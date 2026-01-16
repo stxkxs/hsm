@@ -1,0 +1,101 @@
+# Example HSM Configuration File
+# This file demonstrates all available configuration options
+
+server:
+  host: "0.0.0.0"
+  port: 8443
+  max_connections: 5000
+  timeout_seconds: 30
+  tls_enabled: true
+  tls_cert_path: "/etc/hsm/tls/cert.pem"
+  tls_key_path: "/etc/hsm/tls/key.pem"
+  worker_threads: 0  # 0 = auto-detect CPU cores
+
+storage:
+  backend: "file"  # Options: file, memory, sqlite
+  data_dir: "/var/lib/hsm/data"
+  cache_size_bytes: 524288000  # 500 MB
+  wal_enabled: true
+  sync_mode: "full"  # Options: none, normal, full
+  max_file_size_bytes: 2147483648  # 2 GB
+  backup_dir: "/var/lib/hsm/backup"
+  backup_interval_seconds: 1800  # 30 minutes
+
+security:
+  key_derivation_iterations: 200000
+  encryption_at_rest: true
+  encryption_algorithm: "aes256gcm"  # Options: aes256gcm, chacha20poly1305
+  key_size_bits: 256  # Options: 128, 192, 256
+  session_timeout_seconds: 1800  # 30 minutes
+  max_auth_attempts: 3
+  lockout_duration_seconds: 1800  # 30 minutes
+  audit_log_enabled: true
+  audit_log_path: "/var/log/hsm/audit.log"
+  require_strong_passwords: true
+  min_password_length: 16
+
+logging:
+  level: "info"  # Options: error, warn, info, debug, trace
+  format: "json"  # Options: text, json, compact
+  output: "both"  # Options: console, file, both
+  file_path: "/var/log/hsm/hsm.log"
+  max_file_size_bytes: 524288000  # 500 MB
+  max_backup_files: 30
+  colored: false
+  include_timestamps: true
+  include_module_path: true
+
+metrics:
+  enabled: true
+  format: "prometheus"  # Options: prometheus, json, statsd
+  listen_addr: "127.0.0.1"
+  listen_port: 9090
+  collection_interval_seconds: 30
+  enable_histograms: true
+  histogram_buckets: [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0]
+  retention_seconds: 604800  # 7 days
+
+namespaces:
+  production:
+    description: "Production key namespace"
+    max_keys: 50000
+    encryption_required: true
+    allowed_algorithms:
+      - "RSA-2048"
+      - "RSA-4096"
+      - "ECDSA-P256"
+      - "ECDSA-P384"
+    key_policies:
+      allow_generation: true
+      allow_import: true
+      allow_export: false
+      allow_deletion: false
+      require_backup: true
+      rotation_interval_days: 365
+    access_control:
+      allowed_ips:
+        - "10.0.0.0/8"
+        - "172.16.0.0/12"
+      denied_ips: []
+      require_client_cert: true
+      allowed_cert_fingerprints: []
+      max_concurrent_sessions: 100
+
+  development:
+    description: "Development key namespace"
+    max_keys: 1000
+    encryption_required: false
+    allowed_algorithms: []
+    key_policies:
+      allow_generation: true
+      allow_import: true
+      allow_export: true
+      allow_deletion: true
+      require_backup: false
+      rotation_interval_days: 0
+    access_control:
+      allowed_ips: []
+      denied_ips: []
+      require_client_cert: false
+      allowed_cert_fingerprints: []
+      max_concurrent_sessions: 50

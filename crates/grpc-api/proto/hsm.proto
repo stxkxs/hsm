@@ -1,0 +1,287 @@
+syntax = "proto3";
+
+package hsm.v1;
+
+// HSM service definition
+service HSM {
+  // Key Management Operations
+  rpc GenerateKey(GenerateKeyRequest) returns (GenerateKeyResponse);
+  rpc GetKey(GetKeyRequest) returns (GetKeyResponse);
+  rpc ListKeys(ListKeysRequest) returns (stream KeyMetadata);
+  rpc DeleteKey(DeleteKeyRequest) returns (DeleteKeyResponse);
+  rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
+
+  // Cryptographic Operations
+  rpc Sign(SignRequest) returns (SignResponse);
+  rpc Verify(VerifyRequest) returns (VerifyResponse);
+  rpc Encrypt(EncryptRequest) returns (EncryptResponse);
+  rpc Decrypt(DecryptRequest) returns (DecryptResponse);
+
+  // Batch Cryptographic Operations
+  rpc BatchSign(BatchSignRequest) returns (BatchSignResponse);
+  rpc BatchVerify(BatchVerifyRequest) returns (BatchVerifyResponse);
+  rpc BatchEncrypt(BatchEncryptRequest) returns (BatchEncryptResponse);
+  rpc BatchDecrypt(BatchDecryptRequest) returns (BatchDecryptResponse);
+
+  // Audit Operations
+  rpc GetAuditLog(GetAuditLogRequest) returns (GetAuditLogResponse);
+  rpc StreamAuditLog(StreamAuditLogRequest) returns (stream AuditLogEntry);
+
+  // Health Check
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// Key Types
+enum KeyType {
+  KEY_TYPE_UNSPECIFIED = 0;
+  KEY_TYPE_RSA_2048 = 1;
+  KEY_TYPE_RSA_4096 = 2;
+  KEY_TYPE_ECDSA_P256 = 3;
+  KEY_TYPE_ECDSA_P384 = 4;
+  KEY_TYPE_ED25519 = 5;
+  KEY_TYPE_AES_256 = 6;
+}
+
+// Key Usage Flags
+enum KeyUsage {
+  KEY_USAGE_UNSPECIFIED = 0;
+  KEY_USAGE_SIGN = 1;
+  KEY_USAGE_VERIFY = 2;
+  KEY_USAGE_ENCRYPT = 3;
+  KEY_USAGE_DECRYPT = 4;
+  KEY_USAGE_WRAP = 5;
+  KEY_USAGE_UNWRAP = 6;
+}
+
+// Key State
+enum KeyState {
+  KEY_STATE_UNSPECIFIED = 0;
+  KEY_STATE_ACTIVE = 1;
+  KEY_STATE_INACTIVE = 2;
+  KEY_STATE_COMPROMISED = 3;
+  KEY_STATE_DESTROYED = 4;
+}
+
+// Key Usage Policy
+message KeyUsagePolicy {
+  repeated KeyUsage allowed_usages = 1;
+  bool exportable = 2;
+  int64 max_uses = 3;
+  int64 expiry_time = 4;
+  repeated string allowed_namespaces = 5;
+}
+
+// Key Metadata
+message KeyMetadata {
+  string key_id = 1;
+  string namespace = 2;
+  KeyType key_type = 3;
+  KeyState state = 4;
+  KeyUsagePolicy policy = 5;
+  int64 created_at = 6;
+  int64 updated_at = 7;
+  string version = 8;
+}
+
+// Generate Key Request/Response
+message GenerateKeyRequest {
+  string namespace = 1;
+  KeyType key_type = 2;
+  KeyUsagePolicy policy = 3;
+  map<string, string> metadata = 4;
+}
+
+message GenerateKeyResponse {
+  string key_id = 1;
+  bytes public_key = 2;
+  KeyMetadata metadata = 3;
+}
+
+// Get Key Request/Response
+message GetKeyRequest {
+  string key_id = 1;
+  string namespace = 2;
+}
+
+message GetKeyResponse {
+  KeyMetadata metadata = 1;
+  bytes public_key = 2;
+}
+
+// List Keys Request (streaming response)
+message ListKeysRequest {
+  string namespace = 1;
+  KeyState filter_state = 2;
+  int32 max_results = 3;
+}
+
+// Delete Key Request/Response
+message DeleteKeyRequest {
+  string key_id = 1;
+  string namespace = 2;
+}
+
+message DeleteKeyResponse {
+  bool success = 1;
+}
+
+// Rotate Key Request/Response
+message RotateKeyRequest {
+  string key_id = 1;
+  string namespace = 2;
+}
+
+message RotateKeyResponse {
+  string new_key_id = 1;
+  KeyMetadata metadata = 2;
+}
+
+// Sign Request/Response
+message SignRequest {
+  bytes key_id = 1;           // Optimized: use bytes for binary IDs
+  string namespace = 2;
+  bytes data = 3;
+  string algorithm = 4;
+}
+
+message SignResponse {
+  bytes signature = 1;
+  string algorithm = 2;
+}
+
+// Verify Request/Response
+message VerifyRequest {
+  bytes key_id = 1;           // Optimized: use bytes for binary IDs
+  string namespace = 2;
+  bytes data = 3;
+  bytes signature = 4;
+  string algorithm = 5;
+}
+
+message VerifyResponse {
+  bool valid = 1;
+}
+
+// Batch Sign Request/Response
+message BatchSignRequest {
+  repeated SignRequest requests = 1;
+  bool parallel = 2;          // Hint for parallel execution
+}
+
+message BatchSignResponse {
+  repeated SignResponse responses = 1;
+  repeated string errors = 2;  // Per-request error messages (empty if successful)
+}
+
+// Batch Verify Request/Response
+message BatchVerifyRequest {
+  repeated VerifyRequest requests = 1;
+  bool parallel = 2;
+}
+
+message BatchVerifyResponse {
+  repeated VerifyResponse responses = 1;
+  repeated string errors = 2;
+}
+
+// Encrypt Request/Response
+message EncryptRequest {
+  bytes key_id = 1;           // Optimized: use bytes for binary IDs
+  string namespace = 2;
+  bytes plaintext = 3;
+  bytes associated_data = 4;
+}
+
+message EncryptResponse {
+  bytes ciphertext = 1;
+  bytes nonce = 2;
+}
+
+// Decrypt Request/Response
+message DecryptRequest {
+  bytes key_id = 1;           // Optimized: use bytes for binary IDs
+  string namespace = 2;
+  bytes ciphertext = 3;
+  bytes nonce = 4;
+  bytes associated_data = 5;
+}
+
+message DecryptResponse {
+  bytes plaintext = 1;
+}
+
+// Batch Encrypt Request/Response
+message BatchEncryptRequest {
+  repeated EncryptRequest requests = 1;
+  bool parallel = 2;
+}
+
+message BatchEncryptResponse {
+  repeated EncryptResponse responses = 1;
+  repeated string errors = 2;
+}
+
+// Batch Decrypt Request/Response
+message BatchDecryptRequest {
+  repeated DecryptRequest requests = 1;
+  bool parallel = 2;
+}
+
+message BatchDecryptResponse {
+  repeated DecryptResponse responses = 1;
+  repeated string errors = 2;
+}
+
+// Audit Log Entry
+message AuditLogEntry {
+  string id = 1;
+  int64 timestamp = 2;
+  string user_id = 3;
+  string operation = 4;
+  string resource_id = 5;
+  string namespace = 6;
+  bool success = 7;
+  string error_message = 8;
+  map<string, string> metadata = 9;
+}
+
+// Get Audit Log Request/Response
+message GetAuditLogRequest {
+  string namespace = 1;
+  int64 start_time = 2;
+  int64 end_time = 3;
+  string user_id = 4;
+  string operation = 5;
+  int32 page_size = 6;
+  string page_token = 7;
+}
+
+message GetAuditLogResponse {
+  repeated AuditLogEntry entries = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+// Stream Audit Log Request
+message StreamAuditLogRequest {
+  string namespace = 1;
+  int64 start_time = 2;
+  string user_id = 3;
+  string operation = 4;
+}
+
+// Health Check Request/Response
+message HealthCheckRequest {
+  string service = 1;
+}
+
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+  }
+  ServingStatus status = 1;
+  string message = 2;
+  map<string, string> details = 3;
+}

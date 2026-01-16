@@ -1,0 +1,400 @@
+{
+  "dashboard": {
+    "title": "HSM Metrics Dashboard",
+    "tags": ["hsm", "metrics", "security"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Operation Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(hsm_operations_total[5m])",
+            "legendFormat": "{{operation}} - {{status}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "ops/sec", "format": "short"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Error Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(hsm_operation_errors_total[5m])",
+            "legendFormat": "{{operation}} - {{error_type}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "errors/sec", "format": "short"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [0.01], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "60s",
+          "handler": 1,
+          "name": "High Error Rate",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 3,
+        "title": "Operation Latency (p50, p95, p99)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(hsm_operation_duration_seconds_bucket[5m]))",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(hsm_operation_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(hsm_operation_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"label": "seconds", "format": "s"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Crypto Operation Latency",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(hsm_sign_duration_seconds_bucket[5m]))",
+            "legendFormat": "Sign p99 - {{algorithm}}",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(hsm_verify_duration_seconds_bucket[5m]))",
+            "legendFormat": "Verify p99 - {{algorithm}}",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(hsm_encrypt_duration_seconds_bucket[5m]))",
+            "legendFormat": "Encrypt p99 - {{algorithm}}",
+            "refId": "C"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(hsm_decrypt_duration_seconds_bucket[5m]))",
+            "legendFormat": "Decrypt p99 - {{algorithm}}",
+            "refId": "D"
+          }
+        ],
+        "yaxes": [
+          {"label": "seconds", "format": "s"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Active Keys",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "hsm_active_keys",
+            "legendFormat": "{{namespace}} - {{algorithm}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "keys", "format": "short"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Key Operations",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 16},
+        "targets": [
+          {
+            "expr": "rate(hsm_key_generation_total[5m])",
+            "legendFormat": "Generation - {{algorithm}}",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(hsm_key_deletion_total[5m])",
+            "legendFormat": "Deletion - {{reason}}",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"label": "ops/sec", "format": "short"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Authentication",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 16},
+        "targets": [
+          {
+            "expr": "rate(hsm_auth_attempts_total[5m])",
+            "legendFormat": "Attempts - {{method}}",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(hsm_auth_failures_total[5m])",
+            "legendFormat": "Failures - {{method}}",
+            "refId": "B"
+          },
+          {
+            "expr": "hsm_active_sessions",
+            "legendFormat": "Active Sessions",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"label": "count", "format": "short"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Storage Performance",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(hsm_storage_read_duration_seconds_bucket[5m]))",
+            "legendFormat": "Read p95",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(hsm_storage_write_duration_seconds_bucket[5m]))",
+            "legendFormat": "Write p95",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(hsm_storage_errors_total[5m])",
+            "legendFormat": "Errors",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"label": "seconds / errors", "format": "short"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Audit Metrics",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "rate(hsm_audit_events_written_total[5m])",
+            "legendFormat": "Events Written",
+            "refId": "A"
+          },
+          {
+            "expr": "hsm_audit_queue_depth",
+            "legendFormat": "Queue Depth",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(hsm_audit_write_duration_seconds_bucket[5m]))",
+            "legendFormat": "Write p95",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"label": "events/sec", "format": "short"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Component Health",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+        "targets": [
+          {
+            "expr": "hsm_component_health",
+            "legendFormat": "{{component}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "health (0=unhealthy, 1=healthy)", "format": "short", "min": 0, "max": 1},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Resource Saturation",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+        "targets": [
+          {
+            "expr": "hsm_cpu_saturation",
+            "legendFormat": "CPU Saturation",
+            "refId": "A"
+          },
+          {
+            "expr": "hsm_memory_saturation",
+            "legendFormat": "Memory Saturation",
+            "refId": "B"
+          },
+          {
+            "expr": "hsm_disk_saturation",
+            "legendFormat": "Disk Saturation",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"label": "saturation (0-1)", "format": "percentunit", "min": 0, "max": 1},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Memory Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 40},
+        "targets": [
+          {
+            "expr": "hsm_memory_usage_bytes",
+            "legendFormat": "{{component}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "bytes", "format": "bytes"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 13,
+        "title": "Storage Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 40},
+        "targets": [
+          {
+            "expr": "hsm_storage_usage_bytes",
+            "legendFormat": "{{namespace}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "bytes", "format": "bytes"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 14,
+        "title": "Metric Cardinality",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 40},
+        "targets": [
+          {
+            "expr": "hsm_metric_cardinality",
+            "legendFormat": "Cardinality",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "count", "format": "short"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [8000], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "60s",
+          "handler": 1,
+          "name": "High Cardinality",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 15,
+        "title": "Success Rate (SLI)",
+        "type": "singlestat",
+        "gridPos": {"h": 4, "w": 4, "x": 0, "y": 48},
+        "targets": [
+          {
+            "expr": "rate(hsm_operations_total{status=\"success\"}[5m]) / rate(hsm_operations_total[5m])",
+            "refId": "A"
+          }
+        ],
+        "format": "percentunit",
+        "thresholds": "0.95,0.99",
+        "colorBackground": true
+      },
+      {
+        "id": 16,
+        "title": "p99 Latency (SLI)",
+        "type": "singlestat",
+        "gridPos": {"h": 4, "w": 4, "x": 4, "y": 48},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(hsm_operation_duration_seconds_bucket[5m]))",
+            "refId": "A"
+          }
+        ],
+        "format": "s",
+        "thresholds": "0.5,1.0",
+        "colorBackground": true
+      },
+      {
+        "id": 17,
+        "title": "Error Rate (SLI)",
+        "type": "singlestat",
+        "gridPos": {"h": 4, "w": 4, "x": 8, "y": 48},
+        "targets": [
+          {
+            "expr": "rate(hsm_operation_errors_total[5m])",
+            "refId": "A"
+          }
+        ],
+        "format": "short",
+        "thresholds": "0.01,0.1",
+        "colorBackground": true,
+        "colorValue": false
+      }
+    ]
+  }
+}

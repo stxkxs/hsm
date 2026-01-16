@@ -1,0 +1,163 @@
+# Prometheus alerting rules for HSM metrics
+# Load these rules in your Prometheus configuration:
+#   rule_files:
+#     - "prometheus_rules.yml"
+
+groups:
+  - name: hsm_critical
+    interval: 10s
+    rules:
+      - alert: HighErrorRate
+        expr: rate(hsm_operation_errors_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HSM error rate above threshold"
+          description: "HSM is experiencing {{ $value | humanizePercentage }} errors per second"
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.99, rate(hsm_operation_duration_seconds_bucket[5m])) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HSM p99 latency above 1s"
+          description: "HSM p99 latency is {{ $value }}s"
+
+      - alert: AuditQueueFull
+        expr: hsm_audit_queue_depth > 1000
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Audit queue is filling up"
+          description: "Audit queue depth is {{ $value }}, maximum is 1000"
+
+      - alert: ComponentUnhealthy
+        expr: hsm_component_health{component=~".+"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HSM component unhealthy"
+          description: "Component {{ $labels.component }} is unhealthy"
+
+      - alert: HighCPUSaturation
+        expr: hsm_cpu_saturation > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU saturation"
+          description: "CPU saturation is {{ $value | humanizePercentage }}"
+
+      - alert: HighMemorySaturation
+        expr: hsm_memory_saturation > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory saturation"
+          description: "Memory saturation is {{ $value | humanizePercentage }}"
+
+      - alert: HighDiskSaturation
+        expr: hsm_disk_saturation > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk saturation"
+          description: "Disk saturation is {{ $value | humanizePercentage }}"
+
+      - alert: AuthenticationFailureSpike
+        expr: rate(hsm_auth_failures_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Authentication failures: {{ $value }} per second"
+
+      - alert: StorageErrors
+        expr: rate(hsm_storage_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Storage errors detected"
+          description: "Storage errors: {{ $value }} per second"
+
+      - alert: HighMetricCardinality
+        expr: hsm_metric_cardinality > 8000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Metric cardinality approaching limit"
+          description: "Current cardinality: {{ $value }}, limit is 10000"
+
+  - name: hsm_performance
+    interval: 30s
+    rules:
+      - alert: SlowSignOperations
+        expr: histogram_quantile(0.95, rate(hsm_sign_duration_seconds_bucket[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sign operations are slow"
+          description: "p95 sign latency is {{ $value }}s"
+
+      - alert: SlowVerifyOperations
+        expr: histogram_quantile(0.95, rate(hsm_verify_duration_seconds_bucket[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Verify operations are slow"
+          description: "p95 verify latency is {{ $value }}s"
+
+      - alert: SlowStorageReads
+        expr: histogram_quantile(0.95, rate(hsm_storage_read_duration_seconds_bucket[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Storage reads are slow"
+          description: "p95 storage read latency is {{ $value }}s"
+
+      - alert: SlowStorageWrites
+        expr: histogram_quantile(0.95, rate(hsm_storage_write_duration_seconds_bucket[5m])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Storage writes are slow"
+          description: "p95 storage write latency is {{ $value }}s"
+
+  - name: hsm_availability
+    interval: 30s
+    rules:
+      - alert: LowSuccessRate
+        expr: |
+          (
+            rate(hsm_operations_total{status="success"}[5m])
+            /
+            rate(hsm_operations_total[5m])
+          ) < 0.99
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HSM success rate below 99%"
+          description: "Success rate is {{ $value | humanizePercentage }}"
+
+      - alert: NoRecentOperations
+        expr: rate(hsm_operations_total[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No HSM operations detected"
+          description: "HSM has not processed any operations in 10 minutes"

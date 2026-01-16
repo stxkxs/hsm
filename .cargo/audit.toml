@@ -1,0 +1,24 @@
+# Cargo audit configuration
+
+[advisories]
+# Vulnerabilities and warnings that are documented and accepted
+ignore = [
+    # atomic-polyfill is unmaintained but is a transitive dependency
+    # from postcard -> heapless. This is a warning, not a vulnerability.
+    # Postcard maintainers would need to update heapless version.
+    "RUSTSEC-2023-0089",
+
+    # RSA Marvin Attack - no fix available upstream
+    # Documented in README.md under Known Vulnerabilities
+    # Mitigation: Use OAEP padding instead of PKCS#1 v1.5
+    "RUSTSEC-2023-0071",
+
+    # Sharks Secret Sharing coefficient bias - no fix available upstream
+    # Documented in README.md under Known Vulnerabilities
+    # Mitigation: Additional randomness sources for critical splits
+    "RUSTSEC-2024-0398",
+]
+
+# Severity threshold for errors (we want to be notified of medium+ vulnerabilities)
+# Options: none, low, medium, high, critical
+severity_threshold = "medium"

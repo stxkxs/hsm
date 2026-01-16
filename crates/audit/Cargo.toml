@@ -1,0 +1,29 @@
+[package]
+name = "audit"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+hex = "0.4"
+thiserror = "2.0"
+parking_lot = "0.12"
+tokio = { version = "1.49", features = ["sync", "rt", "time", "macros"] }
+zstd = "0.13"
+aes-gcm = "0.10"
+postcard = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.24"
+criterion = "0.8"
+tokio = { version = "1.49", features = ["full"] }
+
+[[bench]]
+name = "audit_benchmarks"
+harness = false

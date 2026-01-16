@@ -1,0 +1,56 @@
+[package]
+name = "grpc-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tonic = { version = "0.14", features = ["tls-ring", "transport"] }
+tonic-prost = "0.14"
+prost = "0.14"
+tokio = { version = "1.49", features = ["full"] }
+tokio-stream = "0.1"
+tower = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2.0"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.19", features = ["v4", "serde"] }
+
+# Performance enhancements
+lru = "0.16"
+dashmap = "6.1"
+parking_lot = "0.12"
+
+# Security and reliability
+tonic-health = "0.14"
+tower-http = "0.6"
+async-trait = "0.1"
+
+# Tracing and observability
+tracing-opentelemetry = "0.32"
+opentelemetry = { version = "0.31", features = ["trace"] }
+opentelemetry-otlp = "0.31"
+
+# HSM dependencies
+hsm-crypto-engine = { path = "../crypto-engine" }
+hsm-key-manager = { path = "../key-manager" }
+hsm-auth = { path = "../auth" }
+
+[build-dependencies]
+tonic-prost-build = "0.14"
+
+[dev-dependencies]
+tempfile = "3.24"
+criterion = { version = "0.8", features = ["async_tokio"] }
+proptest = "1.9"
+quickcheck = "1.0"
+arbitrary = { version = "1.4", features = ["derive"] }
+
+[[bench]]
+name = "grpc_benchmarks"
+harness = false

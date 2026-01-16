@@ -1,0 +1,207 @@
+use crate::error::ApiError;
+use crate::handlers::{audit::AuditHandler, crypto_ops::CryptoOpsHandler, health::HealthHandler, key_management::KeyManagementHandler};
+use crate::middleware::{auth::AuthInterceptor, metrics::MetricsCollector};
+use crate::proto::hsm::hsm_server::{Hsm, HsmServer};
+use crate::proto::hsm::*;
+use hsm_auth::AuthManager;
+use hsm_crypto_engine::CryptoEngine;
+use hsm_key_manager::KeyManager;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::Arc;
+use tokio_stream::Stream;
+use tonic::{transport::Server, Request, Response, Status};
+use tracing::{info, error};
+
+pub struct HsmService {
+    key_handler: Arc<KeyManagementHandler>,
+    crypto_handler: Arc<CryptoOpsHandler>,
+    audit_handler: Arc<AuditHandler>,
+    health_handler: Arc<HealthHandler>,
+}
+
+impl HsmService {
+    pub fn new(
+        key_manager: Arc<KeyManager>,
+        crypto_engine: Arc<CryptoEngine>,
+        auth_manager: Arc<AuthManager>,
+        metrics: MetricsCollector,
+    ) -> Self {
+        let auth = Arc::new(AuthInterceptor::new(auth_manager));
+
+        let key_handler = Arc::new(KeyManagementHandler::new(
+            Arc::clone(&key_manager),
+            Arc::clone(&auth),
+            metrics.clone(),
+        ));
+
+        let crypto_handler = Arc::new(CryptoOpsHandler::new(
+            crypto_engine,
+            key_manager,
+            Arc::clone(&auth),
+            metrics.clone(),
+        ));
+
+        let audit_handler = Arc::new(AuditHandler::new(Arc::clone(&auth), metrics.clone()));
+        let health_handler = Arc::new(HealthHandler::new());
+
+        Self {
+            key_handler,
+            crypto_handler,
+            audit_handler,
+            health_handler,
+        }
+    }
+}
+
+#[tonic::async_trait]
+impl Hsm for HsmService {
+    async fn generate_key(
+        &self,
+        request: Request<GenerateKeyRequest>,
+    ) -> Result<Response<GenerateKeyResponse>, Status> {
+        self.key_handler.generate_key(request).await
+    }
+
+    async fn get_key(
+        &self,
+        request: Request<GetKeyRequest>,
+    ) -> Result<Response<GetKeyResponse>, Status> {
+        self.key_handler.get_key(request).await
+    }
+
+    async fn list_keys(
+        &self,
+        request: Request<ListKeysRequest>,
+    ) -> Result<Response<ListKeysResponse>, Status> {
+        self.key_handler.list_keys(request).await
+    }
+
+    async fn delete_key(
+        &self,
+        request: Request<DeleteKeyRequest>,
+    ) -> Result<Response<DeleteKeyResponse>, Status> {
+        self.key_handler.delete_key(request).await
+    }
+
+    async fn rotate_key(
+        &self,
+        request: Request<RotateKeyRequest>,
+    ) -> Result<Response<RotateKeyResponse>, Status> {
+        self.key_handler.rotate_key(request).await
+    }
+
+    async fn sign(
+        &self,
+        request: Request<SignRequest>,
+    ) -> Result<Response<SignResponse>, Status> {
+        self.crypto_handler.sign(request).await
+    }
+
+    async fn verify(
+        &self,
+        request: Request<VerifyRequest>,
+    ) -> Result<Response<VerifyResponse>, Status> {
+        self.crypto_handler.verify(request).await
+    }
+
+    async fn encrypt(
+        &self,
+        request: Request<EncryptRequest>,
+    ) -> Result<Response<EncryptResponse>, Status> {
+        self.crypto_handler.encrypt(request).await
+    }
+
+    async fn decrypt(
+        &self,
+        request: Request<DecryptRequest>,
+    ) -> Result<Response<DecryptResponse>, Status> {
+        self.crypto_handler.decrypt(request).await
+    }
+
+    async fn get_audit_log(
+        &self,
+        request: Request<GetAuditLogRequest>,
+    ) -> Result<Response<GetAuditLogResponse>, Status> {
+        self.audit_handler.get_audit_log(request).await
+    }
+
+    type StreamAuditLogStream = Pin<Box<dyn Stream<Item = Result<AuditLogEntry, Status>> + Send>>;
+
+    async fn stream_audit_log(
+        &self,
+        request: Request<StreamAuditLogRequest>,
+    ) -> Result<Response<Self::StreamAuditLogStream>, Status> {
+        self.audit_handler.stream_audit_log(request).await
+    }
+
+    async fn health_check(
+        &self,
+        request: Request<HealthCheckRequest>,
+    ) -> Result<Response<HealthCheckResponse>, Status> {
+        self.health_handler.health_check(request).await
+    }
+}
+
+pub struct GrpcServer {
+    addr: SocketAddr,
+    service: HsmService,
+}
+
+impl GrpcServer {
+    pub fn new(
+        addr: SocketAddr,
+        key_manager: Arc<KeyManager>,
+        crypto_engine: Arc<CryptoEngine>,
+        auth_manager: Arc<AuthManager>,
+    ) -> Self {
+        let metrics = MetricsCollector::new();
+        let service = HsmService::new(key_manager, crypto_engine, auth_manager, metrics);
+
+        Self { addr, service }
+    }
+
+    pub async fn serve(self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Starting gRPC server on {}", self.addr);
+
+        Server::builder()
+            .add_service(HsmServer::new(self.service))
+            .serve_with_shutdown(self.addr, Self::shutdown_signal())
+            .await?;
+
+        info!("gRPC server stopped");
+        Ok(())
+    }
+
+    async fn shutdown_signal() {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install CTRL+C signal handler");
+        info!("Received shutdown signal");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_server_creation() {
+        let addr = "127.0.0.1:50051".parse().unwrap();
+        let key_manager = Arc::new(KeyManager::new().await.unwrap());
+        let crypto_engine = Arc::new(CryptoEngine::new());
+        let auth_manager = Arc::new(AuthManager::new());
+
+        let _server = GrpcServer::new(addr, key_manager, crypto_engine, auth_manager);
+    }
+
+    #[tokio::test]
+    async fn test_service_creation() {
+        let key_manager = Arc::new(KeyManager::new().await.unwrap());
+        let crypto_engine = Arc::new(CryptoEngine::new());
+        let auth_manager = Arc::new(AuthManager::new());
+        let metrics = MetricsCollector::new();
+
+        let _service = HsmService::new(key_manager, crypto_engine, auth_manager, metrics);
+    }
+}

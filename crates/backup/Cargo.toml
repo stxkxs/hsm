@@ -1,0 +1,33 @@
+[package]
+name = "backup"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sharks = "0.5"  # Shamir's Secret Sharing
+argon2 = "0.5"  # Key derivation
+aes-gcm = "0.10"  # AES-GCM encryption
+rand = "0.8"  # Random number generation
+thiserror = "2.0"  # Error handling
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+zeroize = { version = "1.8", features = ["derive"] }
+rayon = "1.11"  # Parallel processing
+zstd = "0.13"  # Compression
+postcard = { workspace = true }  # Binary serialization
+tokio = { version = "1.49", features = ["io-util", "fs"] }  # Async I/O
+hmac = "0.12"  # HMAC for integrity
+sha2 = "0.10"  # SHA-256 hashing
+
+[dev-dependencies]
+proptest = "1.9"  # Property-based testing
+criterion = { version = "0.8", features = ["html_reports"] }  # Benchmarking
+tempfile = "3.24"  # Temporary files for testing
+tokio = { version = "1.49", features = ["macros", "rt-multi-thread"] }  # Async runtime for tests
+
+[[bench]]
+name = "backup_benchmarks"
+harness = false

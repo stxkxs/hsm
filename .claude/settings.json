@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "pre-commit": {
+      "type": "command",
+      "command": "cargo fmt --check --all && cargo clippy --all -- -D warnings && cargo check --all",
+      "events": ["PreToolUse"],
+      "filter": {
+        "tool": "Bash",
+        "prompt": "git commit"
+      },
+      "description": "Format check, clippy lints, and compilation before commits"
+    },
+    "post-edit": {
+      "type": "command",
+      "command": "cargo check",
+      "events": ["PostToolUse"],
+      "filter": {
+        "tool": "Edit"
+      },
+      "description": "Quick compilation check after editing files"
+    }
+  },
+  "project": {
+    "name": "HSM (Hardware Security Module)",
+    "description": "Production-grade HSM in Rust with 9 independent modules"
+  }
+}

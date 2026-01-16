@@ -1,0 +1,40 @@
+[package]
+name = "hsm-crypto-engine-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+hsm-crypto-engine = { path = ".." }
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_ed25519_sign"
+path = "fuzz_targets/fuzz_ed25519_sign.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_ed25519_verify"
+path = "fuzz_targets/fuzz_ed25519_verify.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_aes_gcm_encrypt"
+path = "fuzz_targets/fuzz_aes_gcm_encrypt.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_aes_gcm_decrypt"
+path = "fuzz_targets/fuzz_aes_gcm_decrypt.rs"
+test = false
+doc = false

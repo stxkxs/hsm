@@ -1,0 +1,48 @@
+[package]
+name = "hsm-config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+config = "0.15"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+toml = "0.9"
+thiserror = "2.0"
+
+# Secret management
+secrecy = { version = "0.10", features = ["serde"] }
+zeroize = "1.8"
+
+# Validation
+validator = { version = "0.20", features = ["derive"] }
+
+# Hot reload & concurrency
+notify = "8.2"
+parking_lot = "0.12"
+
+# Encryption
+aes-gcm = "0.10"
+argon2 = { version = "0.5", features = ["std"] }
+rand = "0.8"
+
+# Async runtime
+tokio = { version = "1.49", features = ["sync", "time", "fs", "rt"] }
+
+# Logging
+tracing = "0.1"
+
+# Utilities
+chrono = "0.4"
+
+[dev-dependencies]
+tempfile = "3.24"
+criterion = { version = "0.8", features = ["html_reports"] }
+tokio = { version = "1.49", features = ["macros", "rt-multi-thread"] }
+
+# [[bench]]
+# name = "config_benchmarks"
+# harness = false
