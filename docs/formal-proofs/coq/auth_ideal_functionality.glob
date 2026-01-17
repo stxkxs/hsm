@@ -1,0 +1,634 @@
+DIGEST 1cd429e7ad9655f37a43d14037f02b7d
+Fauth_ideal_functionality
+R502:513 uc_framework <> <> lib
+R531:547 Stdlib.Lists.List <> <> lib
+R565:585 Stdlib.Strings.String <> <> lib
+R603:618 Stdlib.Bool.Bool <> <> lib
+R636:653 Stdlib.Arith.Arith <> <> lib
+R663:675 Stdlib.Lists.List ListNotations <> mod
+ind 736:739 <> Role
+constr 748:752 <> Admin
+constr 758:765 <> Operator
+constr 771:774 <> User
+constr 780:786 <> Auditor
+scheme 736:739 <> Role_rect
+scheme 736:739 <> Role_ind
+scheme 736:739 <> Role_rec
+scheme 736:739 <> Role_sind
+ind 822:830 <> Operation
+constr 839:849 <> GenerateKey
+constr 855:863 <> ImportKey
+constr 869:877 <> DeleteKey
+constr 883:886 <> Sign
+constr 892:897 <> Verify
+constr 903:909 <> Encrypt
+constr 915:921 <> Decrypt
+constr 927:935 <> RotateKey
+constr 941:949 <> ExportKey
+constr 955:966 <> GetAuditLogs
+constr 972:985 <> GetKeyMetadata
+scheme 822:830 <> Operation_rect
+scheme 822:830 <> Operation_ind
+scheme 822:830 <> Operation_rec
+scheme 822:830 <> Operation_sind
+ind 1020:1027 <> Resource
+constr 1036:1046 <> KeyResource
+constr 1085:1097 <> AuditResource
+constr 1127:1140 <> ConfigResource
+R1055:1058 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1050:1054 uc_framework <> KeyId def
+R1068:1071 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1059:1067 uc_framework <> Namespace def
+R1072:1079 auth_ideal_functionality <> Resource:5 ind
+R1110:1113 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1101:1109 uc_framework <> Namespace def
+R1114:1121 auth_ideal_functionality <> Resource:5 ind
+R1144:1151 auth_ideal_functionality <> Resource:5 ind
+scheme 1020:1027 <> Resource_rect
+scheme 1020:1027 <> Resource_ind
+scheme 1020:1027 <> Resource_rec
+scheme 1020:1027 <> Resource_sind
+def 1196:1204 <> SessionId
+R1209:1214 Stdlib.Strings.String <> string ind
+rec 1225:1231 <> Session
+proj 1240:1249 <> session_id
+proj 1266:1273 <> identity
+proj 1295:1304 <> created_at
+proj 1315:1324 <> expires_at
+proj 1335:1343 <> client_ip
+proj 1357:1365 <> is_active
+R1253:1261 auth_ideal_functionality <> SessionId def
+R1277:1290 uc_framework <> ClientIdentity rec
+R1308:1310 Corelib.Init.Datatypes <> nat ind
+R1328:1330 Corelib.Init.Datatypes <> nat ind
+R1347:1352 Stdlib.Strings.String <> string ind
+R1369:1372 Corelib.Init.Datatypes <> bool ind
+rec 1428:1438 <> Certificate
+proj 1447:1456 <> subject_cn
+proj 1470:1480 <> subject_org
+proj 1494:1503 <> subject_ou
+proj 1517:1522 <> issuer
+proj 1536:1545 <> valid_from
+proj 1556:1563 <> valid_to
+proj 1574:1583 <> public_key
+proj 1600:1608 <> signature
+R1460:1465 Stdlib.Strings.String <> string ind
+R1484:1489 Stdlib.Strings.String <> string ind
+R1507:1512 Stdlib.Strings.String <> string ind
+R1526:1531 Stdlib.Strings.String <> string ind
+R1549:1551 Corelib.Init.Datatypes <> nat ind
+R1567:1569 Corelib.Init.Datatypes <> nat ind
+R1587:1595 uc_framework <> Bitstring def
+R1612:1620 uc_framework <> Bitstring def
+rec 1658:1666 <> AuthState
+proj 1699:1706 <> sessions
+proj 1758:1764 <> ca_cert
+proj 1804:1819 <> role_permissions
+proj 1875:1889 <> session_counter
+proj 1919:1926 <> auth_log
+R1710:1713 Corelib.Init.Datatypes <> list ind
+R1715:1721 auth_ideal_functionality <> Session rec
+R1768:1778 auth_ideal_functionality <> Certificate rec
+R1823:1826 Corelib.Init.Datatypes <> list ind
+R1833:1835 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1829:1832 auth_ideal_functionality <> Role ind
+R1836:1844 auth_ideal_functionality <> Operation ind
+R1893:1895 Corelib.Init.Datatypes <> nat ind
+R1930:1933 Corelib.Init.Datatypes <> list ind
+R1935:1944 uc_framework <> AuditEvent ind
+def 2046:2059 <> has_permission
+R2066:2069 auth_ideal_functionality <> Role ind
+binder 2062:2062 <> r:29
+R2078:2086 auth_ideal_functionality <> Operation ind
+binder 2073:2074 <> op:30
+R2091:2094 Corelib.Init.Datatypes <> bool ind
+R2110:2111 auth_ideal_functionality <> op:30 var
+R2107:2107 auth_ideal_functionality <> r:29 var
+R2156:2160 auth_ideal_functionality <> Admin constr
+R2168:2171 Corelib.Init.Datatypes <> true constr
+R2207:2214 auth_ideal_functionality <> Operator constr
+R2217:2227 auth_ideal_functionality <> GenerateKey constr
+R2232:2235 Corelib.Init.Datatypes <> true constr
+R2241:2248 auth_ideal_functionality <> Operator constr
+R2251:2259 auth_ideal_functionality <> ImportKey constr
+R2264:2267 Corelib.Init.Datatypes <> true constr
+R2273:2280 auth_ideal_functionality <> Operator constr
+R2283:2286 auth_ideal_functionality <> Sign constr
+R2291:2294 Corelib.Init.Datatypes <> true constr
+R2300:2307 auth_ideal_functionality <> Operator constr
+R2310:2315 auth_ideal_functionality <> Verify constr
+R2320:2323 Corelib.Init.Datatypes <> true constr
+R2329:2336 auth_ideal_functionality <> Operator constr
+R2339:2345 auth_ideal_functionality <> Encrypt constr
+R2350:2353 Corelib.Init.Datatypes <> true constr
+R2359:2366 auth_ideal_functionality <> Operator constr
+R2369:2375 auth_ideal_functionality <> Decrypt constr
+R2380:2383 Corelib.Init.Datatypes <> true constr
+R2389:2396 auth_ideal_functionality <> Operator constr
+R2399:2407 auth_ideal_functionality <> RotateKey constr
+R2412:2415 Corelib.Init.Datatypes <> true constr
+R2421:2428 auth_ideal_functionality <> Operator constr
+R2431:2444 auth_ideal_functionality <> GetKeyMetadata constr
+R2449:2452 Corelib.Init.Datatypes <> true constr
+R2458:2465 auth_ideal_functionality <> Operator constr
+R2473:2477 Corelib.Init.Datatypes <> false constr
+R2509:2512 auth_ideal_functionality <> User constr
+R2515:2518 auth_ideal_functionality <> Sign constr
+R2523:2526 Corelib.Init.Datatypes <> true constr
+R2532:2535 auth_ideal_functionality <> User constr
+R2538:2543 auth_ideal_functionality <> Verify constr
+R2548:2551 Corelib.Init.Datatypes <> true constr
+R2557:2560 auth_ideal_functionality <> User constr
+R2563:2569 auth_ideal_functionality <> Encrypt constr
+R2574:2577 Corelib.Init.Datatypes <> true constr
+R2583:2586 auth_ideal_functionality <> User constr
+R2589:2595 auth_ideal_functionality <> Decrypt constr
+R2600:2603 Corelib.Init.Datatypes <> true constr
+R2609:2612 auth_ideal_functionality <> User constr
+R2615:2628 auth_ideal_functionality <> GetKeyMetadata constr
+R2633:2636 Corelib.Init.Datatypes <> true constr
+R2642:2645 auth_ideal_functionality <> User constr
+R2653:2657 Corelib.Init.Datatypes <> false constr
+R2692:2698 auth_ideal_functionality <> Auditor constr
+R2701:2712 auth_ideal_functionality <> GetAuditLogs constr
+R2717:2720 Corelib.Init.Datatypes <> true constr
+R2726:2732 auth_ideal_functionality <> Auditor constr
+R2735:2748 auth_ideal_functionality <> GetKeyMetadata constr
+R2753:2756 Corelib.Init.Datatypes <> true constr
+R2762:2768 auth_ideal_functionality <> Auditor constr
+R2776:2780 Corelib.Init.Datatypes <> false constr
+def 2835:2842 <> get_role
+R2856:2869 uc_framework <> ClientIdentity rec
+binder 2845:2852 <> identity:33
+R2874:2877 auth_ideal_functionality <> Role ind
+R2887:2893 Stdlib.Lists.List <> existsb def
+R2926:2930 uc_framework <> roles proj
+R2916:2923 auth_ideal_functionality <> identity:33 var
+R2896:2905 Stdlib.Strings.String <> eqb def
+R2954:2960 Stdlib.Lists.List <> existsb def
+R2996:3000 uc_framework <> roles proj
+R2986:2993 auth_ideal_functionality <> identity:33 var
+R2963:2972 Stdlib.Strings.String <> eqb def
+R3027:3033 Stdlib.Lists.List <> existsb def
+R3068:3072 uc_framework <> roles proj
+R3058:3065 auth_ideal_functionality <> identity:33 var
+R3036:3045 Stdlib.Strings.String <> eqb def
+R3095:3098 auth_ideal_functionality <> User constr
+R3080:3086 auth_ideal_functionality <> Auditor constr
+R3008:3015 auth_ideal_functionality <> Operator constr
+R2938:2942 auth_ideal_functionality <> Admin constr
+ax 3213:3239 <> ideal_verify_cert_signature
+R3256:3259 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3245:3255 auth_ideal_functionality <> Certificate rec
+R3271:3274 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3260:3270 auth_ideal_functionality <> Certificate rec
+R3275:3278 Corelib.Init.Datatypes <> bool ind
+def 3334:3354 <> check_validity_period
+R3366:3376 auth_ideal_functionality <> Certificate rec
+binder 3359:3362 <> cert:36
+R3397:3399 Corelib.Init.Datatypes <> nat ind
+binder 3382:3393 <> current_time:37
+R3406:3409 Corelib.Init.Datatypes <> bool ind
+R3462:3465 auth_ideal_functionality <> cert:36 var
+R3422:3438 auth_ideal_functionality <> Build_Certificate constr
+R3472:3475 Corelib.Init.Datatypes <> andb def
+R3511:3517 Stdlib.Arith.PeanoNat Nat leb def
+R3519:3530 auth_ideal_functionality <> current_time:37 var
+R3478:3484 Stdlib.Arith.PeanoNat Nat leb def
+R3489:3500 auth_ideal_functionality <> current_time:37 var
+def 3588:3607 <> validate_certificate
+R3620:3628 auth_ideal_functionality <> AuthState rec
+binder 3612:3616 <> state:39
+R3641:3651 auth_ideal_functionality <> Certificate rec
+binder 3634:3637 <> cert:40
+R3672:3674 Corelib.Init.Datatypes <> nat ind
+binder 3657:3668 <> current_time:41
+R3681:3684 Corelib.Init.Datatypes <> bool ind
+R3691:3694 Corelib.Init.Datatypes <> andb def
+R3755:3775 auth_ideal_functionality <> check_validity_period def
+R3777:3780 auth_ideal_functionality <> cert:40 var
+R3782:3793 auth_ideal_functionality <> current_time:41 var
+R3697:3723 auth_ideal_functionality <> ideal_verify_cert_signature defax
+R3725:3728 auth_ideal_functionality <> cert:40 var
+R3737:3743 auth_ideal_functionality <> ca_cert proj
+R3730:3734 auth_ideal_functionality <> state:39 var
+def 3850:3865 <> extract_identity
+R3877:3887 auth_ideal_functionality <> Certificate rec
+binder 3870:3873 <> cert:42
+R3894:3907 uc_framework <> ClientIdentity rec
+R3962:3965 auth_ideal_functionality <> cert:42 var
+R3920:3936 auth_ideal_functionality <> Build_Certificate constr
+R3985:3994 Stdlib.Strings.String <> eqb def
+binder 3976:3977 <> ns:44
+R4151:4154 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R4155:4157 Corelib.Init.Datatypes <> nil constr
+R4129:4132 Corelib.Init.Datatypes <> list ind
+R4134:4139 Stdlib.Strings.String <> string ind
+binder 4121:4125 <> roles:45
+R4177:4178 uc_framework <> cn proj
+R4177:4178 uc_framework <> cn proj
+R4177:4178 uc_framework <> cn proj
+R4192:4203 uc_framework <> organization proj
+R4192:4203 uc_framework <> organization proj
+R4218:4226 uc_framework <> namespace proj
+R4218:4226 uc_framework <> namespace proj
+R4240:4244 uc_framework <> roles proj
+R4240:4244 uc_framework <> roles proj
+R4231:4232 auth_ideal_functionality <> ns:44 var
+R4249:4253 auth_ideal_functionality <> roles:45 var
+def 4362:4379 <> ideal_authenticate
+R4392:4400 auth_ideal_functionality <> AuthState rec
+binder 4384:4388 <> state:46
+R4413:4423 auth_ideal_functionality <> Certificate rec
+binder 4406:4409 <> cert:47
+R4444:4446 Corelib.Init.Datatypes <> nat ind
+binder 4429:4440 <> current_time:48
+R4453:4458 Corelib.Init.Datatypes <> option ind
+R4475:4477 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R4461:4474 uc_framework <> ClientIdentity rec
+R4478:4486 auth_ideal_functionality <> AuthState rec
+R4497:4516 auth_ideal_functionality <> validate_certificate def
+R4518:4522 auth_ideal_functionality <> state:46 var
+R4524:4527 auth_ideal_functionality <> cert:47 var
+R4529:4540 auth_ideal_functionality <> current_time:48 var
+R4994:4995 uc_framework <> cn proj
+R4994:4995 uc_framework <> cn proj
+R4994:4995 uc_framework <> cn proj
+R5004:5015 uc_framework <> organization proj
+R5004:5015 uc_framework <> organization proj
+R5024:5032 uc_framework <> namespace proj
+R5024:5032 uc_framework <> namespace proj
+R5041:5045 uc_framework <> roles proj
+R5041:5045 uc_framework <> roles proj
+R5050:5051 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+binder 4974:4986 <> fake_identity:49
+R5124:5127 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R5078:5086 uc_framework <> AuthEvent constr
+R5111:5123 auth_ideal_functionality <> fake_identity:49 var
+R5135:5142 auth_ideal_functionality <> auth_log proj
+R5128:5132 auth_ideal_functionality <> state:46 var
+binder 5067:5073 <> new_log:50
+R5152:5155 Corelib.Init.Datatypes <> None constr
+R4567:4582 auth_ideal_functionality <> extract_identity def
+R4584:4587 auth_ideal_functionality <> cert:47 var
+binder 4555:4562 <> identity:51
+R4652:4655 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R4611:4619 uc_framework <> AuthEvent constr
+R4644:4651 auth_ideal_functionality <> identity:51 var
+R4663:4670 auth_ideal_functionality <> auth_log proj
+R4656:4660 auth_ideal_functionality <> state:46 var
+binder 4600:4606 <> new_log:52
+R4680:4683 Corelib.Init.Datatypes <> Some constr
+R4685:4685 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4694:4698 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4954:4957 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4686:4693 auth_ideal_functionality <> identity:51 var
+R4699:4706 auth_ideal_functionality <> sessions proj
+R4699:4706 auth_ideal_functionality <> sessions proj
+R4699:4706 auth_ideal_functionality <> sessions proj
+R4751:4757 auth_ideal_functionality <> ca_cert proj
+R4751:4757 auth_ideal_functionality <> ca_cert proj
+R4801:4816 auth_ideal_functionality <> role_permissions proj
+R4801:4816 auth_ideal_functionality <> role_permissions proj
+R4869:4883 auth_ideal_functionality <> session_counter proj
+R4869:4883 auth_ideal_functionality <> session_counter proj
+R4935:4942 auth_ideal_functionality <> auth_log proj
+R4935:4942 auth_ideal_functionality <> auth_log proj
+R4718:4725 auth_ideal_functionality <> sessions proj
+R4711:4715 auth_ideal_functionality <> state:46 var
+R4769:4775 auth_ideal_functionality <> ca_cert proj
+R4762:4766 auth_ideal_functionality <> state:46 var
+R4828:4843 auth_ideal_functionality <> role_permissions proj
+R4821:4825 auth_ideal_functionality <> state:46 var
+R4895:4909 auth_ideal_functionality <> session_counter proj
+R4888:4892 auth_ideal_functionality <> state:46 var
+R4947:4953 auth_ideal_functionality <> new_log:52 var
+def 5224:5237 <> create_session
+R5250:5258 auth_ideal_functionality <> AuthState rec
+binder 5242:5246 <> state:53
+R5275:5288 uc_framework <> ClientIdentity rec
+binder 5264:5271 <> identity:54
+R5306:5311 Stdlib.Strings.String <> string ind
+binder 5294:5302 <> client_ip:55
+R5332:5334 Corelib.Init.Datatypes <> nat ind
+binder 5317:5328 <> current_time:56
+R5346:5348 Corelib.Init.Datatypes <> nat ind
+binder 5340:5342 <> ttl:57
+R5364:5366 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R5355:5363 auth_ideal_functionality <> SessionId def
+R5367:5375 auth_ideal_functionality <> AuthState rec
+R5403:5407 Stdlib.Strings.String <> ::string_scope:x_'++'_x not
+R5445:5445 Stdlib.Strings.String <> ::string_scope:x_'++'_x not
+R5408:5420 uc_framework String of_nat def
+R5429:5443 auth_ideal_functionality <> session_counter proj
+R5422:5426 auth_ideal_functionality <> state:53 var
+binder 5386:5388 <> sid:58
+R5470:5479 auth_ideal_functionality <> session_id proj
+R5470:5479 auth_ideal_functionality <> session_id proj
+R5470:5479 auth_ideal_functionality <> session_id proj
+R5508:5515 auth_ideal_functionality <> identity proj
+R5508:5515 auth_ideal_functionality <> identity proj
+R5549:5558 auth_ideal_functionality <> created_at proj
+R5549:5558 auth_ideal_functionality <> created_at proj
+R5596:5605 auth_ideal_functionality <> expires_at proj
+R5596:5605 auth_ideal_functionality <> expires_at proj
+R5649:5657 auth_ideal_functionality <> client_ip proj
+R5649:5657 auth_ideal_functionality <> client_ip proj
+R5692:5700 auth_ideal_functionality <> is_active proj
+R5692:5700 auth_ideal_functionality <> is_active proj
+R5484:5486 auth_ideal_functionality <> sid:58 var
+R5520:5527 auth_ideal_functionality <> identity:54 var
+R5563:5574 auth_ideal_functionality <> current_time:56 var
+R5622:5624 Corelib.Init.Peano <> ::nat_scope:x_'+'_x not
+R5610:5621 auth_ideal_functionality <> current_time:56 var
+R5625:5627 auth_ideal_functionality <> ttl:57 var
+R5662:5670 auth_ideal_functionality <> client_ip:55 var
+R5705:5708 Corelib.Init.Datatypes <> true constr
+binder 5456:5462 <> session:59
+R5745:5748 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R5738:5744 auth_ideal_functionality <> session:59 var
+R5756:5763 auth_ideal_functionality <> sessions proj
+R5749:5753 auth_ideal_functionality <> state:53 var
+binder 5722:5733 <> new_sessions:60
+R5821:5824 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R5786:5794 uc_framework <> AuthEvent constr
+R5813:5820 auth_ideal_functionality <> identity:54 var
+R5832:5839 auth_ideal_functionality <> auth_log proj
+R5825:5829 auth_ideal_functionality <> state:53 var
+binder 5775:5781 <> new_log:61
+R5847:5847 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5851:5855 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6061:6064 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5848:5850 auth_ideal_functionality <> sid:58 var
+R5856:5863 auth_ideal_functionality <> sessions proj
+R5856:5863 auth_ideal_functionality <> sessions proj
+R5856:5863 auth_ideal_functionality <> sessions proj
+R5892:5898 auth_ideal_functionality <> ca_cert proj
+R5892:5898 auth_ideal_functionality <> ca_cert proj
+R5930:5945 auth_ideal_functionality <> role_permissions proj
+R5930:5945 auth_ideal_functionality <> role_permissions proj
+R5986:6000 auth_ideal_functionality <> session_counter proj
+R5986:6000 auth_ideal_functionality <> session_counter proj
+R6042:6049 auth_ideal_functionality <> auth_log proj
+R6042:6049 auth_ideal_functionality <> auth_log proj
+R5868:5879 auth_ideal_functionality <> new_sessions:60 var
+R5910:5916 auth_ideal_functionality <> ca_cert proj
+R5903:5907 auth_ideal_functionality <> state:53 var
+R5957:5972 auth_ideal_functionality <> role_permissions proj
+R5950:5954 auth_ideal_functionality <> state:53 var
+R6005:6005 Corelib.Init.Datatypes <> S constr
+R6014:6028 auth_ideal_functionality <> session_counter proj
+R6007:6011 auth_ideal_functionality <> state:53 var
+R6054:6060 auth_ideal_functionality <> new_log:61 var
+def 6103:6118 <> validate_session
+R6131:6139 auth_ideal_functionality <> AuthState rec
+binder 6123:6127 <> state:62
+R6151:6159 auth_ideal_functionality <> SessionId def
+binder 6145:6147 <> sid:63
+R6177:6182 Stdlib.Strings.String <> string ind
+binder 6165:6173 <> client_ip:64
+R6203:6205 Corelib.Init.Datatypes <> nat ind
+binder 6188:6199 <> current_time:65
+R6212:6217 Corelib.Init.Datatypes <> option ind
+R6234:6236 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R6220:6233 uc_framework <> ClientIdentity rec
+R6237:6245 auth_ideal_functionality <> AuthState rec
+R6259:6262 Stdlib.Lists.List <> find def
+R6312:6319 auth_ideal_functionality <> sessions proj
+R6305:6309 auth_ideal_functionality <> state:62 var
+binder 6269:6269 <> s:66
+R6274:6283 Stdlib.Strings.String <> eqb def
+R6288:6297 auth_ideal_functionality <> session_id proj
+R6285:6285 auth_ideal_functionality <> s:66 var
+R6300:6302 auth_ideal_functionality <> sid:63 var
+R6331:6334 Corelib.Init.Datatypes <> None constr
+R6339:6342 Corelib.Init.Datatypes <> None constr
+R6348:6351 Corelib.Init.Datatypes <> Some constr
+R6376:6388 auth_ideal_functionality <> Build_Session constr
+R6474:6477 Corelib.Init.Datatypes <> negb def
+R6539:6545 Stdlib.Arith.PeanoNat Nat ltb def
+R6551:6562 auth_ideal_functionality <> current_time:65 var
+R6645:6648 Corelib.Init.Datatypes <> negb def
+R6651:6660 Stdlib.Strings.String <> eqb def
+R6665:6673 auth_ideal_functionality <> client_ip:64 var
+R6697:6700 Corelib.Init.Datatypes <> Some constr
+R6702:6702 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6705:6706 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6712:6712 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6707:6711 auth_ideal_functionality <> state:62 var
+R6681:6684 Corelib.Init.Datatypes <> None constr
+R6569:6572 Corelib.Init.Datatypes <> None constr
+R6491:6494 Corelib.Init.Datatypes <> None constr
+def 6803:6817 <> ideal_authorize
+R6830:6838 auth_ideal_functionality <> AuthState rec
+binder 6822:6826 <> state:68
+R6855:6868 uc_framework <> ClientIdentity rec
+binder 6844:6851 <> identity:69
+R6879:6887 auth_ideal_functionality <> Operation ind
+binder 6874:6875 <> op:70
+R6899:6906 auth_ideal_functionality <> Resource ind
+binder 6893:6895 <> res:71
+R6917:6919 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R6913:6916 Corelib.Init.Datatypes <> bool ind
+R6920:6928 auth_ideal_functionality <> AuthState rec
+R6978:6985 auth_ideal_functionality <> get_role def
+R6987:6994 auth_ideal_functionality <> identity:69 var
+binder 6970:6973 <> role:72
+R7048:7061 auth_ideal_functionality <> has_permission def
+R7063:7066 auth_ideal_functionality <> role:72 var
+R7068:7069 auth_ideal_functionality <> op:70 var
+binder 7036:7043 <> has_perm:73
+R7156:7158 auth_ideal_functionality <> res:71 var
+R7171:7181 auth_ideal_functionality <> KeyResource constr
+R7191:7200 Stdlib.Strings.String <> eqb def
+R7212:7220 uc_framework <> namespace proj
+R7202:7209 auth_ideal_functionality <> identity:69 var
+R7232:7244 auth_ideal_functionality <> AuditResource constr
+R7252:7261 Stdlib.Strings.String <> eqb def
+R7273:7281 uc_framework <> namespace proj
+R7263:7270 auth_ideal_functionality <> identity:69 var
+R7293:7306 auth_ideal_functionality <> ConfigResource constr
+R7317:7320 auth_ideal_functionality <> role:72 var
+R7327:7331 auth_ideal_functionality <> Admin constr
+R7336:7339 Corelib.Init.Datatypes <> true constr
+R7348:7352 Corelib.Init.Datatypes <> false constr
+binder 7130:7141 <> namespace_ok:76
+R7392:7395 Corelib.Init.Datatypes <> andb def
+R7406:7417 auth_ideal_functionality <> namespace_ok:76 var
+R7397:7404 auth_ideal_functionality <> has_perm:73 var
+binder 7378:7387 <> authorized:77
+R7481:7490 auth_ideal_functionality <> authorized:77 var
+binder 7464:7473 <> event_type:78
+R7591:7594 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R7562:7570 uc_framework <> AuthEvent constr
+R7572:7581 auth_ideal_functionality <> event_type:78 var
+R7583:7590 auth_ideal_functionality <> identity:69 var
+R7602:7609 auth_ideal_functionality <> auth_log proj
+R7595:7599 auth_ideal_functionality <> state:68 var
+binder 7551:7557 <> new_log:79
+R7618:7618 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7629:7633 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7869:7872 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7619:7628 auth_ideal_functionality <> authorized:77 var
+R7634:7641 auth_ideal_functionality <> sessions proj
+R7634:7641 auth_ideal_functionality <> sessions proj
+R7634:7641 auth_ideal_functionality <> sessions proj
+R7681:7687 auth_ideal_functionality <> ca_cert proj
+R7681:7687 auth_ideal_functionality <> ca_cert proj
+R7726:7741 auth_ideal_functionality <> role_permissions proj
+R7726:7741 auth_ideal_functionality <> role_permissions proj
+R7789:7803 auth_ideal_functionality <> session_counter proj
+R7789:7803 auth_ideal_functionality <> session_counter proj
+R7850:7857 auth_ideal_functionality <> auth_log proj
+R7850:7857 auth_ideal_functionality <> auth_log proj
+R7653:7660 auth_ideal_functionality <> sessions proj
+R7646:7650 auth_ideal_functionality <> state:68 var
+R7699:7705 auth_ideal_functionality <> ca_cert proj
+R7692:7696 auth_ideal_functionality <> state:68 var
+R7753:7768 auth_ideal_functionality <> role_permissions proj
+R7746:7750 auth_ideal_functionality <> state:68 var
+R7815:7829 auth_ideal_functionality <> session_counter proj
+R7808:7812 auth_ideal_functionality <> state:68 var
+R7862:7868 auth_ideal_functionality <> new_log:79 var
+prf 7987:8012 <> authentication_correctness
+R8034:8042 auth_ideal_functionality <> AuthState rec
+binder 8026:8030 <> state:80
+R8053:8063 auth_ideal_functionality <> Certificate rec
+binder 8046:8049 <> cert:81
+R8074:8076 Corelib.Init.Datatypes <> nat ind
+binder 8067:8070 <> time:82
+R8127:8134 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8120:8122 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8084:8103 auth_ideal_functionality <> validate_certificate def
+R8105:8109 auth_ideal_functionality <> state:80 var
+R8111:8114 auth_ideal_functionality <> cert:81 var
+R8116:8119 auth_ideal_functionality <> time:82 var
+R8123:8126 Corelib.Init.Datatypes <> true constr
+R8135:8141 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R8157:8164 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+binder 8142:8149 <> identity:83
+binder 8151:8156 <> state':84
+R8199:8201 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8165:8182 auth_ideal_functionality <> ideal_authenticate def
+R8184:8188 auth_ideal_functionality <> state:80 var
+R8190:8193 auth_ideal_functionality <> cert:81 var
+R8195:8198 auth_ideal_functionality <> time:82 var
+R8202:8205 Corelib.Init.Datatypes <> Some constr
+R8207:8207 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8216:8217 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8224:8224 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8208:8215 auth_ideal_functionality <> identity:83 var
+R8218:8223 auth_ideal_functionality <> state':84 var
+R8276:8293 auth_ideal_functionality <> ideal_authenticate def
+R8324:8339 auth_ideal_functionality <> extract_identity def
+R8324:8339 auth_ideal_functionality <> extract_identity def
+prf 8471:8493 <> authorization_soundness
+R8515:8523 auth_ideal_functionality <> AuthState rec
+binder 8507:8511 <> state:85
+R8538:8551 uc_framework <> ClientIdentity rec
+binder 8527:8534 <> identity:86
+R8560:8568 auth_ideal_functionality <> Operation ind
+binder 8555:8556 <> op:87
+R8578:8585 auth_ideal_functionality <> Resource ind
+binder 8572:8574 <> res:88
+R8643:8703 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8636:8638 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8593:8595 Corelib.Init.Datatypes <> fst def
+R8598:8612 auth_ideal_functionality <> ideal_authorize def
+R8614:8618 auth_ideal_functionality <> state:85 var
+R8620:8627 auth_ideal_functionality <> identity:86 var
+R8629:8630 auth_ideal_functionality <> op:87 var
+R8632:8634 auth_ideal_functionality <> res:88 var
+R8639:8642 Corelib.Init.Datatypes <> true constr
+R8748:8790 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R8741:8743 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8704:8717 auth_ideal_functionality <> has_permission def
+R8720:8727 auth_ideal_functionality <> get_role def
+R8729:8736 auth_ideal_functionality <> identity:86 var
+R8739:8740 auth_ideal_functionality <> op:87 var
+R8744:8747 Corelib.Init.Datatypes <> true constr
+R8797:8799 auth_ideal_functionality <> res:88 var
+R8812:8822 auth_ideal_functionality <> KeyResource constr
+R8852:8854 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8842:8850 uc_framework <> namespace proj
+R8832:8839 auth_ideal_functionality <> identity:86 var
+R8864:8876 auth_ideal_functionality <> AuditResource constr
+R8904:8906 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8894:8902 uc_framework <> namespace proj
+R8884:8891 auth_ideal_functionality <> identity:86 var
+R8916:8929 auth_ideal_functionality <> ConfigResource constr
+R8951:8953 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8934:8941 auth_ideal_functionality <> get_role def
+R8943:8950 auth_ideal_functionality <> identity:86 var
+R8954:8958 auth_ideal_functionality <> Admin constr
+R9023:9037 auth_ideal_functionality <> ideal_authorize def
+prf 9182:9209 <> session_hijacking_prevention
+R9231:9239 auth_ideal_functionality <> AuthState rec
+binder 9223:9227 <> state:90
+R9249:9257 auth_ideal_functionality <> SessionId def
+binder 9243:9245 <> sid:91
+R9271:9276 Stdlib.Strings.String <> string ind
+binder 9261:9263 <> ip1:92
+binder 9265:9267 <> ip2:93
+R9287:9289 Corelib.Init.Datatypes <> nat ind
+binder 9280:9283 <> time:94
+R9307:9314 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R9300:9303 Corelib.Init.Logic <> ::type_scope:x_'<>'_x not
+R9297:9299 auth_ideal_functionality <> ip1:92 var
+R9304:9306 auth_ideal_functionality <> ip2:93 var
+R9321:9336 auth_ideal_functionality <> validate_session def
+R9338:9342 auth_ideal_functionality <> state:90 var
+R9344:9346 auth_ideal_functionality <> sid:91 var
+R9348:9350 auth_ideal_functionality <> ip1:92 var
+R9352:9355 auth_ideal_functionality <> time:94 var
+R9368:9371 Corelib.Init.Datatypes <> Some constr
+R9373:9373 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9382:9383 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9385:9385 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9491:9493 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R9456:9471 auth_ideal_functionality <> validate_session def
+R9473:9477 auth_ideal_functionality <> state:90 var
+R9479:9481 auth_ideal_functionality <> sid:91 var
+R9483:9485 auth_ideal_functionality <> ip2:93 var
+R9487:9490 auth_ideal_functionality <> time:94 var
+R9494:9497 Corelib.Init.Datatypes <> None constr
+R9505:9508 Corelib.Init.Datatypes <> None constr
+R9513:9516 Corelib.Init.Logic <> True ind
+R9581:9596 auth_ideal_functionality <> validate_session def
+R9611:9614 Stdlib.Lists.List <> find def
+R9611:9614 Stdlib.Lists.List <> find def
+prf 9841:9864 <> namespace_isolation_auth
+R9886:9894 auth_ideal_functionality <> AuthState rec
+binder 9878:9882 <> state:95
+R9909:9922 uc_framework <> ClientIdentity rec
+binder 9898:9905 <> identity:96
+R9931:9939 auth_ideal_functionality <> Operation ind
+binder 9926:9927 <> op:97
+R9949:9953 uc_framework <> KeyId def
+binder 9943:9945 <> kid:98
+R9962:9970 uc_framework <> Namespace def
+binder 9957:9958 <> ns:99
+R10004:10011 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R9998:10001 Corelib.Init.Logic <> ::type_scope:x_'<>'_x not
+R9988:9996 uc_framework <> namespace proj
+R9978:9985 auth_ideal_functionality <> identity:96 var
+R10002:10003 auth_ideal_functionality <> ns:99 var
+R10072:10074 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R10012:10014 Corelib.Init.Datatypes <> fst def
+R10017:10031 auth_ideal_functionality <> ideal_authorize def
+R10033:10037 auth_ideal_functionality <> state:95 var
+R10039:10046 auth_ideal_functionality <> identity:96 var
+R10048:10049 auth_ideal_functionality <> op:97 var
+R10052:10062 auth_ideal_functionality <> KeyResource constr
+R10064:10066 auth_ideal_functionality <> kid:98 var
+R10068:10069 auth_ideal_functionality <> ns:99 var
+R10075:10079 Corelib.Init.Datatypes <> false constr
+R10138:10152 auth_ideal_functionality <> ideal_authorize def
+ax 10315:10320 <> F_auth
+R10324:10333 uc_framework <> IdealState defax
+ax 10372:10387 <> F_auth_authentic
+R10391:10402 uc_framework <> Authenticity defax
+R10404:10409 auth_ideal_functionality <> F_auth defax
+ax 10590:10605 <> F_auth_integrity
+R10609:10617 uc_framework <> Integrity defax
+R10619:10624 auth_ideal_functionality <> F_auth defax

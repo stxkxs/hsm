@@ -1,0 +1,54 @@
+name: Security & Side-Channel Tests
+
+on:
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  Z3_SYS_Z3_HEADER: ""  # Unset macOS path
+
+jobs:
+  timing-tests:
+    name: Timing Side-Channel Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run timing tests
+        working-directory: crates/crypto-engine
+        run: cargo test --release --test timing_tests -- --nocapture
+
+  fault-injection:
+    name: Fault Injection Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run fault injection tests
+        run: cd crates/crypto-engine && cargo test --test fault_injection_tests --release
+
+  security-leakage:
+    name: Debug Information Leakage Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run security leakage tests
+        run: cd crates/crypto-engine && cargo test --test security_tests --release
+
+  constant-time-verification:
+    name: Constant-Time Code Verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run constant_time module tests
+        working-directory: crates/crypto-engine
+        run: cargo test --release constant_time

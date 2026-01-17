@@ -37,7 +37,15 @@ anyhow = "1.0"
 # SHA-256 for fingerprints
 sha2 = "0.10"
 
+# Storage backends (optional)
+hsm-storage = { path = "../storage", optional = true }
+hsm-hardware-backend = { path = "../hardware-backend", optional = true }
+
+# Async trait support
+async-trait = { version = "0.1", optional = true }
+
 [dev-dependencies]
+tempfile = "3.24"
 tokio = { version = "1.49", features = ["full", "test-util"] }
 proptest = "1.9"
 criterion = "0.8"
@@ -45,3 +53,11 @@ criterion = "0.8"
 [[bench]]
 name = "key_manager_benches"
 harness = false
+
+[features]
+default = []
+hardware = ["hsm-storage/hardware", "hsm-hardware-backend", "async-trait"]
+aws-nitro = ["hardware", "hsm-storage/aws-nitro", "hsm-hardware-backend/aws-nitro"]
+intel-sgx = ["hardware", "hsm-storage/intel-sgx", "hsm-hardware-backend/intel-sgx"]
+amd-sev = ["hardware", "hsm-storage/amd-sev", "hsm-hardware-backend/amd-sev"]
+all-hardware = ["hardware", "hsm-storage/all-hardware", "hsm-hardware-backend/all-backends"]

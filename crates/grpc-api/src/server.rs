@@ -166,7 +166,7 @@ fn create_tls_config(config: &TlsConfig) -> Result<ServerTlsConfig> {
 ///     let config = ServerConfig::default();
 ///     let server = create_server(&config)?;
 ///
-///     let addr = "0.0.0.0:50051".parse()?;
+///     let addr: std::net::SocketAddr = "0.0.0.0:50051".parse()?;
 ///
 ///     // Start server with graceful shutdown
 ///     // server

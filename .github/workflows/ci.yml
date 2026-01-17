@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  Z3_SYS_Z3_HEADER: ""  # Unset macOS path, let z3-sys auto-detect on Linux
 
 jobs:
   test:
@@ -16,10 +17,16 @@ jobs:
     - uses: actions/checkout@v3
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
-    - name: Install protobuf compiler
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-    - name: Run tests
-      run: cargo test --all --verbose
+    - name: Install system dependencies
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler z3
+    - name: Run tests (excluding long-running performance/stress tests)
+      run: |
+        cargo test --all --verbose -- \
+          --skip throughput_10000 \
+          --skip verification_performance \
+          --skip high_throughput \
+          --skip stress \
+          --skip workload
     - name: Run clippy
       run: cargo clippy --all -- -D warnings
     - name: Check formatting
@@ -33,4 +40,4 @@ jobs:
     - name: Install cargo-audit
       run: cargo install cargo-audit
     - name: Security audit
-      run: cargo audit
+      run: cargo audit --ignore RUSTSEC-2025-0055

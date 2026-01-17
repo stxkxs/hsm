@@ -1,0 +1,363 @@
+DIGEST 90faefd346a348c6fe4242c2ca97b233
+Fuc_framework
+R334:350 Stdlib.Lists.List <> <> lib
+R368:388 Stdlib.Strings.String <> <> lib
+R406:425 Stdlib.ZArith.ZArith <> <> lib
+R435:447 Stdlib.Lists.List ListNotations <> mod
+def 527:533 <> Message
+R538:541 Corelib.Init.Datatypes <> list ind
+R543:545 Corelib.Init.Datatypes <> nat ind
+def 585:591 <> PartyId
+R596:601 Stdlib.Strings.String <> string ind
+def 643:651 <> SessionId
+R656:658 Corelib.Init.Datatypes <> nat ind
+def 698:704 <> Address
+R709:714 Stdlib.Strings.String <> string ind
+def 772:780 <> Bitstring
+R785:788 Corelib.Init.Datatypes <> list ind
+R790:793 Corelib.Init.Datatypes <> bool ind
+ax 849:859 <> random_bits
+R866:869 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R863:865 Corelib.Init.Datatypes <> nat ind
+R870:878 uc_framework <> Bitstring def
+def 961:973 <> nat_to_string
+R980:982 Corelib.Init.Datatypes <> nat ind
+binder 976:976 <> n:3
+R987:992 Stdlib.Strings.String <> string ind
+R1005:1005 uc_framework <> n:3 var
+R1029:1029 Corelib.Init.Datatypes <> S constr
+R1037:1049 Stdlib.Strings.String <> append def
+R1052:1064 uc_framework <> nat_to_string:4 def
+mod 1089:1094 <> String
+def 1110:1115 String of_nat
+R1120:1132 uc_framework <> nat_to_string def
+R1139:1144 uc_framework String <> mod
+def 1228:1236 <> substring
+R1247:1252 Stdlib.Strings.String <> string ind
+binder 1239:1240 <> s1:6
+binder 1242:1243 <> s2:7
+R1257:1260 Corelib.Init.Datatypes <> bool ind
+R1265:1269 Corelib.Init.Datatypes <> false constr
+def 1329:1338 <> modify_nth
+binder 1341:1341 <> A:8
+R1356:1359 Corelib.Init.Datatypes <> list ind
+R1361:1361 uc_framework <> A:8 var
+binder 1352:1352 <> l:9
+R1369:1371 Corelib.Init.Datatypes <> nat ind
+binder 1365:1365 <> n:10
+R1379:1379 uc_framework <> A:8 var
+binder 1375:1375 <> x:11
+R1384:1387 Corelib.Init.Datatypes <> list ind
+R1389:1389 uc_framework <> A:8 var
+R1405:1405 uc_framework <> n:10 var
+R1402:1402 uc_framework <> l:9 var
+R1416:1417 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+R1425:1426 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+R1433:1436 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R1446:1449 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R1445:1445 uc_framework <> x:11 var
+R1457:1460 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R1464:1464 Corelib.Init.Datatypes <> S constr
+R1473:1476 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R1477:1486 uc_framework <> modify_nth:12 def
+R1493:1493 uc_framework <> x:11 var
+def 1568:1572 <> KeyId
+R1577:1582 Stdlib.Strings.String <> string ind
+def 1633:1641 <> Namespace
+R1646:1651 Stdlib.Strings.String <> string ind
+rec 1712:1725 <> ClientIdentity
+proj 1734:1735 <> cn
+proj 1786:1797 <> organization
+proj 1839:1847 <> namespace
+proj 1905:1909 <> roles
+R1739:1744 Stdlib.Strings.String <> string ind
+R1801:1806 Stdlib.Strings.String <> string ind
+R1851:1859 uc_framework <> Namespace def
+R1913:1916 Corelib.Init.Datatypes <> list ind
+R1918:1923 Stdlib.Strings.String <> string ind
+ind 2005:2007 <> Key
+constr 2016:2021 <> RSAKey
+constr 2046:2053 <> ECDSAKey
+constr 2078:2087 <> Ed25519Key
+constr 2112:2117 <> AESKey
+R2034:2037 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2025:2033 uc_framework <> Bitstring def
+R2038:2040 uc_framework <> Key:20 ind
+R2066:2069 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2057:2065 uc_framework <> Bitstring def
+R2070:2072 uc_framework <> Key:20 ind
+R2100:2103 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2091:2099 uc_framework <> Bitstring def
+R2104:2106 uc_framework <> Key:20 ind
+R2130:2133 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2121:2129 uc_framework <> Bitstring def
+R2134:2136 uc_framework <> Key:20 ind
+scheme 2005:2007 <> Key_rect
+scheme 2005:2007 <> Key_ind
+scheme 2005:2007 <> Key_rec
+scheme 2005:2007 <> Key_sind
+ind 2199:2208 <> AuditEvent
+constr 2217:2224 <> CryptoOp
+constr 2275:2286 <> KeyLifecycle
+constr 2337:2345 <> AuthEvent
+R2234:2237 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2228:2233 Stdlib.Strings.String <> string ind
+R2243:2246 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2238:2242 uc_framework <> KeyId def
+R2256:2259 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2247:2255 uc_framework <> Namespace def
+R2260:2269 uc_framework <> AuditEvent:22 ind
+R2296:2299 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2290:2295 Stdlib.Strings.String <> string ind
+R2305:2308 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2300:2304 uc_framework <> KeyId def
+R2318:2321 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2309:2317 uc_framework <> Namespace def
+R2322:2331 uc_framework <> AuditEvent:22 ind
+R2355:2358 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2349:2354 Stdlib.Strings.String <> string ind
+R2373:2376 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2359:2372 uc_framework <> ClientIdentity rec
+R2377:2386 uc_framework <> AuditEvent:22 ind
+scheme 2199:2208 <> AuditEvent_rect
+scheme 2199:2208 <> AuditEvent_ind
+scheme 2199:2208 <> AuditEvent_rec
+scheme 2199:2208 <> AuditEvent_sind
+def 2445:2449 <> Trace
+R2454:2457 Corelib.Init.Datatypes <> list ind
+R2459:2468 uc_framework <> AuditEvent ind
+rec 2536:2556 <> AdversaryCapabilities
+proj 2565:2577 <> can_intercept
+proj 2636:2645 <> can_modify
+proj 2696:2705 <> can_replay
+proj 2760:2775 <> can_authenticate
+proj 2822:2840 <> compromised_modules
+R2581:2584 Corelib.Init.Datatypes <> bool ind
+R2649:2652 Corelib.Init.Datatypes <> bool ind
+R2709:2712 Corelib.Init.Datatypes <> bool ind
+R2779:2782 Corelib.Init.Datatypes <> bool ind
+R2844:2847 Corelib.Init.Datatypes <> list ind
+R2849:2854 Stdlib.Strings.String <> string ind
+def 2947:2963 <> DolevYaoAdversary
+R2967:2987 uc_framework <> AdversaryCapabilities rec
+R2997:3009 uc_framework <> can_intercept proj
+R2997:3009 uc_framework <> can_intercept proj
+R2997:3009 uc_framework <> can_intercept proj
+R3022:3031 uc_framework <> can_modify proj
+R3022:3031 uc_framework <> can_modify proj
+R3044:3053 uc_framework <> can_replay proj
+R3044:3053 uc_framework <> can_replay proj
+R3066:3081 uc_framework <> can_authenticate proj
+R3066:3081 uc_framework <> can_authenticate proj
+R3095:3113 uc_framework <> compromised_modules proj
+R3095:3113 uc_framework <> compromised_modules proj
+R3014:3017 Corelib.Init.Datatypes <> true constr
+R3036:3039 Corelib.Init.Datatypes <> true constr
+R3058:3061 Corelib.Init.Datatypes <> true constr
+R3086:3090 Corelib.Init.Datatypes <> false constr
+R3118:3119 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+def 3176:3190 <> MaliciousClient
+R3194:3214 uc_framework <> AdversaryCapabilities rec
+R3224:3236 uc_framework <> can_intercept proj
+R3224:3236 uc_framework <> can_intercept proj
+R3224:3236 uc_framework <> can_intercept proj
+R3250:3259 uc_framework <> can_modify proj
+R3250:3259 uc_framework <> can_modify proj
+R3273:3282 uc_framework <> can_replay proj
+R3273:3282 uc_framework <> can_replay proj
+R3296:3311 uc_framework <> can_authenticate proj
+R3296:3311 uc_framework <> can_authenticate proj
+R3324:3342 uc_framework <> compromised_modules proj
+R3324:3342 uc_framework <> compromised_modules proj
+R3241:3245 Corelib.Init.Datatypes <> false constr
+R3264:3268 Corelib.Init.Datatypes <> false constr
+R3287:3291 Corelib.Init.Datatypes <> false constr
+R3316:3319 Corelib.Init.Datatypes <> true constr
+R3347:3348 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+ax 3449:3459 <> Environment
+ax 3502:3514 <> ProtocolState
+ax 3568:3577 <> IdealState
+ax 3621:3634 <> AdversaryState
+ax 3678:3691 <> SimulatorState
+ax 3807:3819 <> RealExecution
+R3838:3841 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3825:3837 uc_framework <> ProtocolState defax
+R3856:3859 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3842:3855 uc_framework <> AdversaryState defax
+R3871:3874 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3860:3870 uc_framework <> Environment defax
+R3875:3879 uc_framework <> Trace def
+ax 3965:3978 <> IdealExecution
+R3994:3997 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3984:3993 uc_framework <> IdealState defax
+R4012:4015 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3998:4011 uc_framework <> SimulatorState defax
+R4027:4030 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4016:4026 uc_framework <> Environment defax
+R4031:4035 uc_framework <> Trace def
+ax 4091:4100 <> CompIndist
+R4109:4112 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4104:4108 uc_framework <> Trace def
+R4118:4121 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4113:4117 uc_framework <> Trace def
+def 4206:4215 <> UCRealizes
+R4223:4235 uc_framework <> ProtocolState defax
+binder 4218:4219 <> pi:46
+R4243:4252 uc_framework <> IdealState defax
+binder 4239:4239 <> F:47
+R4279:4292 uc_framework <> AdversaryState defax
+binder 4275:4275 <> A:48
+R4300:4310 uc_framework <> Environment defax
+binder 4296:4296 <> Z:49
+R4318:4325 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R4344:4352 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R4330:4343 uc_framework <> SimulatorState defax
+binder 4326:4326 <> S:50
+R4353:4362 uc_framework <> CompIndist defax
+R4373:4385 uc_framework <> RealExecution defax
+R4387:4388 uc_framework <> pi:46 var
+R4390:4390 uc_framework <> A:48 var
+R4392:4392 uc_framework <> Z:49 var
+R4404:4417 uc_framework <> IdealExecution defax
+R4419:4419 uc_framework <> F:47 var
+R4421:4421 uc_framework <> S:50 var
+R4423:4423 uc_framework <> Z:49 var
+ax 4516:4527 <> ComposeIdeal
+R4541:4544 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4531:4540 uc_framework <> IdealState defax
+R4555:4558 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4545:4554 uc_framework <> IdealState defax
+R4559:4568 uc_framework <> IdealState defax
+ax 4625:4639 <> ComposeProtocol
+R4656:4659 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4643:4655 uc_framework <> ProtocolState defax
+R4673:4676 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4660:4672 uc_framework <> ProtocolState defax
+R4677:4689 uc_framework <> ProtocolState defax
+prf 4738:4757 <> UniversalComposition
+R4781:4793 uc_framework <> ProtocolState defax
+binder 4771:4773 <> pi1:55
+binder 4775:4777 <> pi2:56
+R4805:4814 uc_framework <> IdealState defax
+binder 4797:4798 <> F1:57
+binder 4800:4801 <> F2:58
+R4839:4846 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4822:4831 uc_framework <> UCRealizes def
+R4833:4835 uc_framework <> pi1:55 var
+R4837:4838 uc_framework <> F1:57 var
+R4864:4871 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4847:4856 uc_framework <> UCRealizes def
+R4858:4860 uc_framework <> pi2:56 var
+R4862:4863 uc_framework <> F2:58 var
+R4872:4881 uc_framework <> UCRealizes def
+R4890:4904 uc_framework <> ComposeProtocol defax
+R4906:4908 uc_framework <> pi1:55 var
+R4910:4912 uc_framework <> pi2:56 var
+R4922:4933 uc_framework <> ComposeIdeal defax
+R4935:4936 uc_framework <> F1:57 var
+R4938:4939 uc_framework <> F2:58 var
+ax 5821:5835 <> ParallelCompose
+R5849:5852 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5839:5848 uc_framework <> IdealState defax
+R5863:5866 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5853:5862 uc_framework <> IdealState defax
+R5867:5876 uc_framework <> IdealState defax
+prf 5888:5906 <> ParallelComposition
+R5930:5942 uc_framework <> ProtocolState defax
+binder 5920:5922 <> pi1:61
+binder 5924:5926 <> pi2:62
+R5954:5963 uc_framework <> IdealState defax
+binder 5946:5947 <> F1:63
+binder 5949:5950 <> F2:64
+R5988:5995 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5971:5980 uc_framework <> UCRealizes def
+R5982:5984 uc_framework <> pi1:61 var
+R5986:5987 uc_framework <> F1:63 var
+R6013:6020 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5996:6005 uc_framework <> UCRealizes def
+R6007:6009 uc_framework <> pi2:62 var
+R6011:6012 uc_framework <> F2:64 var
+R6021:6030 uc_framework <> UCRealizes def
+R6039:6053 uc_framework <> ComposeProtocol defax
+R6055:6057 uc_framework <> pi1:61 var
+R6059:6061 uc_framework <> pi2:62 var
+R6071:6085 uc_framework <> ParallelCompose defax
+R6087:6088 uc_framework <> F1:63 var
+R6090:6091 uc_framework <> F2:64 var
+ax 6286:6296 <> Correctness
+R6310:6313 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6300:6309 uc_framework <> IdealState defax
+ax 6379:6393 <> Confidentiality
+R6407:6410 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6397:6406 uc_framework <> IdealState defax
+ax 6476:6484 <> Integrity
+R6498:6501 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6488:6497 uc_framework <> IdealState defax
+ax 6561:6572 <> Authenticity
+R6586:6589 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6576:6585 uc_framework <> IdealState defax
+ax 6655:6666 <> Availability
+R6680:6683 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6670:6679 uc_framework <> IdealState defax
+prf 6827:6845 <> UCPreservesProperty
+R6864:6876 uc_framework <> ProtocolState defax
+binder 6859:6860 <> pi:75
+R6884:6893 uc_framework <> IdealState defax
+binder 6880:6880 <> F:76
+R6911:6914 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6901:6910 uc_framework <> IdealState defax
+binder 6897:6897 <> P:77
+R6941:6948 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6926:6935 uc_framework <> UCRealizes def
+R6937:6938 uc_framework <> pi:75 var
+R6940:6940 uc_framework <> F:76 var
+R6952:6959 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6949:6949 uc_framework <> P:77 var
+R6951:6951 uc_framework <> F:76 var
+R6960:6960 uc_framework <> P:77 var
+R6962:6962 uc_framework <> F:76 var
+prf 7130:7160 <> CompositionPreservesCorrectness
+R7182:7191 uc_framework <> IdealState defax
+binder 7174:7175 <> F1:78
+binder 7177:7178 <> F2:79
+R7213:7220 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7199:7209 uc_framework <> Correctness defax
+R7211:7212 uc_framework <> F1:78 var
+R7235:7242 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7221:7231 uc_framework <> Correctness defax
+R7233:7234 uc_framework <> F2:79 var
+R7243:7253 uc_framework <> Correctness defax
+R7256:7267 uc_framework <> ComposeIdeal defax
+R7269:7270 uc_framework <> F1:78 var
+R7272:7273 uc_framework <> F2:79 var
+prf 7420:7447 <> CompositionPreservesSecurity
+R7469:7478 uc_framework <> IdealState defax
+binder 7461:7462 <> F1:80
+binder 7464:7465 <> F2:81
+R7504:7511 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7486:7500 uc_framework <> Confidentiality defax
+R7502:7503 uc_framework <> F1:80 var
+R7524:7531 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7512:7520 uc_framework <> Integrity defax
+R7522:7523 uc_framework <> F1:80 var
+R7550:7557 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7532:7546 uc_framework <> Confidentiality defax
+R7548:7549 uc_framework <> F2:81 var
+R7570:7577 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7558:7566 uc_framework <> Integrity defax
+R7568:7569 uc_framework <> F2:81 var
+R7614:7621 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R7578:7592 uc_framework <> Confidentiality defax
+R7595:7606 uc_framework <> ComposeIdeal defax
+R7608:7609 uc_framework <> F1:80 var
+R7611:7612 uc_framework <> F2:81 var
+R7622:7630 uc_framework <> Integrity defax
+R7633:7644 uc_framework <> ComposeIdeal defax
+R7646:7647 uc_framework <> F1:80 var
+R7649:7650 uc_framework <> F2:81 var
+R7794:7803 uc_framework <> UCRealizes def
+not 7777:7777 <> :::x_'≈'_x
+R7853:7864 uc_framework <> ComposeIdeal defax
+not 7835:7835 <> :::x_'∘'_x
+R7938:7952 uc_framework <> ComposeProtocol defax
+not 7918:7918 <> :::x_'⊗'_x

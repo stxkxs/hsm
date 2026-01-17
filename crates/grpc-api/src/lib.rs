@@ -149,7 +149,7 @@
 //!     let server = create_server(&config)?;
 //!
 //!     // Bind and serve
-//!     let addr = "0.0.0.0:50051".parse()?;
+//!     let addr: std::net::SocketAddr = "0.0.0.0:50051".parse()?;
 //!     println!("HSM gRPC server listening on {}", addr);
 //!
 //!     // Note: In production, you would add your service implementations here
@@ -254,11 +254,14 @@
 //! let cache = ResponseCache::default();
 //!
 //! // Cache a GetKey response
-//! let key = CacheKey::get_key(b"key-123", "namespace");
-//! cache.put_get_key(key.clone(), vec![/* response data */]);
+//! let key = CacheKey::GetKey {
+//!     key_id: b"key-123".to_vec(),
+//!     namespace: "namespace".to_string(),
+//! };
+//! cache.get_key_cache.insert(key.clone(), vec![/* response data */]);
 //!
 //! // Retrieve from cache
-//! if let Some(response) = cache.get_key(&key) {
+//! if let Some(response) = cache.get_key_cache.get(&key) {
 //!     println!("Cache hit!");
 //! }
 //! # }

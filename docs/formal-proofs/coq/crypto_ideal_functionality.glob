@@ -1,0 +1,618 @@
+DIGEST 6c03515271bebdb6197a12301c4a594a
+Fcrypto_ideal_functionality
+R450:461 uc_framework <> <> lib
+R479:495 Stdlib.Lists.List <> <> lib
+R513:533 Stdlib.Strings.String <> <> lib
+R543:555 Stdlib.Lists.List ListNotations <> mod
+ind 658:670 <> SignAlgorithm
+constr 679:697 <> RSA_PKCS1v15_SHA256
+constr 703:716 <> RSA_PSS_SHA256
+constr 722:731 <> ECDSA_P256
+constr 737:746 <> ECDSA_P384
+constr 752:758 <> Ed25519
+constr 764:768 <> Ed448
+scheme 658:670 <> SignAlgorithm_rect
+scheme 658:670 <> SignAlgorithm_ind
+scheme 658:670 <> SignAlgorithm_rec
+scheme 658:670 <> SignAlgorithm_sind
+ind 811:826 <> EncryptAlgorithm
+constr 835:849 <> RSA_OAEP_SHA256
+constr 855:865 <> AES_256_GCM
+constr 871:881 <> AES_128_GCM
+scheme 811:826 <> EncryptAlgorithm_rect
+scheme 811:826 <> EncryptAlgorithm_ind
+scheme 811:826 <> EncryptAlgorithm_rec
+scheme 811:826 <> EncryptAlgorithm_sind
+ind 918:930 <> HashAlgorithm
+constr 939:944 <> SHA256
+constr 950:955 <> SHA384
+constr 961:966 <> SHA512
+constr 972:979 <> SHA3_256
+scheme 918:930 <> HashAlgorithm_rect
+scheme 918:930 <> HashAlgorithm_ind
+scheme 918:930 <> HashAlgorithm_rec
+scheme 918:930 <> HashAlgorithm_sind
+rec 1208:1218 <> CryptoState
+proj 1275:1289 <> signature_table
+proj 1383:1398 <> encryption_table
+proj 1501:1509 <> key_table
+proj 1579:1591 <> nonce_counter
+proj 1635:1647 <> operation_log
+R1293:1296 Corelib.Init.Datatypes <> list ind
+R1314:1316 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1304:1306 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1299:1303 uc_framework <> KeyId def
+R1307:1313 uc_framework <> Message def
+R1317:1325 uc_framework <> Bitstring def
+R1402:1405 Corelib.Init.Datatypes <> list ind
+R1423:1425 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1413:1415 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1408:1412 uc_framework <> KeyId def
+R1416:1422 uc_framework <> Message def
+R1426:1434 uc_framework <> Bitstring def
+R1513:1516 Corelib.Init.Datatypes <> list ind
+R1524:1526 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1519:1523 uc_framework <> KeyId def
+R1527:1529 uc_framework <> Key ind
+R1595:1597 Corelib.Init.Datatypes <> nat ind
+R1651:1654 Corelib.Init.Datatypes <> list ind
+R1656:1665 uc_framework <> AuditEvent ind
+def 1704:1723 <> initial_crypto_state
+R1727:1737 crypto_ideal_functionality <> CryptoState rec
+R1747:1761 crypto_ideal_functionality <> signature_table proj
+R1747:1761 crypto_ideal_functionality <> signature_table proj
+R1747:1761 crypto_ideal_functionality <> signature_table proj
+R1772:1787 crypto_ideal_functionality <> encryption_table proj
+R1772:1787 crypto_ideal_functionality <> encryption_table proj
+R1798:1806 crypto_ideal_functionality <> key_table proj
+R1798:1806 crypto_ideal_functionality <> key_table proj
+R1817:1829 crypto_ideal_functionality <> nonce_counter proj
+R1817:1829 crypto_ideal_functionality <> nonce_counter proj
+R1839:1851 crypto_ideal_functionality <> operation_log proj
+R1839:1851 crypto_ideal_functionality <> operation_log proj
+R1766:1767 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+R1792:1793 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+R1811:1812 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+R1856:1857 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+ax 1950:1961 <> ideal_keygen
+R1978:1981 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1965:1977 crypto_ideal_functionality <> SignAlgorithm ind
+R1982:1984 uc_framework <> Key ind
+ax 2039:2051 <> random_oracle
+R2062:2065 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2055:2061 uc_framework <> Message def
+R2066:2074 uc_framework <> Bitstring def
+def 2149:2158 <> ideal_sign
+R2171:2181 crypto_ideal_functionality <> CryptoState rec
+binder 2163:2167 <> state:17
+R2196:2200 uc_framework <> KeyId def
+binder 2187:2192 <> key_id:18
+R2216:2222 uc_framework <> Message def
+binder 2206:2212 <> message:19
+R2234:2246 crypto_ideal_functionality <> SignAlgorithm ind
+binder 2228:2230 <> alg:20
+R2253:2258 Corelib.Init.Datatypes <> option ind
+R2270:2272 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R2261:2269 uc_framework <> Bitstring def
+R2273:2283 crypto_ideal_functionality <> CryptoState rec
+R2325:2328 Stdlib.Lists.List <> find def
+R2378:2386 crypto_ideal_functionality <> key_table proj
+R2371:2375 crypto_ideal_functionality <> state:17 var
+R2336:2336 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2340:2341 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2343:2343 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+binder 2337:2339 <> kid:21
+binder 2336:2343 <> pat:22
+R2348:2357 Stdlib.Strings.String <> eqb def
+R2359:2361 crypto_ideal_functionality <> kid:21 var
+R2363:2368 crypto_ideal_functionality <> key_id:18 var
+R2398:2401 Corelib.Init.Datatypes <> None constr
+R2406:2409 Corelib.Init.Datatypes <> None constr
+R2439:2442 Corelib.Init.Datatypes <> Some constr
+R2444:2444 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2446:2447 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2451:2451 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2510:2520 uc_framework <> random_bits defax
+binder 2503:2505 <> sig:23
+R2637:2640 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R2615:2615 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2622:2623 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2631:2632 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2636:2636 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2616:2621 crypto_ideal_functionality <> key_id:18 var
+R2624:2630 crypto_ideal_functionality <> message:19 var
+R2633:2635 crypto_ideal_functionality <> sig:23 var
+R2648:2662 crypto_ideal_functionality <> signature_table proj
+R2641:2645 crypto_ideal_functionality <> state:17 var
+binder 2602:2610 <> new_table:24
+R2743:2746 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R2718:2725 uc_framework <> CryptoOp constr
+R2734:2739 crypto_ideal_functionality <> key_id:18 var
+R2754:2766 crypto_ideal_functionality <> operation_log proj
+R2747:2751 crypto_ideal_functionality <> state:17 var
+binder 2707:2713 <> new_log:25
+R2778:2781 Corelib.Init.Datatypes <> Some constr
+R2783:2783 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2787:2791 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3042:3045 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2784:2786 crypto_ideal_functionality <> sig:23 var
+R2792:2806 crypto_ideal_functionality <> signature_table proj
+R2792:2806 crypto_ideal_functionality <> signature_table proj
+R2792:2806 crypto_ideal_functionality <> signature_table proj
+R2841:2856 crypto_ideal_functionality <> encryption_table proj
+R2841:2856 crypto_ideal_functionality <> encryption_table proj
+R2906:2914 crypto_ideal_functionality <> key_table proj
+R2906:2914 crypto_ideal_functionality <> key_table proj
+R2957:2969 crypto_ideal_functionality <> nonce_counter proj
+R2957:2969 crypto_ideal_functionality <> nonce_counter proj
+R3018:3030 crypto_ideal_functionality <> operation_log proj
+R3018:3030 crypto_ideal_functionality <> operation_log proj
+R2811:2819 crypto_ideal_functionality <> new_table:24 var
+R2868:2883 crypto_ideal_functionality <> encryption_table proj
+R2861:2865 crypto_ideal_functionality <> state:17 var
+R2926:2934 crypto_ideal_functionality <> key_table proj
+R2919:2923 crypto_ideal_functionality <> state:17 var
+R2974:2974 Corelib.Init.Datatypes <> S constr
+R2983:2995 crypto_ideal_functionality <> nonce_counter proj
+R2976:2980 crypto_ideal_functionality <> state:17 var
+R3035:3041 crypto_ideal_functionality <> new_log:25 var
+def 3098:3109 <> ideal_verify
+R3122:3132 crypto_ideal_functionality <> CryptoState rec
+binder 3114:3118 <> state:26
+R3147:3151 uc_framework <> KeyId def
+binder 3138:3143 <> key_id:27
+R3167:3173 uc_framework <> Message def
+binder 3157:3163 <> message:28
+R3191:3199 uc_framework <> Bitstring def
+binder 3179:3187 <> signature:29
+R3211:3223 crypto_ideal_functionality <> SignAlgorithm ind
+binder 3205:3207 <> alg:30
+R3230:3235 Corelib.Init.Datatypes <> option ind
+R3242:3244 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R3238:3241 Corelib.Init.Datatypes <> bool ind
+R3245:3255 crypto_ideal_functionality <> CryptoState rec
+R3297:3300 Stdlib.Lists.List <> find def
+R3350:3358 crypto_ideal_functionality <> key_table proj
+R3343:3347 crypto_ideal_functionality <> state:26 var
+R3308:3308 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3312:3313 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3315:3315 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+binder 3309:3311 <> kid:31
+binder 3308:3315 <> pat:32
+R3320:3329 Stdlib.Strings.String <> eqb def
+R3331:3333 crypto_ideal_functionality <> kid:31 var
+R3335:3340 crypto_ideal_functionality <> key_id:27 var
+R3370:3373 Corelib.Init.Datatypes <> None constr
+R3378:3381 Corelib.Init.Datatypes <> None constr
+R3411:3414 Corelib.Init.Datatypes <> Some constr
+R3416:3416 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3418:3419 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3423:3423 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3527:3533 Stdlib.Lists.List <> existsb def
+R3857:3871 crypto_ideal_functionality <> signature_table proj
+R3850:3854 crypto_ideal_functionality <> state:26 var
+R3564:3566 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R3554:3556 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R3549:3553 uc_framework <> KeyId def
+R3557:3563 uc_framework <> Message def
+R3567:3575 uc_framework <> Bitstring def
+binder 3541:3545 <> entry:33
+R3597:3601 crypto_ideal_functionality <> entry:33 var
+R3620:3620 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3624:3625 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3629:3630 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3634:3634 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3653:3656 Corelib.Init.Datatypes <> andb def
+R3697:3700 Corelib.Init.Datatypes <> andb def
+R3773:3779 Corelib.Init.Nat <> eqb def
+R3782:3792 Stdlib.Lists.List <> length abbrev
+R3800:3810 Stdlib.Lists.List <> length abbrev
+R3812:3820 crypto_ideal_functionality <> signature:29 var
+R3703:3709 Corelib.Init.Nat <> eqb def
+R3712:3722 Stdlib.Lists.List <> length abbrev
+R3730:3740 Stdlib.Lists.List <> length abbrev
+R3742:3748 crypto_ideal_functionality <> message:28 var
+R3659:3668 Stdlib.Strings.String <> eqb def
+R3674:3679 crypto_ideal_functionality <> key_id:27 var
+binder 3507:3514 <> is_valid:35
+R3960:3963 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R3933:3940 uc_framework <> CryptoOp constr
+R3951:3956 crypto_ideal_functionality <> key_id:27 var
+R3971:3983 crypto_ideal_functionality <> operation_log proj
+R3964:3968 crypto_ideal_functionality <> state:26 var
+binder 3922:3928 <> new_log:36
+R3995:3998 Corelib.Init.Datatypes <> Some constr
+R4000:4000 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4009:4013 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4298:4301 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4001:4008 crypto_ideal_functionality <> is_valid:35 var
+R4014:4028 crypto_ideal_functionality <> signature_table proj
+R4014:4028 crypto_ideal_functionality <> signature_table proj
+R4014:4028 crypto_ideal_functionality <> signature_table proj
+R4082:4097 crypto_ideal_functionality <> encryption_table proj
+R4082:4097 crypto_ideal_functionality <> encryption_table proj
+R4152:4160 crypto_ideal_functionality <> key_table proj
+R4152:4160 crypto_ideal_functionality <> key_table proj
+R4208:4220 crypto_ideal_functionality <> nonce_counter proj
+R4208:4220 crypto_ideal_functionality <> nonce_counter proj
+R4274:4286 crypto_ideal_functionality <> operation_log proj
+R4274:4286 crypto_ideal_functionality <> operation_log proj
+R4040:4054 crypto_ideal_functionality <> signature_table proj
+R4033:4037 crypto_ideal_functionality <> state:26 var
+R4109:4124 crypto_ideal_functionality <> encryption_table proj
+R4102:4106 crypto_ideal_functionality <> state:26 var
+R4172:4180 crypto_ideal_functionality <> key_table proj
+R4165:4169 crypto_ideal_functionality <> state:26 var
+R4225:4225 Corelib.Init.Datatypes <> S constr
+R4234:4246 crypto_ideal_functionality <> nonce_counter proj
+R4227:4231 crypto_ideal_functionality <> state:26 var
+R4291:4297 crypto_ideal_functionality <> new_log:36 var
+def 4355:4367 <> ideal_encrypt
+R4380:4390 crypto_ideal_functionality <> CryptoState rec
+binder 4372:4376 <> state:37
+R4405:4409 uc_framework <> KeyId def
+binder 4396:4401 <> key_id:38
+R4427:4433 uc_framework <> Message def
+binder 4415:4423 <> plaintext:39
+R4445:4460 crypto_ideal_functionality <> EncryptAlgorithm ind
+binder 4439:4441 <> alg:40
+R4467:4472 Corelib.Init.Datatypes <> option ind
+R4484:4486 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R4475:4483 uc_framework <> Bitstring def
+R4487:4497 crypto_ideal_functionality <> CryptoState rec
+R4511:4514 Stdlib.Lists.List <> find def
+R4564:4572 crypto_ideal_functionality <> key_table proj
+R4557:4561 crypto_ideal_functionality <> state:37 var
+R4522:4522 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4526:4527 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4529:4529 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+binder 4523:4525 <> kid:41
+binder 4522:4529 <> pat:42
+R4534:4543 Stdlib.Strings.String <> eqb def
+R4545:4547 crypto_ideal_functionality <> kid:41 var
+R4549:4554 crypto_ideal_functionality <> key_id:38 var
+R4584:4587 Corelib.Init.Datatypes <> None constr
+R4592:4595 Corelib.Init.Datatypes <> None constr
+R4601:4604 Corelib.Init.Datatypes <> Some constr
+R4606:4606 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4608:4609 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4613:4613 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4715:4725 uc_framework <> random_bits defax
+R4753:4755 Corelib.Init.Peano <> ::nat_scope:x_'+'_x not
+R4749:4751 Corelib.Init.Peano <> ::nat_scope:x_'*'_x not
+R4728:4738 Stdlib.Lists.List <> length abbrev
+R4740:4748 crypto_ideal_functionality <> plaintext:39 var
+binder 4701:4710 <> ciphertext:43
+R4863:4866 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R4832:4832 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4839:4840 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4850:4851 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4862:4862 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4833:4838 crypto_ideal_functionality <> key_id:38 var
+R4841:4849 crypto_ideal_functionality <> plaintext:39 var
+R4852:4861 crypto_ideal_functionality <> ciphertext:43 var
+R4874:4889 crypto_ideal_functionality <> encryption_table proj
+R4867:4871 crypto_ideal_functionality <> state:37 var
+binder 4819:4827 <> new_table:44
+R4973:4976 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R4945:4952 uc_framework <> CryptoOp constr
+R4964:4969 crypto_ideal_functionality <> key_id:38 var
+R4984:4996 crypto_ideal_functionality <> operation_log proj
+R4977:4981 crypto_ideal_functionality <> state:37 var
+binder 4934:4940 <> new_log:45
+R5008:5011 Corelib.Init.Datatypes <> Some constr
+R5013:5013 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5024:5028 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5306:5309 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5014:5023 crypto_ideal_functionality <> ciphertext:43 var
+R5029:5043 crypto_ideal_functionality <> signature_table proj
+R5029:5043 crypto_ideal_functionality <> signature_table proj
+R5029:5043 crypto_ideal_functionality <> signature_table proj
+R5099:5114 crypto_ideal_functionality <> encryption_table proj
+R5099:5114 crypto_ideal_functionality <> encryption_table proj
+R5156:5164 crypto_ideal_functionality <> key_table proj
+R5156:5164 crypto_ideal_functionality <> key_table proj
+R5214:5226 crypto_ideal_functionality <> nonce_counter proj
+R5214:5226 crypto_ideal_functionality <> nonce_counter proj
+R5282:5294 crypto_ideal_functionality <> operation_log proj
+R5282:5294 crypto_ideal_functionality <> operation_log proj
+R5055:5069 crypto_ideal_functionality <> signature_table proj
+R5048:5052 crypto_ideal_functionality <> state:37 var
+R5119:5127 crypto_ideal_functionality <> new_table:44 var
+R5176:5184 crypto_ideal_functionality <> key_table proj
+R5169:5173 crypto_ideal_functionality <> state:37 var
+R5231:5231 Corelib.Init.Datatypes <> S constr
+R5240:5252 crypto_ideal_functionality <> nonce_counter proj
+R5233:5237 crypto_ideal_functionality <> state:37 var
+R5299:5305 crypto_ideal_functionality <> new_log:45 var
+def 5363:5375 <> ideal_decrypt
+R5388:5398 crypto_ideal_functionality <> CryptoState rec
+binder 5380:5384 <> state:46
+R5413:5417 uc_framework <> KeyId def
+binder 5404:5409 <> key_id:47
+R5436:5444 uc_framework <> Bitstring def
+binder 5423:5432 <> ciphertext:48
+R5456:5471 crypto_ideal_functionality <> EncryptAlgorithm ind
+binder 5450:5452 <> alg:49
+R5478:5483 Corelib.Init.Datatypes <> option ind
+R5493:5495 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R5486:5492 uc_framework <> Message def
+R5496:5506 crypto_ideal_functionality <> CryptoState rec
+R5520:5523 Stdlib.Lists.List <> find def
+R5573:5581 crypto_ideal_functionality <> key_table proj
+R5566:5570 crypto_ideal_functionality <> state:46 var
+R5531:5531 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5535:5536 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5538:5538 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+binder 5532:5534 <> kid:50
+binder 5531:5538 <> pat:51
+R5543:5552 Stdlib.Strings.String <> eqb def
+R5554:5556 crypto_ideal_functionality <> kid:50 var
+R5558:5563 crypto_ideal_functionality <> key_id:47 var
+R5593:5596 Corelib.Init.Datatypes <> None constr
+R5601:5604 Corelib.Init.Datatypes <> None constr
+R5610:5613 Corelib.Init.Datatypes <> Some constr
+R5615:5615 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5617:5618 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5622:5622 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5690:5693 Stdlib.Lists.List <> find def
+R5866:5881 crypto_ideal_functionality <> encryption_table proj
+R5859:5863 crypto_ideal_functionality <> state:46 var
+R5701:5701 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5705:5706 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5708:5709 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5712:5712 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+binder 5710:5711 <> ct:52
+binder 5702:5704 <> kid:53
+binder 5701:5712 <> pat:54
+R5736:5739 Corelib.Init.Datatypes <> andb def
+R5790:5796 Corelib.Init.Nat <> eqb def
+R5799:5809 Stdlib.Lists.List <> length abbrev
+R5811:5812 crypto_ideal_functionality <> ct:52 var
+R5816:5826 Stdlib.Lists.List <> length abbrev
+R5828:5837 crypto_ideal_functionality <> ciphertext:48 var
+R5742:5751 Stdlib.Strings.String <> eqb def
+R5753:5755 crypto_ideal_functionality <> kid:53 var
+R5757:5762 crypto_ideal_functionality <> key_id:47 var
+R5897:5900 Corelib.Init.Datatypes <> None constr
+R5905:5908 Corelib.Init.Datatypes <> None constr
+R5943:5946 Corelib.Init.Datatypes <> Some constr
+R5948:5948 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5950:5951 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5961:5962 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5964:5964 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6064:6067 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R6036:6043 uc_framework <> CryptoOp constr
+R6055:6060 crypto_ideal_functionality <> key_id:47 var
+R6075:6087 crypto_ideal_functionality <> operation_log proj
+R6068:6072 crypto_ideal_functionality <> state:46 var
+binder 6025:6031 <> new_log:55
+R6103:6106 Corelib.Init.Datatypes <> Some constr
+R6108:6108 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6118:6122 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6427:6430 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6123:6137 crypto_ideal_functionality <> signature_table proj
+R6123:6137 crypto_ideal_functionality <> signature_table proj
+R6123:6137 crypto_ideal_functionality <> signature_table proj
+R6196:6211 crypto_ideal_functionality <> encryption_table proj
+R6196:6211 crypto_ideal_functionality <> encryption_table proj
+R6271:6279 crypto_ideal_functionality <> key_table proj
+R6271:6279 crypto_ideal_functionality <> key_table proj
+R6332:6344 crypto_ideal_functionality <> nonce_counter proj
+R6332:6344 crypto_ideal_functionality <> nonce_counter proj
+R6403:6415 crypto_ideal_functionality <> operation_log proj
+R6403:6415 crypto_ideal_functionality <> operation_log proj
+R6149:6163 crypto_ideal_functionality <> signature_table proj
+R6142:6146 crypto_ideal_functionality <> state:46 var
+R6223:6238 crypto_ideal_functionality <> encryption_table proj
+R6216:6220 crypto_ideal_functionality <> state:46 var
+R6291:6299 crypto_ideal_functionality <> key_table proj
+R6284:6288 crypto_ideal_functionality <> state:46 var
+R6349:6349 Corelib.Init.Datatypes <> S constr
+R6358:6370 crypto_ideal_functionality <> nonce_counter proj
+R6351:6355 crypto_ideal_functionality <> state:46 var
+R6420:6426 crypto_ideal_functionality <> new_log:55 var
+def 6507:6516 <> ideal_hash
+R6529:6539 crypto_ideal_functionality <> CryptoState rec
+binder 6521:6525 <> state:56
+R6555:6561 uc_framework <> Message def
+binder 6545:6551 <> message:57
+R6573:6585 crypto_ideal_functionality <> HashAlgorithm ind
+binder 6567:6569 <> alg:58
+R6601:6603 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R6592:6600 uc_framework <> Bitstring def
+R6604:6614 crypto_ideal_functionality <> CryptoState rec
+R6635:6647 crypto_ideal_functionality <> random_oracle defax
+R6649:6655 crypto_ideal_functionality <> message:57 var
+binder 6625:6630 <> digest:59
+R6698:6701 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R6677:6684 uc_framework <> CryptoOp constr
+R6709:6721 crypto_ideal_functionality <> operation_log proj
+R6702:6706 crypto_ideal_functionality <> state:56 var
+binder 6666:6672 <> new_log:60
+R6729:6729 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6736:6740 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6981:6984 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6730:6735 crypto_ideal_functionality <> digest:59 var
+R6741:6755 crypto_ideal_functionality <> signature_table proj
+R6741:6755 crypto_ideal_functionality <> signature_table proj
+R6741:6755 crypto_ideal_functionality <> signature_table proj
+R6798:6813 crypto_ideal_functionality <> encryption_table proj
+R6798:6813 crypto_ideal_functionality <> encryption_table proj
+R6857:6865 crypto_ideal_functionality <> key_table proj
+R6857:6865 crypto_ideal_functionality <> key_table proj
+R6902:6914 crypto_ideal_functionality <> nonce_counter proj
+R6902:6914 crypto_ideal_functionality <> nonce_counter proj
+R6957:6969 crypto_ideal_functionality <> operation_log proj
+R6957:6969 crypto_ideal_functionality <> operation_log proj
+R6767:6781 crypto_ideal_functionality <> signature_table proj
+R6760:6764 crypto_ideal_functionality <> state:56 var
+R6825:6840 crypto_ideal_functionality <> encryption_table proj
+R6818:6822 crypto_ideal_functionality <> state:56 var
+R6877:6885 crypto_ideal_functionality <> key_table proj
+R6870:6874 crypto_ideal_functionality <> state:56 var
+R6919:6919 Corelib.Init.Datatypes <> S constr
+R6928:6940 crypto_ideal_functionality <> nonce_counter proj
+R6921:6925 crypto_ideal_functionality <> state:56 var
+R6974:6980 crypto_ideal_functionality <> new_log:60 var
+prf 7071:7097 <> decrypt_encrypt_correctness
+R7119:7129 crypto_ideal_functionality <> CryptoState rec
+binder 7111:7115 <> state:61
+R7142:7146 uc_framework <> KeyId def
+binder 7133:7138 <> key_id:62
+R7162:7168 uc_framework <> Message def
+binder 7150:7158 <> plaintext:63
+R7178:7193 crypto_ideal_functionality <> EncryptAlgorithm ind
+binder 7172:7174 <> alg:64
+R7207:7219 crypto_ideal_functionality <> ideal_encrypt def
+R7221:7225 crypto_ideal_functionality <> state:61 var
+R7227:7232 crypto_ideal_functionality <> key_id:62 var
+R7234:7242 crypto_ideal_functionality <> plaintext:63 var
+R7244:7246 crypto_ideal_functionality <> alg:64 var
+R7259:7262 Corelib.Init.Datatypes <> None constr
+R7267:7270 Corelib.Init.Logic <> True ind
+R7278:7281 Corelib.Init.Datatypes <> Some constr
+R7283:7283 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7294:7295 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7302:7302 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7321:7333 crypto_ideal_functionality <> ideal_decrypt def
+R7342:7347 crypto_ideal_functionality <> key_id:62 var
+R7360:7362 crypto_ideal_functionality <> alg:64 var
+R7379:7382 Corelib.Init.Datatypes <> None constr
+R7387:7391 Corelib.Init.Logic <> False ind
+R7403:7406 Corelib.Init.Datatypes <> Some constr
+R7408:7408 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7419:7420 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7422:7422 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7437:7439 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7440:7448 crypto_ideal_functionality <> plaintext:63 var
+R7524:7536 crypto_ideal_functionality <> ideal_encrypt def
+R7539:7551 crypto_ideal_functionality <> ideal_decrypt def
+R7566:7569 Stdlib.Lists.List <> find def
+R7566:7569 Stdlib.Lists.List <> find def
+prf 7847:7869 <> verify_sign_correctness
+R7891:7901 crypto_ideal_functionality <> CryptoState rec
+binder 7883:7887 <> state:65
+R7914:7918 uc_framework <> KeyId def
+binder 7905:7910 <> key_id:66
+R7932:7938 uc_framework <> Message def
+binder 7922:7928 <> message:67
+R7948:7960 crypto_ideal_functionality <> SignAlgorithm ind
+binder 7942:7944 <> alg:68
+R7974:7983 crypto_ideal_functionality <> ideal_sign def
+R7985:7989 crypto_ideal_functionality <> state:65 var
+R7991:7996 crypto_ideal_functionality <> key_id:66 var
+R7998:8004 crypto_ideal_functionality <> message:67 var
+R8006:8008 crypto_ideal_functionality <> alg:68 var
+R8021:8024 Corelib.Init.Datatypes <> None constr
+R8029:8032 Corelib.Init.Logic <> True ind
+R8040:8043 Corelib.Init.Datatypes <> Some constr
+R8045:8045 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8055:8056 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8063:8063 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8082:8093 crypto_ideal_functionality <> ideal_verify def
+R8102:8107 crypto_ideal_functionality <> key_id:66 var
+R8109:8115 crypto_ideal_functionality <> message:67 var
+R8127:8129 crypto_ideal_functionality <> alg:68 var
+R8146:8149 Corelib.Init.Datatypes <> None constr
+R8154:8158 Corelib.Init.Logic <> False ind
+R8170:8173 Corelib.Init.Datatypes <> Some constr
+R8175:8175 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8181:8182 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8184:8184 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8194:8196 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8197:8200 Corelib.Init.Datatypes <> true constr
+R8274:8283 crypto_ideal_functionality <> ideal_sign def
+R8286:8297 crypto_ideal_functionality <> ideal_verify def
+R8312:8315 Stdlib.Lists.List <> find def
+R8312:8315 Stdlib.Lists.List <> find def
+prf 8574:8597 <> signature_unforgeability
+R8631:8641 crypto_ideal_functionality <> CryptoState rec
+binder 8611:8615 <> state:69
+binder 8617:8627 <> state_after:70
+R8654:8658 uc_framework <> KeyId def
+binder 8645:8650 <> key_id:71
+R8672:8678 uc_framework <> Message def
+binder 8662:8668 <> message:72
+R8688:8696 uc_framework <> Bitstring def
+binder 8682:8684 <> sig:73
+R8706:8718 crypto_ideal_functionality <> SignAlgorithm ind
+binder 8700:8702 <> alg:74
+R8826:8873 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8799:8801 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8758:8769 crypto_ideal_functionality <> ideal_verify def
+R8771:8775 crypto_ideal_functionality <> state:69 var
+R8777:8782 crypto_ideal_functionality <> key_id:71 var
+R8784:8790 crypto_ideal_functionality <> message:72 var
+R8792:8794 crypto_ideal_functionality <> sig:73 var
+R8796:8798 crypto_ideal_functionality <> alg:74 var
+R8802:8805 Corelib.Init.Datatypes <> Some constr
+R8807:8807 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8812:8813 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8825:8825 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8808:8811 Corelib.Init.Datatypes <> true constr
+R8814:8824 crypto_ideal_functionality <> state_after:70 var
+R8874:8880 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R8887:8888 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+binder 8881:8886 <> state':75
+R8925:8927 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8889:8898 crypto_ideal_functionality <> ideal_sign def
+R8900:8905 crypto_ideal_functionality <> state':75 var
+R8907:8912 crypto_ideal_functionality <> key_id:71 var
+R8914:8920 crypto_ideal_functionality <> message:72 var
+R8922:8924 crypto_ideal_functionality <> alg:74 var
+R8928:8931 Corelib.Init.Datatypes <> Some constr
+R8933:8933 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8937:8938 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8944:8944 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R8934:8936 crypto_ideal_functionality <> sig:73 var
+R8939:8943 crypto_ideal_functionality <> state:69 var
+prf 9243:9268 <> encryption_confidentiality
+R9290:9300 crypto_ideal_functionality <> CryptoState rec
+binder 9282:9286 <> state:76
+R9313:9317 uc_framework <> KeyId def
+binder 9304:9309 <> key_id:77
+R9329:9335 uc_framework <> Message def
+binder 9321:9322 <> m1:78
+binder 9324:9325 <> m2:79
+R9345:9360 crypto_ideal_functionality <> EncryptAlgorithm ind
+binder 9339:9341 <> alg:80
+R9399:9463 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R9382:9384 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R9368:9378 Stdlib.Lists.List <> length abbrev
+R9380:9381 crypto_ideal_functionality <> m1:78 var
+R9385:9395 Stdlib.Lists.List <> length abbrev
+R9397:9398 crypto_ideal_functionality <> m2:79 var
+R9505:9517 crypto_ideal_functionality <> ideal_encrypt def
+R9519:9523 crypto_ideal_functionality <> state:76 var
+R9525:9530 crypto_ideal_functionality <> key_id:77 var
+R9532:9533 crypto_ideal_functionality <> m2:79 var
+R9535:9537 crypto_ideal_functionality <> alg:80 var
+R9470:9482 crypto_ideal_functionality <> ideal_encrypt def
+R9484:9488 crypto_ideal_functionality <> state:76 var
+R9490:9495 crypto_ideal_functionality <> key_id:77 var
+R9497:9498 crypto_ideal_functionality <> m1:78 var
+R9500:9502 crypto_ideal_functionality <> alg:80 var
+R9550:9553 Corelib.Init.Datatypes <> Some constr
+R9555:9555 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9558:9559 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9561:9561 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9564:9567 Corelib.Init.Datatypes <> Some constr
+R9569:9569 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9572:9573 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9575:9575 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9656:9658 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R9642:9652 Stdlib.Lists.List <> length abbrev
+R9659:9669 Stdlib.Lists.List <> length abbrev
+R9722:9725 Corelib.Init.Logic <> True ind
+ax 10184:10191 <> F_crypto
+R10195:10204 uc_framework <> IdealState defax
+ax 10255:10270 <> F_crypto_correct
+R10274:10284 uc_framework <> Correctness defax
+R10286:10293 crypto_ideal_functionality <> F_crypto defax
+ax 10508:10528 <> F_crypto_confidential
+R10532:10546 uc_framework <> Confidentiality defax
+R10548:10555 crypto_ideal_functionality <> F_crypto defax
+ax 10768:10785 <> F_crypto_integrity
+R10789:10797 uc_framework <> Integrity defax
+R10799:10806 crypto_ideal_functionality <> F_crypto defax

@@ -1,0 +1,106 @@
+DIGEST beec3ae5ec804fc042b6dd9b51884001
+Fcomposition_theorem
+R506:517 uc_framework <> <> lib
+R535:560 crypto_ideal_functionality <> <> lib
+R578:604 keymgmt_ideal_functionality <> <> lib
+R622:645 auth_ideal_functionality <> <> lib
+R663:687 audit_ideal_functionality <> <> lib
+R705:721 Stdlib.Lists.List <> <> lib
+R739:759 Stdlib.Strings.String <> <> lib
+R769:781 Stdlib.Lists.List ListNotations <> mod
+def 919:927 <> HSM_ideal
+R931:940 uc_framework <> IdealState defax
+R947:958 uc_framework <> ComposeIdeal defax
+R960:965 auth_ideal_functionality <> F_auth defax
+R972:983 uc_framework <> ComposeIdeal defax
+R985:993 keymgmt_ideal_functionality <> F_keymgmt defax
+R1002:1013 uc_framework <> ComposeIdeal defax
+R1015:1022 crypto_ideal_functionality <> F_crypto defax
+R1024:1030 audit_ideal_functionality <> F_audit prfax
+def 1115:1132 <> HSM_ideal_parallel
+R1136:1145 uc_framework <> IdealState defax
+R1152:1166 uc_framework <> ParallelCompose defax
+R1173:1187 uc_framework <> ParallelCompose defax
+R1189:1194 auth_ideal_functionality <> F_auth defax
+R1196:1204 keymgmt_ideal_functionality <> F_keymgmt defax
+R1212:1226 uc_framework <> ParallelCompose defax
+R1228:1235 crypto_ideal_functionality <> F_crypto defax
+R1237:1243 audit_ideal_functionality <> F_audit prfax
+rec 1500:1513 <> ComposeRequest
+proj 1522:1529 <> req_cert
+proj 1548:1560 <> req_operation
+proj 1577:1586 <> req_key_id
+proj 1599:1611 <> req_namespace
+proj 1628:1638 <> req_message
+proj 1653:1665 <> req_timestamp
+R1533:1543 auth_ideal_functionality <> Certificate rec
+R1564:1572 auth_ideal_functionality <> Operation ind
+R1590:1594 uc_framework <> KeyId def
+R1615:1623 uc_framework <> Namespace def
+R1642:1648 uc_framework <> Message def
+R1669:1671 Corelib.Init.Datatypes <> nat ind
+rec 1685:1699 <> ComposeResponse
+proj 1708:1719 <> resp_success
+proj 1731:1739 <> resp_data
+proj 1763:1772 <> resp_error
+R1723:1726 Corelib.Init.Datatypes <> bool ind
+R1743:1748 Corelib.Init.Datatypes <> option ind
+R1750:1758 uc_framework <> Bitstring def
+R1776:1781 Corelib.Init.Datatypes <> option ind
+R1783:1788 Stdlib.Strings.String <> string ind
+ax 1842:1856 <> execute_request
+R1874:1877 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1860:1873 composition_theorem <> ComposeRequest rec
+R1878:1883 Corelib.Init.Datatypes <> option ind
+R1885:1899 composition_theorem <> ComposeResponse rec
+ax 2207:2232 <> composition_authentication
+R2252:2265 composition_theorem <> ComposeRequest rec
+binder 2246:2248 <> req:14
+R2276:2290 composition_theorem <> ComposeResponse rec
+binder 2269:2272 <> resp:15
+R2329:2336 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2317:2319 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2298:2312 composition_theorem <> execute_request defax
+R2314:2316 composition_theorem <> req:14 var
+R2320:2323 Corelib.Init.Datatypes <> Some constr
+R2325:2328 composition_theorem <> resp:15 var
+R2363:2411 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2356:2358 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2343:2354 composition_theorem <> resp_success proj
+R2337:2340 composition_theorem <> resp:15 var
+R2359:2362 Corelib.Init.Datatypes <> true constr
+R2412:2415 Corelib.Init.Logic <> True ind
+ax 2469:2493 <> composition_authorization
+R2513:2526 composition_theorem <> ComposeRequest rec
+binder 2507:2509 <> req:18
+R2537:2551 composition_theorem <> ComposeResponse rec
+binder 2530:2533 <> resp:19
+R2590:2597 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2578:2580 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2559:2573 composition_theorem <> execute_request defax
+R2575:2577 composition_theorem <> req:18 var
+R2581:2584 Corelib.Init.Datatypes <> Some constr
+R2586:2589 composition_theorem <> resp:19 var
+R2624:2671 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2617:2619 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2604:2615 composition_theorem <> resp_success proj
+R2598:2601 composition_theorem <> resp:19 var
+R2620:2623 Corelib.Init.Datatypes <> true constr
+R2672:2675 Corelib.Init.Logic <> True ind
+ax 2727:2749 <> composition_audit_trail
+R2769:2782 composition_theorem <> ComposeRequest rec
+binder 2763:2765 <> req:22
+R2793:2807 composition_theorem <> ComposeResponse rec
+binder 2786:2789 <> resp:23
+R2846:2853 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2834:2836 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2815:2829 composition_theorem <> execute_request defax
+R2831:2833 composition_theorem <> req:22 var
+R2837:2840 Corelib.Init.Datatypes <> Some constr
+R2842:2845 composition_theorem <> resp:23 var
+R2880:2923 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2873:2875 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2860:2871 composition_theorem <> resp_success proj
+R2854:2857 composition_theorem <> resp:23 var
+R2876:2879 Corelib.Init.Datatypes <> true constr
+R2924:2927 Corelib.Init.Logic <> True ind

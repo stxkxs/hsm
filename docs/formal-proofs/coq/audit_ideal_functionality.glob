@@ -1,0 +1,377 @@
+DIGEST b53ee5dea9aa4363943201a5ac201d9b
+Faudit_ideal_functionality
+R472:483 uc_framework <> <> lib
+R501:517 Stdlib.Lists.List <> <> lib
+R535:555 Stdlib.Strings.String <> <> lib
+R573:588 Stdlib.Bool.Bool <> <> lib
+R606:625 Stdlib.NArith.NArith <> <> lib
+R635:647 Stdlib.Lists.List ListNotations <> mod
+rec 710:722 <> AuditLogEntry
+proj 731:738 <> sequence
+proj 798:806 <> timestamp
+proj 854:863 <> event_type
+proj 906:914 <> operation
+proj 962:970 <> namespace
+proj 1013:1021 <> client_id
+proj 1070:1075 <> key_id
+proj 1134:1139 <> result
+proj 1194:1203 <> latency_ms
+proj 1253:1261 <> prev_hash
+proj 1330:1341 <> current_hash
+R742:744 Corelib.Init.Datatypes <> nat ind
+R810:812 Corelib.Init.Datatypes <> nat ind
+R867:872 Stdlib.Strings.String <> string ind
+R918:923 Stdlib.Strings.String <> string ind
+R974:982 uc_framework <> Namespace def
+R1025:1030 Stdlib.Strings.String <> string ind
+R1079:1084 Corelib.Init.Datatypes <> option ind
+R1086:1090 uc_framework <> KeyId def
+R1143:1148 Stdlib.Strings.String <> string ind
+R1207:1209 Corelib.Init.Datatypes <> nat ind
+R1265:1273 uc_framework <> Bitstring def
+R1345:1353 uc_framework <> Bitstring def
+ind 1438:1447 <> MerkleTree
+constr 1456:1459 <> Leaf
+constr 1491:1494 <> Node
+R1472:1475 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1463:1471 uc_framework <> Bitstring def
+R1476:1485 audit_ideal_functionality <> MerkleTree:13 ind
+R1507:1510 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1498:1506 uc_framework <> Bitstring def
+R1521:1524 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1511:1520 audit_ideal_functionality <> MerkleTree:13 ind
+R1535:1538 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1525:1534 audit_ideal_functionality <> MerkleTree:13 ind
+R1539:1548 audit_ideal_functionality <> MerkleTree:13 ind
+scheme 1438:1447 <> MerkleTree_rect
+scheme 1438:1447 <> MerkleTree_ind
+scheme 1438:1447 <> MerkleTree_rec
+scheme 1438:1447 <> MerkleTree_sind
+def 1597:1607 <> merkle_root
+R1617:1626 audit_ideal_functionality <> MerkleTree ind
+binder 1610:1613 <> tree:15
+R1631:1639 uc_framework <> Bitstring def
+R1652:1655 audit_ideal_functionality <> tree:15 var
+R1666:1669 audit_ideal_functionality <> Leaf constr
+R1688:1691 audit_ideal_functionality <> Node constr
+rec 1750:1759 <> AuditState
+proj 1802:1812 <> log_entries
+proj 1874:1884 <> merkle_tree
+proj 1928:1943 <> sequence_counter
+proj 1979:1988 <> chain_head
+R1816:1819 Corelib.Init.Datatypes <> list ind
+R1821:1833 audit_ideal_functionality <> AuditLogEntry rec
+R1888:1897 audit_ideal_functionality <> MerkleTree ind
+R1947:1949 Corelib.Init.Datatypes <> nat ind
+R1992:2000 uc_framework <> Bitstring def
+def 2039:2057 <> initial_audit_state
+R2061:2070 audit_ideal_functionality <> AuditState rec
+R2080:2090 audit_ideal_functionality <> log_entries proj
+R2080:2090 audit_ideal_functionality <> log_entries proj
+R2080:2090 audit_ideal_functionality <> log_entries proj
+R2101:2111 audit_ideal_functionality <> merkle_tree proj
+R2101:2111 audit_ideal_functionality <> merkle_tree proj
+R2127:2142 audit_ideal_functionality <> sequence_counter proj
+R2127:2142 audit_ideal_functionality <> sequence_counter proj
+R2152:2161 audit_ideal_functionality <> chain_head proj
+R2152:2161 audit_ideal_functionality <> chain_head proj
+R2095:2096 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+R2116:2119 audit_ideal_functionality <> Leaf constr
+R2121:2122 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+R2166:2167 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+ax 2259:2268 <> hash_entry
+R2285:2288 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2272:2284 audit_ideal_functionality <> AuditLogEntry rec
+R2289:2297 uc_framework <> Bitstring def
+ax 2355:2366 <> hash_combine
+R2379:2382 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2370:2378 uc_framework <> Bitstring def
+R2392:2395 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2383:2391 uc_framework <> Bitstring def
+R2396:2404 uc_framework <> Bitstring def
+def 2484:2492 <> ideal_log
+R2505:2514 audit_ideal_functionality <> AuditState rec
+binder 2497:2501 <> state:27
+R2533:2538 Stdlib.Strings.String <> string ind
+binder 2520:2529 <> event_type:28
+R2556:2561 Stdlib.Strings.String <> string ind
+binder 2544:2552 <> operation:29
+R2572:2580 uc_framework <> Namespace def
+binder 2567:2568 <> ns:30
+R2598:2603 Stdlib.Strings.String <> string ind
+binder 2586:2594 <> client_id:31
+R2618:2623 Corelib.Init.Datatypes <> option ind
+R2625:2629 uc_framework <> KeyId def
+binder 2609:2614 <> key_id:32
+R2644:2649 Stdlib.Strings.String <> string ind
+binder 2635:2640 <> result:33
+R2665:2667 Corelib.Init.Datatypes <> nat ind
+binder 2655:2661 <> latency:34
+R2685:2687 Corelib.Init.Datatypes <> nat ind
+binder 2673:2681 <> timestamp:35
+R2707:2709 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R2694:2706 audit_ideal_functionality <> AuditLogEntry rec
+R2710:2719 audit_ideal_functionality <> AuditState rec
+R2779:2783 audit_ideal_functionality <> state:27 var
+R2732:2747 audit_ideal_functionality <> Build_AuditState constr
+R2831:2838 audit_ideal_functionality <> sequence proj
+R2831:2838 audit_ideal_functionality <> sequence proj
+R2831:2838 audit_ideal_functionality <> sequence proj
+R2869:2877 audit_ideal_functionality <> timestamp proj
+R2869:2877 audit_ideal_functionality <> timestamp proj
+R2910:2919 audit_ideal_functionality <> event_type proj
+R2910:2919 audit_ideal_functionality <> event_type proj
+R2953:2961 audit_ideal_functionality <> operation proj
+R2953:2961 audit_ideal_functionality <> operation proj
+R2994:3002 audit_ideal_functionality <> namespace proj
+R2994:3002 audit_ideal_functionality <> namespace proj
+R3028:3036 audit_ideal_functionality <> client_id proj
+R3028:3036 audit_ideal_functionality <> client_id proj
+R3069:3074 audit_ideal_functionality <> key_id proj
+R3069:3074 audit_ideal_functionality <> key_id proj
+R3104:3109 audit_ideal_functionality <> result proj
+R3104:3109 audit_ideal_functionality <> result proj
+R3139:3148 audit_ideal_functionality <> latency_ms proj
+R3139:3148 audit_ideal_functionality <> latency_ms proj
+R3179:3187 audit_ideal_functionality <> prev_hash proj
+R3179:3187 audit_ideal_functionality <> prev_hash proj
+R3215:3226 audit_ideal_functionality <> current_hash proj
+R3215:3226 audit_ideal_functionality <> current_hash proj
+R2882:2890 audit_ideal_functionality <> timestamp:35 var
+R2924:2933 audit_ideal_functionality <> event_type:28 var
+R2966:2974 audit_ideal_functionality <> operation:29 var
+R3007:3008 audit_ideal_functionality <> ns:30 var
+R3041:3049 audit_ideal_functionality <> client_id:31 var
+R3079:3084 audit_ideal_functionality <> key_id:32 var
+R3114:3119 audit_ideal_functionality <> result:33 var
+R3153:3159 audit_ideal_functionality <> latency:34 var
+R3231:3232 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+binder 2819:2823 <> entry:37
+R3324:3333 audit_ideal_functionality <> hash_entry defax
+R3335:3339 audit_ideal_functionality <> entry:37 var
+binder 3308:3319 <> current_hash:38
+R3415:3419 audit_ideal_functionality <> entry:37 var
+R3352:3370 audit_ideal_functionality <> Build_AuditLogEntry constr
+R3452:3459 audit_ideal_functionality <> sequence proj
+R3452:3459 audit_ideal_functionality <> sequence proj
+R3452:3459 audit_ideal_functionality <> sequence proj
+R3496:3504 audit_ideal_functionality <> timestamp proj
+R3496:3504 audit_ideal_functionality <> timestamp proj
+R3540:3549 audit_ideal_functionality <> event_type proj
+R3540:3549 audit_ideal_functionality <> event_type proj
+R3585:3593 audit_ideal_functionality <> operation proj
+R3585:3593 audit_ideal_functionality <> operation proj
+R3629:3637 audit_ideal_functionality <> namespace proj
+R3629:3637 audit_ideal_functionality <> namespace proj
+R3675:3683 audit_ideal_functionality <> client_id proj
+R3675:3683 audit_ideal_functionality <> client_id proj
+R3720:3725 audit_ideal_functionality <> key_id proj
+R3720:3725 audit_ideal_functionality <> key_id proj
+R3762:3767 audit_ideal_functionality <> result proj
+R3762:3767 audit_ideal_functionality <> result proj
+R3804:3813 audit_ideal_functionality <> latency_ms proj
+R3804:3813 audit_ideal_functionality <> latency_ms proj
+R3850:3858 audit_ideal_functionality <> prev_hash proj
+R3850:3858 audit_ideal_functionality <> prev_hash proj
+R3894:3905 audit_ideal_functionality <> current_hash proj
+R3894:3905 audit_ideal_functionality <> current_hash proj
+R3910:3921 audit_ideal_functionality <> current_hash:38 var
+binder 3430:3444 <> entry_with_hash:40
+R3989:3992 Corelib.Init.Datatypes <> ::list_scope:x_'++'_x not
+R3993:3993 Stdlib.Lists.List ListNotations ::list_scope:'['_x_']' not
+R4009:4009 Stdlib.Lists.List ListNotations ::list_scope:'['_x_']' not
+R3994:4008 audit_ideal_functionality <> entry_with_hash:40 var
+binder 3966:3976 <> new_entries:41
+R4102:4105 audit_ideal_functionality <> Node constr
+R4107:4118 audit_ideal_functionality <> current_hash:38 var
+R4126:4129 audit_ideal_functionality <> Leaf constr
+R4131:4142 audit_ideal_functionality <> current_hash:38 var
+binder 4090:4097 <> new_tree:42
+R4192:4202 audit_ideal_functionality <> log_entries proj
+R4192:4202 audit_ideal_functionality <> log_entries proj
+R4192:4202 audit_ideal_functionality <> log_entries proj
+R4241:4251 audit_ideal_functionality <> merkle_tree proj
+R4241:4251 audit_ideal_functionality <> merkle_tree proj
+R4287:4302 audit_ideal_functionality <> sequence_counter proj
+R4287:4302 audit_ideal_functionality <> sequence_counter proj
+R4339:4348 audit_ideal_functionality <> chain_head proj
+R4339:4348 audit_ideal_functionality <> chain_head proj
+R4207:4217 audit_ideal_functionality <> new_entries:41 var
+R4256:4263 audit_ideal_functionality <> new_tree:42 var
+R4307:4307 Corelib.Init.Datatypes <> S constr
+R4353:4364 audit_ideal_functionality <> current_hash:38 var
+binder 4176:4184 <> new_state:43
+R4375:4375 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4391:4392 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4402:4402 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4376:4390 audit_ideal_functionality <> entry_with_hash:40 var
+R4393:4401 audit_ideal_functionality <> new_state:43 var
+def 4451:4458 <> get_logs
+R4471:4480 audit_ideal_functionality <> AuditState rec
+binder 4463:4467 <> state:44
+R4497:4499 Corelib.Init.Datatypes <> nat ind
+binder 4486:4493 <> from_seq:45
+R4514:4516 Corelib.Init.Datatypes <> nat ind
+binder 4505:4510 <> to_seq:46
+R4541:4546 Corelib.Init.Datatypes <> option ind
+R4548:4556 uc_framework <> Namespace def
+binder 4522:4537 <> namespace_filter:47
+R4563:4566 Corelib.Init.Datatypes <> list ind
+R4568:4580 audit_ideal_functionality <> AuditLogEntry rec
+binder 4607:4607 <> e:48
+R4616:4619 Corelib.Init.Datatypes <> andb def
+R4654:4660 Corelib.Init.Nat <> leb def
+R4665:4672 audit_ideal_functionality <> sequence proj
+R4662:4662 audit_ideal_functionality <> e:48 var
+R4675:4680 audit_ideal_functionality <> to_seq:46 var
+R4622:4628 Corelib.Init.Nat <> leb def
+R4630:4637 audit_ideal_functionality <> from_seq:45 var
+R4642:4649 audit_ideal_functionality <> sequence proj
+R4639:4639 audit_ideal_functionality <> e:48 var
+binder 4591:4598 <> in_range:49
+binder 4716:4716 <> e:50
+R4731:4746 audit_ideal_functionality <> namespace_filter:47 var
+R4759:4762 Corelib.Init.Datatypes <> None constr
+R4767:4770 Corelib.Init.Datatypes <> true constr
+R4778:4781 Corelib.Init.Datatypes <> Some constr
+R4789:4798 Stdlib.Strings.String <> eqb def
+R4803:4811 audit_ideal_functionality <> namespace proj
+R4800:4800 audit_ideal_functionality <> e:50 var
+binder 4693:4707 <> namespace_match:52
+R4831:4836 Stdlib.Lists.List <> filter def
+R4903:4913 audit_ideal_functionality <> log_entries proj
+R4896:4900 audit_ideal_functionality <> state:44 var
+binder 4843:4843 <> e:53
+R4848:4851 Corelib.Init.Datatypes <> andb def
+R4867:4881 audit_ideal_functionality <> namespace_match:52 var
+R4883:4883 audit_ideal_functionality <> e:53 var
+R4854:4861 audit_ideal_functionality <> in_range:49 var
+R4863:4863 audit_ideal_functionality <> e:53 var
+def 4968:4979 <> verify_chain
+R4994:4997 Corelib.Init.Datatypes <> list ind
+R4999:5011 audit_ideal_functionality <> AuditLogEntry rec
+binder 4984:4990 <> entries:54
+R5033:5041 uc_framework <> Bitstring def
+binder 5017:5029 <> expected_prev:55
+R5048:5051 Corelib.Init.Datatypes <> bool ind
+R5064:5070 audit_ideal_functionality <> entries:54 var
+R5081:5082 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+R5087:5090 Corelib.Init.Datatypes <> true constr
+R5097:5100 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R5121:5139 audit_ideal_functionality <> Build_AuditLogEntry constr
+R5233:5239 Corelib.Init.Nat <> eqb def
+R5242:5252 Stdlib.Lists.List <> length abbrev
+R5259:5269 Stdlib.Lists.List <> length abbrev
+R5271:5283 audit_ideal_functionality <> expected_prev:55 var
+R5570:5574 Corelib.Init.Datatypes <> false constr
+R5369:5378 audit_ideal_functionality <> hash_entry defax
+binder 5352:5364 <> computed_hash:59
+R5396:5402 Corelib.Init.Nat <> eqb def
+R5405:5415 Stdlib.Lists.List <> length abbrev
+R5422:5432 Stdlib.Lists.List <> length abbrev
+R5434:5446 audit_ideal_functionality <> computed_hash:59 var
+R5545:5549 Corelib.Init.Datatypes <> false constr
+R5501:5512 audit_ideal_functionality <> verify_chain:56 def
+def 5630:5649 <> verify_log_integrity
+R5662:5671 audit_ideal_functionality <> AuditState rec
+binder 5654:5658 <> state:60
+R5688:5690 Corelib.Init.Datatypes <> nat ind
+binder 5677:5684 <> from_seq:61
+R5705:5707 Corelib.Init.Datatypes <> nat ind
+binder 5696:5701 <> to_seq:62
+R5714:5717 Corelib.Init.Datatypes <> bool ind
+R5739:5746 audit_ideal_functionality <> get_logs def
+R5748:5752 audit_ideal_functionality <> state:60 var
+R5754:5761 audit_ideal_functionality <> from_seq:61 var
+R5763:5768 audit_ideal_functionality <> to_seq:62 var
+R5770:5773 Corelib.Init.Datatypes <> None constr
+binder 5728:5734 <> entries:63
+R5786:5792 audit_ideal_functionality <> entries:63 var
+R5803:5804 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+R5809:5812 Corelib.Init.Datatypes <> true constr
+R5819:5822 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R5867:5878 audit_ideal_functionality <> verify_chain def
+R5880:5886 audit_ideal_functionality <> entries:63 var
+R5888:5889 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+def 5961:5975 <> get_merkle_root
+R5988:5997 audit_ideal_functionality <> AuditState rec
+binder 5980:5984 <> state:65
+R6004:6012 uc_framework <> Bitstring def
+R6019:6029 audit_ideal_functionality <> merkle_root def
+R6038:6048 audit_ideal_functionality <> merkle_tree proj
+R6031:6035 audit_ideal_functionality <> state:65 var
+ax 6103:6121 <> verify_merkle_proof
+R6140:6143 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6127:6139 audit_ideal_functionality <> AuditLogEntry rec
+R6158:6161 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6144:6147 Corelib.Init.Datatypes <> list ind
+R6149:6157 uc_framework <> Bitstring def
+R6171:6174 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6162:6170 uc_framework <> Bitstring def
+R6175:6178 Corelib.Init.Datatypes <> bool ind
+prf 6274:6289 <> log_completeness
+R6311:6320 audit_ideal_functionality <> AuditState rec
+binder 6303:6307 <> state:68
+R6332:6337 Stdlib.Strings.String <> string ind
+binder 6324:6328 <> event:69
+R6346:6351 Stdlib.Strings.String <> string ind
+binder 6341:6342 <> op:70
+R6360:6368 uc_framework <> Namespace def
+binder 6355:6356 <> ns:71
+R6390:6395 Stdlib.Strings.String <> string ind
+binder 6381:6386 <> client:72
+R6405:6410 Corelib.Init.Datatypes <> option ind
+R6412:6416 uc_framework <> KeyId def
+binder 6399:6401 <> kid:73
+R6429:6434 Stdlib.Strings.String <> string ind
+binder 6420:6425 <> result:74
+R6462:6464 Corelib.Init.Datatypes <> nat ind
+binder 6447:6453 <> latency:75
+binder 6455:6458 <> time:76
+R6496:6504 audit_ideal_functionality <> ideal_log def
+R6506:6510 audit_ideal_functionality <> state:68 var
+R6512:6516 audit_ideal_functionality <> event:69 var
+R6518:6519 audit_ideal_functionality <> op:70 var
+R6521:6522 audit_ideal_functionality <> ns:71 var
+R6524:6529 audit_ideal_functionality <> client:72 var
+R6531:6533 audit_ideal_functionality <> kid:73 var
+R6535:6540 audit_ideal_functionality <> result:74 var
+R6542:6548 audit_ideal_functionality <> latency:75 var
+R6550:6553 audit_ideal_functionality <> time:76 var
+R6477:6477 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6483:6484 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6491:6491 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6599:6600 Stdlib.Lists.List <> In def
+R6616:6626 audit_ideal_functionality <> log_entries proj
+prf 6718:6737 <> hash_chain_integrity
+R6759:6768 audit_ideal_functionality <> AuditState rec
+binder 6751:6755 <> state:77
+R6782:6784 Corelib.Init.Datatypes <> nat ind
+binder 6772:6775 <> from:78
+binder 6777:6778 <> to:79
+R6833:6899 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6826:6828 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R6792:6811 audit_ideal_functionality <> verify_log_integrity def
+R6813:6817 audit_ideal_functionality <> state:77 var
+R6819:6822 audit_ideal_functionality <> from:78 var
+R6824:6825 audit_ideal_functionality <> to:79 var
+R6829:6832 Corelib.Init.Datatypes <> true constr
+R6912:6914 Corelib.Init.Datatypes <> nat ind
+binder 6908:6908 <> i:80
+R6926:6938 audit_ideal_functionality <> AuditLogEntry rec
+binder 6918:6922 <> entry:81
+R6986:6995 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6948:6949 Stdlib.Lists.List <> In def
+R6958:6965 audit_ideal_functionality <> get_logs def
+R6967:6971 audit_ideal_functionality <> state:77 var
+R6973:6976 audit_ideal_functionality <> from:78 var
+R6978:6979 audit_ideal_functionality <> to:79 var
+R6981:6984 Corelib.Init.Datatypes <> None constr
+R6951:6955 audit_ideal_functionality <> entry:81 var
+R7016:7018 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7003:7014 audit_ideal_functionality <> current_hash proj
+R6996:7000 audit_ideal_functionality <> entry:81 var
+R7019:7028 audit_ideal_functionality <> hash_entry defax
+R7030:7034 audit_ideal_functionality <> entry:81 var
+def 7230:7236 <> F_audit
+R7240:7249 uc_framework <> IdealState defax

@@ -92,7 +92,7 @@
 //! use hsm_config::load_from_env;
 //!
 //! // Load config with env var overrides
-//! let config = load_from_env("config.yaml").expect("Failed to load");
+//! let config = load_from_env().expect("Failed to load");
 //! ```
 //!
 //! # Validation Error Handling

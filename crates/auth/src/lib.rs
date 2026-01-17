@@ -204,16 +204,15 @@
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Initialize auth service with certificates
-//! let auth_service = AuthService::new(
-//!     include_bytes!("ca.pem"),
-//!     include_bytes!("server.pem"),
-//!     include_bytes!("server.key"),
-//!     3600, // 1 hour session TTL
-//! )?;
+//! let ca_cert = std::fs::read("ca.pem")?;
+//! let server_cert = std::fs::read("server.pem")?;
+//! let server_key = std::fs::read("server.key")?;
+//!
+//! let auth_service = AuthService::new(&ca_cert, &server_cert, &server_key, 3600)?; // 1 hour session TTL
 //!
 //! // Authenticate client and create session
-//! let client_cert_der = include_bytes!("client.der");
-//! let session = auth_service.authenticate_and_create_session(client_cert_der)?;
+//! let client_cert_der = std::fs::read("client.der")?;
+//! let session = auth_service.authenticate_and_create_session(&client_cert_der)?;
 //!
 //! println!("Session created: {}", session.id);
 //! println!("Client: {}", session.identity.common_name);
@@ -238,14 +237,12 @@
 //! use hsm_auth::{AuthService, Permission};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # let auth_service = AuthService::new(
-//! #     include_bytes!("ca.pem"),
-//! #     include_bytes!("server.pem"),
-//! #     include_bytes!("server.key"),
-//! #     3600,
-//! # )?;
-//! # let client_cert_der = include_bytes!("client.der");
-//! # let session = auth_service.authenticate_and_create_session(client_cert_der)?;
+//! # let ca_cert = std::fs::read("ca.pem")?;
+//! # let server_cert = std::fs::read("server.pem")?;
+//! # let server_key = std::fs::read("server.key")?;
+//! # let auth_service = AuthService::new(&ca_cert, &server_cert, &server_key, 3600)?;
+//! # let client_cert_der = std::fs::read("client.der")?;
+//! # let session = auth_service.authenticate_and_create_session(&client_cert_der)?;
 //! # let identity = &session.identity;
 //! # let key_id = "key-123";
 //! # let namespace = "production";

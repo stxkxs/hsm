@@ -12,6 +12,9 @@ members = [
     "crates/backup",
     "crates/config",
     "crates/hsm-server",
+    "crates/verification",
+    "crates/zk-proofs",
+    "crates/hardware-backend",
 ]
 
 [workspace.package]

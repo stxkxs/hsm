@@ -114,7 +114,7 @@ impl Default for KeyUsagePolicy {
 }
 
 /// Complete key structure
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct Key {
     pub id: KeyId,

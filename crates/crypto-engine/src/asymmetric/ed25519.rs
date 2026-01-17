@@ -229,13 +229,34 @@ impl Ed25519Engine {
 
         let signing_key = SigningKey::from_bytes(&key_bytes);
 
-        Ok(messages
-            .par_iter()
-            .map(|msg| {
-                let signature = signing_key.sign(msg);
-                signature.to_bytes().to_vec()
-            })
-            .collect())
+        // Use sequential iteration under MIRI to avoid rayon compatibility issues
+        #[cfg(miri)]
+        {
+            Ok(messages
+                .iter()
+                .map(|msg| {
+                    let signature = signing_key.sign(msg);
+                    signature.to_bytes().to_vec()
+                })
+                .collect())
+        }
+
+        // Use parallel iteration in production for better performance
+        #[cfg(not(miri))]
+        {
+            // Clone key_bytes into Arc to safely share across threads
+            let key_bytes = std::sync::Arc::new(key_bytes);
+
+            Ok(messages
+                .par_iter()
+                .map(|msg| {
+                    // Each thread creates its own SigningKey from the shared key bytes
+                    let signing_key = SigningKey::from_bytes(&*key_bytes);
+                    let signature = signing_key.sign(msg);
+                    signature.to_bytes().to_vec()
+                })
+                .collect())
+        }
     }
 
     /// Verifies multiple signatures in parallel.
@@ -269,12 +290,27 @@ impl Ed25519Engine {
             ));
         }
 
-        Ok(public_keys
-            .par_iter()
-            .zip(messages.par_iter())
-            .zip(signatures.par_iter())
-            .map(|((pk, msg), sig)| Self::verify(pk, msg, sig).unwrap_or(false))
-            .collect())
+        // Use sequential iteration under MIRI to avoid rayon compatibility issues
+        #[cfg(miri)]
+        {
+            Ok(public_keys
+                .iter()
+                .zip(messages.iter())
+                .zip(signatures.iter())
+                .map(|((pk, msg), sig)| Self::verify(pk, msg, sig).unwrap_or(false))
+                .collect())
+        }
+
+        // Use parallel iteration in production for better performance
+        #[cfg(not(miri))]
+        {
+            Ok(public_keys
+                .par_iter()
+                .zip(messages.par_iter())
+                .zip(signatures.par_iter())
+                .map(|((pk, msg), sig)| Self::verify(pk, msg, sig).unwrap_or(false))
+                .collect())
+        }
     }
 }
 

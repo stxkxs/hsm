@@ -112,7 +112,7 @@
 //! ## Atomic Operations with Caching
 //!
 //! ```rust,no_run
-//! use hsm_storage::{EncryptedFileStorage, CachedStorage, KeyId};
+//! use hsm_storage::{EncryptedFileStorage, CachedStorage, KeyId, StorageBackend};
 //! use std::path::PathBuf;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -173,6 +173,13 @@ pub mod compression;
 pub mod integrity;
 pub mod sharding;
 
+// Hardware backend integration
+#[cfg(feature = "hardware")]
+pub mod hardware_storage;
+
+#[cfg(feature = "hardware")]
+pub mod storage_config;
+
 // Re-export primary types
 pub use backend::{StorageBackend, StorageError, StorageResult};
 pub use encrypted_fs::EncryptedFileStorage;
@@ -184,6 +191,15 @@ pub use cached_storage::{CacheStats, CachedStorage};
 pub use compression::{compress, decompress, CompressedData, CompressionStats};
 pub use integrity::{IntegrityKeyManager, IntegrityProtectedKey};
 pub use sharding::{get_shard_number, get_sharded_path, ShardStats};
+
+// Re-export hardware backend types
+#[cfg(feature = "hardware")]
+pub use hardware_storage::{HardwareStorageBackend, HardwareStorageStats};
+
+#[cfg(feature = "hardware")]
+pub use storage_config::{
+    create_storage_backend, HardwareBackendConfig, StorageBackendType, StorageConfig,
+};
 
 /// A unique identifier for a cryptographic key
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

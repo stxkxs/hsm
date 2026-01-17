@@ -59,7 +59,7 @@
 //! ## Basic Caching
 //!
 //! ```rust,no_run
-//! use hsm_storage::{CachedStorage, EncryptedFileStorage, KeyId};
+//! use hsm_storage::{CachedStorage, EncryptedFileStorage, KeyId, StorageBackend};
 //! use std::path::PathBuf;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -94,7 +94,7 @@
 //! ## Monitoring Cache Performance
 //!
 //! ```rust,no_run
-//! use hsm_storage::{CachedStorage, EncryptedFileStorage, KeyId};
+//! use hsm_storage::{CachedStorage, EncryptedFileStorage, KeyId, StorageBackend};
 //! use std::path::PathBuf;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -127,7 +127,7 @@
 //! ## Write-Through Caching
 //!
 //! ```rust,no_run
-//! use hsm_storage::{CachedStorage, EncryptedFileStorage, KeyId};
+//! use hsm_storage::{CachedStorage, EncryptedFileStorage, KeyId, StorageBackend};
 //! use std::path::PathBuf;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

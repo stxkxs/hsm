@@ -58,15 +58,16 @@ use std::sync::Arc;
 /// use hsm_auth::mtls::MtlsAuthenticator;
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let ca_cert = include_bytes!("ca.pem");
-/// let server_cert = include_bytes!("server.pem");
-/// let server_key = include_bytes!("server.key");
+/// // Load certificates (in production, load from files or K8s secrets)
+/// let ca_cert = std::fs::read("ca.pem")?;
+/// let server_cert = std::fs::read("server.pem")?;
+/// let server_key = std::fs::read("server.key")?;
 ///
-/// let authenticator = MtlsAuthenticator::new(ca_cert, server_cert, server_key)?;
+/// let authenticator = MtlsAuthenticator::new(&ca_cert, &server_cert, &server_key)?;
 ///
 /// // Authenticate a client
-/// let client_cert_der = include_bytes!("client.der");
-/// let identity = authenticator.authenticate(client_cert_der)?;
+/// let client_cert_der = std::fs::read("client.der")?;
+/// let identity = authenticator.authenticate(&client_cert_der)?;
 ///
 /// println!("Authenticated: {}", identity.common_name);
 /// println!("Organization: {:?}", identity.organization);
@@ -128,11 +129,11 @@ impl MtlsAuthenticator {
     /// use hsm_auth::mtls::MtlsAuthenticator;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let authenticator = MtlsAuthenticator::new(
-    ///     include_bytes!("ca.pem"),
-    ///     include_bytes!("server.pem"),
-    ///     include_bytes!("server.key"),
-    /// )?;
+    /// let ca_cert = std::fs::read("ca.pem")?;
+    /// let server_cert = std::fs::read("server.pem")?;
+    /// let server_key = std::fs::read("server.key")?;
+    ///
+    /// let authenticator = MtlsAuthenticator::new(&ca_cert, &server_cert, &server_key)?;
     /// # Ok(())
     /// # }
     /// ```
@@ -188,13 +189,12 @@ impl MtlsAuthenticator {
     /// ```rust,no_run
     /// # use hsm_auth::mtls::MtlsAuthenticator;
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let authenticator = MtlsAuthenticator::new(
-    /// #     include_bytes!("ca.pem"),
-    /// #     include_bytes!("server.pem"),
-    /// #     include_bytes!("server.key"),
-    /// # )?;
-    /// let client_cert_der = include_bytes!("client.der");
-    /// let identity = authenticator.authenticate(client_cert_der)?;
+    /// # let ca_cert = std::fs::read("ca.pem")?;
+    /// # let server_cert = std::fs::read("server.pem")?;
+    /// # let server_key = std::fs::read("server.key")?;
+    /// # let authenticator = MtlsAuthenticator::new(&ca_cert, &server_cert, &server_key)?;
+    /// let client_cert_der = std::fs::read("client.der")?;
+    /// let identity = authenticator.authenticate(&client_cert_der)?;
     ///
     /// println!("Client: {}", identity.common_name);
     /// println!("Namespace: {}", identity.namespace);

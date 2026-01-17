@@ -27,6 +27,11 @@ service HSM {
   rpc GetAuditLog(GetAuditLogRequest) returns (GetAuditLogResponse);
   rpc StreamAuditLog(StreamAuditLogRequest) returns (stream AuditLogEntry);
 
+  // Zero-Knowledge Audit Verification
+  rpc GenerateZkAuditProof(ZkAuditProofRequest) returns (ZkAuditProofResponse);
+  rpc VerifyZkAuditProof(VerifyZkAuditProofRequest) returns (VerifyZkAuditProofResponse);
+  rpc GetMerkleRoot(GetMerkleRootRequest) returns (GetMerkleRootResponse);
+
   // Health Check
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
 }
@@ -268,6 +273,83 @@ message StreamAuditLogRequest {
   int64 start_time = 2;
   string user_id = 3;
   string operation = 4;
+}
+
+// Zero-Knowledge Audit Proof Request/Response
+message ZkAuditProofRequest {
+  // Sequence number of the event to prove (public)
+  uint64 sequence = 1;
+
+  // Whether to include Merkle proof
+  bool include_merkle_proof = 2;
+
+  // Namespace (optional filter)
+  string namespace = 3;
+}
+
+message ZkAuditProofResponse {
+  // Public data (revealed in the proof)
+  PublicEventData public_data = 1;
+
+  // ZK proof (opaque binary data)
+  bytes proof = 2;
+
+  // Proof size in bytes
+  uint32 proof_size = 3;
+
+  // Proof generation time in milliseconds
+  uint64 generation_time_ms = 4;
+}
+
+message PublicEventData {
+  // Sequence number (public)
+  uint64 sequence = 1;
+
+  // Event type (public)
+  string event_type = 2;
+
+  // Timestamp (public)
+  int64 timestamp = 3;
+
+  // Merkle root (for inclusion proof)
+  bytes merkle_root = 4;
+}
+
+// Verify ZK Audit Proof Request/Response
+message VerifyZkAuditProofRequest {
+  // Public data to verify against
+  PublicEventData public_data = 1;
+
+  // ZK proof to verify
+  bytes proof = 2;
+}
+
+message VerifyZkAuditProofResponse {
+  // Whether the proof is valid
+  bool valid = 1;
+
+  // Verification time in milliseconds
+  uint64 verification_time_ms = 2;
+
+  // Error message if invalid
+  string error_message = 3;
+}
+
+// Get Merkle Root Request/Response
+message GetMerkleRootRequest {
+  // Namespace (optional filter)
+  string namespace = 1;
+}
+
+message GetMerkleRootResponse {
+  // Current Merkle root
+  bytes merkle_root = 1;
+
+  // Number of events in the tree
+  uint64 num_events = 2;
+
+  // Last update timestamp
+  int64 last_updated = 3;
 }
 
 // Health Check Request/Response

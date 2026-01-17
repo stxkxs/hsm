@@ -88,7 +88,7 @@
 //! ## Splitting a master key
 //!
 //! ```rust
-//! use hsm_backup::shamir::{split_master_key, recover_master_key};
+//! use backup::shamir::{split_master_key, recover_master_key};
 //!
 //! // Original master key (32 bytes for AES-256)
 //! let master_key = b"my_secret_master_key_32_bytes!!!";
@@ -108,7 +108,7 @@
 //! ## Recovering the master key
 //!
 //! ```rust
-//! # use hsm_backup::shamir::{split_master_key, recover_master_key};
+//! # use backup::shamir::{split_master_key, recover_master_key};
 //! # let master_key = b"my_secret_master_key_32_bytes!!!";
 //! # let shares = split_master_key(master_key, 3, 5).unwrap();
 //!
@@ -127,7 +127,7 @@
 //! ## Share serialization for storage
 //!
 //! ```rust
-//! use hsm_backup::shamir::{split_master_key, ShamirSecretSharing, ShamirConfig};
+//! use backup::shamir::{split_master_key, ShamirSecretSharing, ShamirConfig};
 //!
 //! # let master_key = b"my_secret_master_key_32_bytes!!!";
 //! # let shares = split_master_key(master_key, 3, 5).unwrap();
@@ -293,7 +293,7 @@ impl ShamirSecretSharing {
     /// # Examples
     ///
     /// ```rust
-    /// use hsm_backup::shamir::{ShamirConfig, ShamirSecretSharing};
+    /// use backup::shamir::{ShamirConfig, ShamirSecretSharing};
     ///
     /// let config = ShamirConfig::new(3, 5).unwrap();
     /// let shamir = ShamirSecretSharing::new(config);

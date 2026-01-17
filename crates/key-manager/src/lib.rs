@@ -87,7 +87,7 @@
 //! ## Basic Key Generation
 //!
 //! ```
-//! use key_manager::{DefaultKeyManager, KeyManager, KeySpec, KeyType, KeyUsagePolicy};
+//! use hsm_key_manager::{DefaultKeyManager, KeyManager, KeySpec, KeyType, KeyUsagePolicy};
 //! use std::collections::HashMap;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -98,7 +98,10 @@
 //!     key_type: KeyType::Ed25519,
 //!     namespace: "production".to_string(),
 //!     policy: KeyUsagePolicy {
-//!         allowed_operations: vec!["sign".to_string(), "verify".to_string()],
+//!         can_sign: true,
+//!         can_encrypt: false,
+//!         can_derive: false,
+//!         can_export: false,
 //!         max_operations: Some(1_000_000),
 //!         expires_at: None,
 //!     },
@@ -114,8 +117,8 @@
 //!
 //! ## Key Rotation
 //!
-//! ```
-//! use key_manager::{DefaultKeyManager, KeyManager, KeySpec, KeyType, KeyUsagePolicy};
+//! ```no_run
+//! use hsm_key_manager::{DefaultKeyManager, KeyManager, KeySpec, KeyType, KeyUsagePolicy};
 //! use std::collections::HashMap;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -126,7 +129,10 @@
 //!     key_type: KeyType::Rsa2048,
 //!     namespace: "production".to_string(),
 //!     policy: KeyUsagePolicy {
-//!         allowed_operations: vec!["sign".to_string()],
+//!         can_sign: true,
+//!         can_encrypt: false,
+//!         can_derive: false,
+//!         can_export: false,
 //!         max_operations: None,
 //!         expires_at: None,
 //!     },
@@ -150,7 +156,8 @@
 //! ## Listing Keys with Filters
 //!
 //! ```
-//! use key_manager::{DefaultKeyManager, KeyManager, KeyFilter, KeyState};
+//! use hsm_key_manager::{DefaultKeyManager, KeyManager, KeyFilter, KeyState};
+//! use std::collections::HashMap;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let manager = DefaultKeyManager::new();
@@ -159,6 +166,7 @@
 //! let filter = KeyFilter {
 //!     key_type: None,
 //!     state: Some(KeyState::Active),
+//!     labels: HashMap::new(),
 //! };
 //!
 //! let keys = manager.list_keys("production", filter)?;
@@ -180,10 +188,25 @@ pub mod policy;
 pub mod rotation;
 pub mod store;
 
+#[cfg(feature = "hardware")]
+pub mod hardware;
+
+#[cfg(feature = "hardware")]
+pub mod config;
+
 pub use error::{Error, Result};
 pub use key::{Key, KeyId, KeySpec, KeyState, KeyType, KeyUsagePolicy};
 pub use metadata::{KeyFilter, KeyMetadata};
 use store::KeyStore;
+
+#[cfg(feature = "hardware")]
+pub use hardware::{AsyncKeyManager, HardwareKeyManager};
+
+#[cfg(feature = "hardware")]
+pub use config::{
+    create_hardware_key_manager, create_hardware_backend, HardwareBackendConfig,
+    KeyManagerBackendType, KeyManagerConfig, NitroConfig, SevConfig, SgxConfig,
+};
 
 /// Main key manager trait
 pub trait KeyManager: Send + Sync {

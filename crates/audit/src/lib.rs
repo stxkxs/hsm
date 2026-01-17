@@ -57,6 +57,7 @@ pub mod storage;
 pub mod storage_enhanced;
 pub mod tamper_detection;
 pub mod verifier;
+pub mod zk_integration;
 
 // Re-export main types for convenience
 pub use event::{AuditEvent, AuditEventBuilder, EventType, OperationResult};
@@ -70,6 +71,9 @@ pub use verifier::{AuditVerifier, VerificationError, VerificationReport, Verific
 pub use async_logger::{AsyncAuditConfig, AsyncAuditError, AsyncAuditLogger};
 pub use storage_enhanced::{EnhancedAuditStorage, EnhancedStorageConfig, EnhancedStorageError};
 pub use tamper_detection::{IntegrityReport, TamperDetector, Violation};
+
+// Re-export ZK integration types
+pub use zk_integration::{ZkAuditLogger, ZkAuditLoggerWrapper, ZkIntegrationError, ZkProofRequest, ZkProofResponse};
 
 #[cfg(test)]
 mod tests {

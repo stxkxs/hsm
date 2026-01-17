@@ -1,0 +1,607 @@
+DIGEST d4b587ac7288883ba0769763ff4854e3
+Fkeymgmt_ideal_functionality
+R512:523 uc_framework <> <> lib
+R541:557 Stdlib.Lists.List <> <> lib
+R575:595 Stdlib.Strings.String <> <> lib
+R613:628 Stdlib.Bool.Bool <> <> lib
+R638:650 Stdlib.Lists.List ListNotations <> mod
+ind 721:728 <> KeyState
+constr 737:743 <> Pending
+constr 776:781 <> Active
+constr 813:823 <> Deactivated
+constr 857:867 <> Compromised
+constr 909:917 <> Destroyed
+scheme 721:728 <> KeyState_rect
+scheme 721:728 <> KeyState_ind
+scheme 721:728 <> KeyState_rec
+scheme 721:728 <> KeyState_sind
+rec 977:987 <> KeyMetadata
+proj 996:1001 <> key_id
+proj 1014:1022 <> namespace
+proj 1039:1047 <> algorithm
+proj 1061:1070 <> created_at
+proj 1106:1110 <> state
+proj 1126:1130 <> owner
+proj 1152:1154 <> acl
+proj 1207:1217 <> usage_count
+proj 1228:1237 <> expires_at
+R1005:1009 uc_framework <> KeyId def
+R1026:1034 uc_framework <> Namespace def
+R1051:1056 Stdlib.Strings.String <> string ind
+R1074:1076 Corelib.Init.Datatypes <> nat ind
+R1114:1121 keymgmt_ideal_functionality <> KeyState ind
+R1134:1147 uc_framework <> ClientIdentity rec
+R1158:1161 Corelib.Init.Datatypes <> list ind
+R1163:1176 uc_framework <> ClientIdentity rec
+R1221:1223 Corelib.Init.Datatypes <> nat ind
+R1241:1246 Corelib.Init.Datatypes <> option ind
+R1248:1250 Corelib.Init.Datatypes <> nat ind
+rec 1291:1302 <> KeyMgmtState
+proj 1367:1370 <> keys
+proj 1473:1484 <> deleted_keys
+proj 1565:1575 <> key_counter
+proj 1605:1613 <> audit_log
+R1374:1377 Corelib.Init.Datatypes <> list ind
+R1380:1380 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1398:1402 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1420:1420 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1390:1392 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1381:1389 uc_framework <> Namespace def
+R1393:1397 uc_framework <> KeyId def
+R1406:1408 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1403:1405 uc_framework <> Key ind
+R1409:1419 keymgmt_ideal_functionality <> KeyMetadata rec
+R1488:1491 Corelib.Init.Datatypes <> list ind
+R1503:1505 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R1494:1502 uc_framework <> Namespace def
+R1506:1510 uc_framework <> KeyId def
+R1579:1581 Corelib.Init.Datatypes <> nat ind
+R1617:1620 Corelib.Init.Datatypes <> list ind
+R1622:1631 uc_framework <> AuditEvent ind
+def 1670:1690 <> initial_keymgmt_state
+R1694:1705 keymgmt_ideal_functionality <> KeyMgmtState rec
+R1715:1718 keymgmt_ideal_functionality <> keys proj
+R1715:1718 keymgmt_ideal_functionality <> keys proj
+R1715:1718 keymgmt_ideal_functionality <> keys proj
+R1729:1740 keymgmt_ideal_functionality <> deleted_keys proj
+R1729:1740 keymgmt_ideal_functionality <> deleted_keys proj
+R1751:1761 keymgmt_ideal_functionality <> key_counter proj
+R1751:1761 keymgmt_ideal_functionality <> key_counter proj
+R1771:1779 keymgmt_ideal_functionality <> audit_log proj
+R1771:1779 keymgmt_ideal_functionality <> audit_log proj
+R1723:1724 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+R1745:1746 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+R1784:1785 Stdlib.Lists.List ListNotations ::list_scope:'['_']' not
+def 1862:1871 <> gen_key_id
+R1884:1886 Corelib.Init.Datatypes <> nat ind
+binder 1874:1880 <> counter:18
+R1891:1895 uc_framework <> KeyId def
+R1908:1912 Stdlib.Strings.String <> ::string_scope:x_'++'_x not
+R1934:1934 Stdlib.Strings.String <> ::string_scope:x_'++'_x not
+R1913:1925 uc_framework String of_nat def
+R1927:1933 keymgmt_ideal_functionality <> counter:18 var
+def 1989:1998 <> key_exists
+R2011:2022 keymgmt_ideal_functionality <> KeyMgmtState rec
+binder 2003:2007 <> state:19
+R2033:2041 uc_framework <> Namespace def
+binder 2028:2029 <> ns:20
+R2053:2057 uc_framework <> KeyId def
+binder 2047:2049 <> kid:21
+R2064:2067 Corelib.Init.Datatypes <> bool ind
+R2074:2080 Stdlib.Lists.List <> existsb def
+R2175:2178 keymgmt_ideal_functionality <> keys proj
+R2168:2172 keymgmt_ideal_functionality <> state:19 var
+R2088:2088 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2095:2096 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2098:2098 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2089:2089 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2091:2092 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2094:2094 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+binder 2093:2093 <> k:22
+binder 2090:2090 <> n:23
+binder 2088:2098 <> pat:24
+R2115:2118 Corelib.Init.Datatypes <> andb def
+R2139:2148 Stdlib.Strings.String <> eqb def
+R2150:2150 keymgmt_ideal_functionality <> k:22 var
+R2152:2154 keymgmt_ideal_functionality <> kid:21 var
+R2121:2130 Stdlib.Strings.String <> eqb def
+R2132:2132 keymgmt_ideal_functionality <> n:23 var
+R2134:2135 keymgmt_ideal_functionality <> ns:20 var
+def 2225:2235 <> key_deleted
+R2248:2259 keymgmt_ideal_functionality <> KeyMgmtState rec
+binder 2240:2244 <> state:25
+R2270:2278 uc_framework <> Namespace def
+binder 2265:2266 <> ns:26
+R2290:2294 uc_framework <> KeyId def
+binder 2284:2286 <> kid:27
+R2301:2304 Corelib.Init.Datatypes <> bool ind
+R2311:2317 Stdlib.Lists.List <> existsb def
+R2407:2418 keymgmt_ideal_functionality <> deleted_keys proj
+R2400:2404 keymgmt_ideal_functionality <> state:25 var
+R2325:2325 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2327:2328 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R2330:2330 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+binder 2329:2329 <> k:28
+binder 2326:2326 <> n:29
+binder 2325:2330 <> pat:30
+R2347:2350 Corelib.Init.Datatypes <> andb def
+R2371:2380 Stdlib.Strings.String <> eqb def
+R2382:2382 keymgmt_ideal_functionality <> k:28 var
+R2384:2386 keymgmt_ideal_functionality <> kid:27 var
+R2353:2362 Stdlib.Strings.String <> eqb def
+R2364:2364 keymgmt_ideal_functionality <> n:29 var
+R2366:2367 keymgmt_ideal_functionality <> ns:26 var
+def 2464:2483 <> has_namespace_access
+R2499:2512 uc_framework <> ClientIdentity rec
+binder 2488:2495 <> identity:31
+R2523:2531 uc_framework <> Namespace def
+binder 2518:2519 <> ns:32
+R2538:2541 Corelib.Init.Datatypes <> bool ind
+R2567:2574 keymgmt_ideal_functionality <> identity:31 var
+R2581:2600 uc_framework <> Build_ClientIdentity constr
+R2614:2615 keymgmt_ideal_functionality <> ns:32 var
+binder 2552:2556 <> id_ns:34
+R2626:2635 Stdlib.Strings.String <> eqb def
+R2637:2641 keymgmt_ideal_functionality <> id_ns:34 var
+R2643:2644 keymgmt_ideal_functionality <> ns:32 var
+def 2695:2700 <> in_acl
+R2716:2729 uc_framework <> ClientIdentity rec
+binder 2705:2712 <> identity:35
+R2746:2756 keymgmt_ideal_functionality <> KeyMetadata rec
+binder 2735:2742 <> metadata:36
+R2763:2766 Corelib.Init.Datatypes <> bool ind
+R2801:2808 keymgmt_ideal_functionality <> identity:35 var
+binder 2778:2782 <> id_cn:37
+binder 2788:2792 <> id_ns:38
+R2815:2821 Stdlib.Lists.List <> existsb def
+R2996:2998 keymgmt_ideal_functionality <> acl proj
+R2986:2993 keymgmt_ideal_functionality <> metadata:36 var
+R2834:2847 uc_framework <> ClientIdentity rec
+binder 2829:2830 <> id:39
+R2889:2890 keymgmt_ideal_functionality <> id:39 var
+binder 2870:2872 <> cn':40
+binder 2878:2880 <> ns':41
+R2907:2910 Corelib.Init.Datatypes <> andb def
+R2953:2962 Stdlib.Strings.String <> eqb def
+R2964:2966 keymgmt_ideal_functionality <> ns':41 var
+R2968:2972 keymgmt_ideal_functionality <> id_ns:38 var
+R2913:2922 Stdlib.Strings.String <> eqb def
+R2924:2926 keymgmt_ideal_functionality <> cn':40 var
+R2928:2932 keymgmt_ideal_functionality <> id_cn:37 var
+def 3071:3088 <> ideal_generate_key
+R3101:3112 keymgmt_ideal_functionality <> KeyMgmtState rec
+binder 3093:3097 <> state:42
+R3123:3131 uc_framework <> Namespace def
+binder 3118:3119 <> ns:43
+R3143:3148 Stdlib.Strings.String <> string ind
+binder 3137:3139 <> alg:44
+R3162:3175 uc_framework <> ClientIdentity rec
+binder 3154:3158 <> owner:45
+R3182:3187 Corelib.Init.Datatypes <> option ind
+R3195:3197 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R3190:3194 uc_framework <> KeyId def
+R3198:3209 keymgmt_ideal_functionality <> KeyMgmtState rec
+R3251:3270 keymgmt_ideal_functionality <> has_namespace_access def
+R3272:3276 keymgmt_ideal_functionality <> owner:45 var
+R3278:3279 keymgmt_ideal_functionality <> ns:43 var
+R4124:4127 Corelib.Init.Datatypes <> None constr
+R3334:3343 keymgmt_ideal_functionality <> gen_key_id def
+R3352:3362 keymgmt_ideal_functionality <> key_counter proj
+R3345:3349 keymgmt_ideal_functionality <> state:42 var
+binder 3327:3329 <> kid:46
+R3412:3421 uc_framework <> Ed25519Key constr
+R3424:3434 uc_framework <> random_bits defax
+binder 3405:3407 <> key:47
+R3499:3504 keymgmt_ideal_functionality <> key_id proj
+R3499:3504 keymgmt_ideal_functionality <> key_id proj
+R3499:3504 keymgmt_ideal_functionality <> key_id proj
+R3520:3528 keymgmt_ideal_functionality <> namespace proj
+R3520:3528 keymgmt_ideal_functionality <> namespace proj
+R3543:3551 keymgmt_ideal_functionality <> algorithm proj
+R3543:3551 keymgmt_ideal_functionality <> algorithm proj
+R3567:3576 keymgmt_ideal_functionality <> created_at proj
+R3567:3576 keymgmt_ideal_functionality <> created_at proj
+R3608:3612 keymgmt_ideal_functionality <> state proj
+R3608:3612 keymgmt_ideal_functionality <> state proj
+R3631:3635 keymgmt_ideal_functionality <> owner proj
+R3631:3635 keymgmt_ideal_functionality <> owner proj
+R3653:3655 keymgmt_ideal_functionality <> acl proj
+R3653:3655 keymgmt_ideal_functionality <> acl proj
+R3675:3685 keymgmt_ideal_functionality <> usage_count proj
+R3675:3685 keymgmt_ideal_functionality <> usage_count proj
+R3699:3708 keymgmt_ideal_functionality <> expires_at proj
+R3699:3708 keymgmt_ideal_functionality <> expires_at proj
+R3509:3511 keymgmt_ideal_functionality <> kid:46 var
+R3533:3534 keymgmt_ideal_functionality <> ns:43 var
+R3556:3558 keymgmt_ideal_functionality <> alg:44 var
+R3588:3598 keymgmt_ideal_functionality <> key_counter proj
+R3581:3585 keymgmt_ideal_functionality <> state:42 var
+R3617:3622 keymgmt_ideal_functionality <> Active constr
+R3640:3644 keymgmt_ideal_functionality <> owner:45 var
+R3660:3660 Stdlib.Lists.List ListNotations ::list_scope:'['_x_']' not
+R3666:3666 Stdlib.Lists.List ListNotations ::list_scope:'['_x_']' not
+R3661:3665 keymgmt_ideal_functionality <> owner:45 var
+R3713:3716 Corelib.Init.Datatypes <> None constr
+binder 3478:3485 <> metadata:48
+R3804:3807 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R3776:3776 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3786:3787 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3803:3803 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3777:3777 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3780:3781 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3785:3785 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3778:3779 keymgmt_ideal_functionality <> ns:43 var
+R3782:3784 keymgmt_ideal_functionality <> kid:46 var
+R3788:3788 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3792:3793 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3802:3802 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3789:3791 keymgmt_ideal_functionality <> key:47 var
+R3794:3801 keymgmt_ideal_functionality <> metadata:48 var
+R3815:3818 keymgmt_ideal_functionality <> keys proj
+R3808:3812 keymgmt_ideal_functionality <> state:42 var
+binder 3764:3771 <> new_keys:49
+R3900:3903 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R3870:3881 uc_framework <> KeyLifecycle constr
+R3894:3896 keymgmt_ideal_functionality <> kid:46 var
+R3898:3899 keymgmt_ideal_functionality <> ns:43 var
+R3911:3919 keymgmt_ideal_functionality <> audit_log proj
+R3904:3908 keymgmt_ideal_functionality <> state:42 var
+binder 3859:3865 <> new_log:50
+R3929:3932 Corelib.Init.Datatypes <> Some constr
+R3934:3934 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3938:3942 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4108:4111 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R3935:3937 keymgmt_ideal_functionality <> kid:46 var
+R3943:3946 keymgmt_ideal_functionality <> keys proj
+R3943:3946 keymgmt_ideal_functionality <> keys proj
+R3943:3946 keymgmt_ideal_functionality <> keys proj
+R3978:3989 keymgmt_ideal_functionality <> deleted_keys proj
+R3978:3989 keymgmt_ideal_functionality <> deleted_keys proj
+R4033:4043 keymgmt_ideal_functionality <> key_counter proj
+R4033:4043 keymgmt_ideal_functionality <> key_counter proj
+R4088:4096 keymgmt_ideal_functionality <> audit_log proj
+R4088:4096 keymgmt_ideal_functionality <> audit_log proj
+R3951:3958 keymgmt_ideal_functionality <> new_keys:49 var
+R4001:4012 keymgmt_ideal_functionality <> deleted_keys proj
+R3994:3998 keymgmt_ideal_functionality <> state:42 var
+R4048:4048 Corelib.Init.Datatypes <> S constr
+R4057:4067 keymgmt_ideal_functionality <> key_counter proj
+R4050:4054 keymgmt_ideal_functionality <> state:42 var
+R4101:4107 keymgmt_ideal_functionality <> new_log:50 var
+def 4184:4196 <> ideal_get_key
+R4209:4220 keymgmt_ideal_functionality <> KeyMgmtState rec
+binder 4201:4205 <> state:51
+R4231:4239 uc_framework <> Namespace def
+binder 4226:4227 <> ns:52
+R4251:4255 uc_framework <> KeyId def
+binder 4245:4247 <> kid:53
+R4273:4286 uc_framework <> ClientIdentity rec
+binder 4261:4269 <> requester:54
+R4293:4298 Corelib.Init.Datatypes <> option ind
+R4318:4320 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R4304:4306 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R4301:4303 uc_framework <> Key ind
+R4307:4317 keymgmt_ideal_functionality <> KeyMetadata rec
+R4321:4332 keymgmt_ideal_functionality <> KeyMgmtState rec
+R4374:4377 Corelib.Init.Datatypes <> negb def
+R4380:4399 keymgmt_ideal_functionality <> has_namespace_access def
+R4401:4409 keymgmt_ideal_functionality <> requester:54 var
+R4411:4412 keymgmt_ideal_functionality <> ns:52 var
+R4464:4467 Stdlib.Lists.List <> find def
+R4572:4575 keymgmt_ideal_functionality <> keys proj
+R4565:4569 keymgmt_ideal_functionality <> state:51 var
+R4475:4475 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4482:4483 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4485:4485 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4476:4476 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4478:4479 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4481:4481 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+binder 4480:4480 <> k:55
+binder 4477:4477 <> n:56
+binder 4475:4485 <> pat:57
+R4507:4510 Corelib.Init.Datatypes <> andb def
+R4531:4540 Stdlib.Strings.String <> eqb def
+R4542:4542 keymgmt_ideal_functionality <> k:55 var
+R4544:4546 keymgmt_ideal_functionality <> kid:53 var
+R4513:4522 Stdlib.Strings.String <> eqb def
+R4524:4524 keymgmt_ideal_functionality <> n:56 var
+R4526:4527 keymgmt_ideal_functionality <> ns:52 var
+R4589:4592 Corelib.Init.Datatypes <> None constr
+R4597:4600 Corelib.Init.Datatypes <> None constr
+R4628:4631 Corelib.Init.Datatypes <> Some constr
+R4633:4633 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4635:4636 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4652:4652 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4637:4637 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4641:4642 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4651:4651 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R4692:4697 keymgmt_ideal_functionality <> in_acl def
+R4699:4707 keymgmt_ideal_functionality <> requester:54 var
+R5306:5309 Corelib.Init.Datatypes <> None constr
+R4798:4814 keymgmt_ideal_functionality <> Build_KeyMetadata constr
+R4953:4958 keymgmt_ideal_functionality <> Active constr
+R5036:5052 keymgmt_ideal_functionality <> Build_KeyMetadata constr
+R5054:5056 keymgmt_ideal_functionality <> kid:53 var
+R5092:5092 Corelib.Init.Datatypes <> S constr
+binder 5020:5031 <> new_metadata:60
+R5194:5197 Corelib.Init.Datatypes <> Some constr
+R5199:5199 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5203:5204 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5217:5218 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5224:5224 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5205:5216 keymgmt_ideal_functionality <> new_metadata:60 var
+R5219:5223 keymgmt_ideal_functionality <> state:51 var
+R5243:5246 Corelib.Init.Datatypes <> None constr
+R4420:4423 Corelib.Init.Datatypes <> None constr
+def 5393:5408 <> ideal_delete_key
+R5421:5432 keymgmt_ideal_functionality <> KeyMgmtState rec
+binder 5413:5417 <> state:61
+R5443:5451 uc_framework <> Namespace def
+binder 5438:5439 <> ns:62
+R5463:5467 uc_framework <> KeyId def
+binder 5457:5459 <> kid:63
+R5485:5498 uc_framework <> ClientIdentity rec
+binder 5473:5481 <> requester:64
+R5505:5510 Corelib.Init.Datatypes <> option ind
+R5512:5523 keymgmt_ideal_functionality <> KeyMgmtState rec
+R5533:5536 Corelib.Init.Datatypes <> negb def
+R5539:5558 keymgmt_ideal_functionality <> has_namespace_access def
+R5560:5568 keymgmt_ideal_functionality <> requester:64 var
+R5570:5571 keymgmt_ideal_functionality <> ns:62 var
+R5631:5634 Stdlib.Lists.List <> find def
+R5739:5742 keymgmt_ideal_functionality <> keys proj
+R5732:5736 keymgmt_ideal_functionality <> state:61 var
+R5642:5642 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5649:5650 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5652:5652 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5643:5643 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5645:5646 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5648:5648 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+binder 5647:5647 <> k:65
+binder 5644:5644 <> n:66
+binder 5642:5652 <> pat:67
+R5674:5677 Corelib.Init.Datatypes <> andb def
+R5698:5707 Stdlib.Strings.String <> eqb def
+R5709:5709 keymgmt_ideal_functionality <> k:65 var
+R5711:5713 keymgmt_ideal_functionality <> kid:63 var
+R5680:5689 Stdlib.Strings.String <> eqb def
+R5691:5691 keymgmt_ideal_functionality <> n:66 var
+R5693:5694 keymgmt_ideal_functionality <> ns:62 var
+R5756:5759 Corelib.Init.Datatypes <> None constr
+R5764:5767 Corelib.Init.Datatypes <> None constr
+R5775:5778 Corelib.Init.Datatypes <> Some constr
+R5780:5780 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5782:5783 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5797:5797 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5784:5784 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5786:5787 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5796:5796 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5855:5864 Stdlib.Strings.String <> eqb def
+R5877:5878 uc_framework <> cn proj
+R5866:5874 keymgmt_ideal_functionality <> requester:64 var
+R5899:5900 uc_framework <> cn proj
+R5891:5895 keymgmt_ideal_functionality <> owner proj
+R6592:6595 Corelib.Init.Datatypes <> None constr
+R5973:5978 Stdlib.Lists.List <> filter def
+R6171:6174 keymgmt_ideal_functionality <> keys proj
+R6164:6168 keymgmt_ideal_functionality <> state:61 var
+R5986:5986 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5993:5994 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5996:5996 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5987:5987 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5989:5990 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R5992:5992 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+binder 5991:5991 <> k:68
+binder 5988:5988 <> n:69
+binder 5986:5996 <> pat:70
+R6036:6039 Corelib.Init.Datatypes <> negb def
+R6042:6045 Corelib.Init.Datatypes <> andb def
+R6111:6120 Stdlib.Strings.String <> eqb def
+R6122:6122 keymgmt_ideal_functionality <> k:68 var
+R6124:6126 keymgmt_ideal_functionality <> kid:63 var
+R6048:6057 Stdlib.Strings.String <> eqb def
+R6059:6059 keymgmt_ideal_functionality <> n:69 var
+R6061:6062 keymgmt_ideal_functionality <> ns:62 var
+binder 5961:5968 <> new_keys:71
+R6254:6257 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R6245:6245 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6248:6249 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6253:6253 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6246:6247 keymgmt_ideal_functionality <> ns:62 var
+R6250:6252 keymgmt_ideal_functionality <> kid:63 var
+R6265:6276 keymgmt_ideal_functionality <> deleted_keys proj
+R6258:6262 keymgmt_ideal_functionality <> state:61 var
+binder 6230:6240 <> new_deleted:72
+R6368:6371 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R6340:6351 uc_framework <> KeyLifecycle constr
+R6362:6364 keymgmt_ideal_functionality <> kid:63 var
+R6366:6367 keymgmt_ideal_functionality <> ns:62 var
+R6379:6387 keymgmt_ideal_functionality <> audit_log proj
+R6372:6376 keymgmt_ideal_functionality <> state:61 var
+binder 6329:6335 <> new_log:73
+R6403:6406 Corelib.Init.Datatypes <> Some constr
+R6411:6414 keymgmt_ideal_functionality <> keys proj
+R6411:6414 keymgmt_ideal_functionality <> keys proj
+R6411:6414 keymgmt_ideal_functionality <> keys proj
+R6446:6457 keymgmt_ideal_functionality <> deleted_keys proj
+R6446:6457 keymgmt_ideal_functionality <> deleted_keys proj
+R6492:6502 keymgmt_ideal_functionality <> key_counter proj
+R6492:6502 keymgmt_ideal_functionality <> key_counter proj
+R6545:6553 keymgmt_ideal_functionality <> audit_log proj
+R6545:6553 keymgmt_ideal_functionality <> audit_log proj
+R6419:6426 keymgmt_ideal_functionality <> new_keys:71 var
+R6462:6472 keymgmt_ideal_functionality <> new_deleted:72 var
+R6514:6524 keymgmt_ideal_functionality <> key_counter proj
+R6507:6511 keymgmt_ideal_functionality <> state:61 var
+R6558:6564 keymgmt_ideal_functionality <> new_log:73 var
+R5579:5582 Corelib.Init.Datatypes <> None constr
+def 6677:6692 <> ideal_rotate_key
+R6705:6716 keymgmt_ideal_functionality <> KeyMgmtState rec
+binder 6697:6701 <> state:74
+R6727:6735 uc_framework <> Namespace def
+binder 6722:6723 <> ns:75
+R6751:6755 uc_framework <> KeyId def
+binder 6741:6747 <> old_kid:76
+R6773:6786 uc_framework <> ClientIdentity rec
+binder 6761:6769 <> requester:77
+R6793:6798 Corelib.Init.Datatypes <> option ind
+R6806:6808 Corelib.Init.Datatypes <> ::type_scope:x_'*'_x not
+R6801:6805 uc_framework <> KeyId def
+R6809:6820 keymgmt_ideal_functionality <> KeyMgmtState rec
+R6863:6875 keymgmt_ideal_functionality <> ideal_get_key def
+R6877:6881 keymgmt_ideal_functionality <> state:74 var
+R6883:6884 keymgmt_ideal_functionality <> ns:75 var
+R6886:6892 keymgmt_ideal_functionality <> old_kid:76 var
+R6894:6902 keymgmt_ideal_functionality <> requester:77 var
+R6913:6916 Corelib.Init.Datatypes <> None constr
+R6921:6924 Corelib.Init.Datatypes <> None constr
+R6930:6933 Corelib.Init.Datatypes <> Some constr
+R6935:6935 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6937:6938 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6951:6952 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R6959:6959 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7024:7041 keymgmt_ideal_functionality <> ideal_generate_key def
+R7050:7051 keymgmt_ideal_functionality <> ns:75 var
+R7067:7075 keymgmt_ideal_functionality <> algorithm proj
+R7078:7086 keymgmt_ideal_functionality <> requester:77 var
+R7101:7104 Corelib.Init.Datatypes <> None constr
+R7109:7112 Corelib.Init.Datatypes <> None constr
+R7122:7125 Corelib.Init.Datatypes <> Some constr
+R7127:7127 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7135:7136 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7144:7144 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7309:7312 Corelib.Init.Datatypes <> ::list_scope:x_'::'_x not
+R7277:7288 uc_framework <> KeyLifecycle constr
+R7299:7305 keymgmt_ideal_functionality <> old_kid:76 var
+R7307:7308 keymgmt_ideal_functionality <> ns:75 var
+R7322:7330 keymgmt_ideal_functionality <> audit_log proj
+binder 7266:7272 <> new_log:78
+R7346:7349 Corelib.Init.Datatypes <> Some constr
+R7351:7351 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7359:7363 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7567:7570 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R7364:7367 keymgmt_ideal_functionality <> keys proj
+R7364:7367 keymgmt_ideal_functionality <> keys proj
+R7364:7367 keymgmt_ideal_functionality <> keys proj
+R7415:7426 keymgmt_ideal_functionality <> deleted_keys proj
+R7415:7426 keymgmt_ideal_functionality <> deleted_keys proj
+R7482:7492 keymgmt_ideal_functionality <> key_counter proj
+R7482:7492 keymgmt_ideal_functionality <> key_counter proj
+R7547:7555 keymgmt_ideal_functionality <> audit_log proj
+R7547:7555 keymgmt_ideal_functionality <> audit_log proj
+R7381:7384 keymgmt_ideal_functionality <> keys proj
+R7440:7451 keymgmt_ideal_functionality <> deleted_keys proj
+R7506:7516 keymgmt_ideal_functionality <> key_counter proj
+R7560:7566 keymgmt_ideal_functionality <> new_log:78 var
+prf 7697:7715 <> namespace_isolation
+R7737:7748 keymgmt_ideal_functionality <> KeyMgmtState rec
+binder 7729:7733 <> state:79
+R7762:7770 uc_framework <> Namespace def
+binder 7752:7754 <> ns1:80
+binder 7756:7758 <> ns2:81
+R7780:7784 uc_framework <> KeyId def
+binder 7774:7776 <> kid:82
+R7799:7812 uc_framework <> ClientIdentity rec
+binder 7788:7795 <> identity:83
+R7830:7837 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7823:7826 Corelib.Init.Logic <> ::type_scope:x_'<>'_x not
+R7820:7822 keymgmt_ideal_functionality <> ns1:80 var
+R7827:7829 keymgmt_ideal_functionality <> ns2:81 var
+R7906:7913 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7838:7838 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7899:7902 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7882:7889 keymgmt_ideal_functionality <> identity:83 var
+R7845:7864 uc_framework <> Build_ClientIdentity constr
+R7903:7905 keymgmt_ideal_functionality <> ns2:81 var
+R7950:7952 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7914:7926 keymgmt_ideal_functionality <> ideal_get_key def
+R7928:7932 keymgmt_ideal_functionality <> state:79 var
+R7934:7936 keymgmt_ideal_functionality <> ns1:80 var
+R7938:7940 keymgmt_ideal_functionality <> kid:82 var
+R7942:7949 keymgmt_ideal_functionality <> identity:83 var
+R7953:7956 Corelib.Init.Datatypes <> None constr
+prf 8042:8056 <> secure_deletion
+R8078:8089 keymgmt_ideal_functionality <> KeyMgmtState rec
+binder 8070:8074 <> state:85
+R8098:8106 uc_framework <> Namespace def
+binder 8093:8094 <> ns:86
+R8116:8120 uc_framework <> KeyId def
+binder 8110:8112 <> kid:87
+R8135:8148 uc_framework <> ClientIdentity rec
+binder 8124:8131 <> identity:88
+R8162:8177 keymgmt_ideal_functionality <> ideal_delete_key def
+R8179:8183 keymgmt_ideal_functionality <> state:85 var
+R8185:8186 keymgmt_ideal_functionality <> ns:86 var
+R8188:8190 keymgmt_ideal_functionality <> kid:87 var
+R8192:8199 keymgmt_ideal_functionality <> identity:88 var
+R8212:8215 Corelib.Init.Datatypes <> None constr
+R8220:8223 Corelib.Init.Logic <> True ind
+R8231:8234 Corelib.Init.Datatypes <> Some constr
+R8351:8399 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R8344:8346 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8308:8320 keymgmt_ideal_functionality <> ideal_get_key def
+R8329:8330 keymgmt_ideal_functionality <> ns:86 var
+R8332:8334 keymgmt_ideal_functionality <> kid:87 var
+R8336:8343 keymgmt_ideal_functionality <> identity:88 var
+R8347:8350 Corelib.Init.Datatypes <> None constr
+R8425:8427 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8400:8410 keymgmt_ideal_functionality <> key_deleted def
+R8419:8420 keymgmt_ideal_functionality <> ns:86 var
+R8422:8424 keymgmt_ideal_functionality <> kid:87 var
+R8428:8431 Corelib.Init.Datatypes <> true constr
+prf 8523:8546 <> deleted_key_non_recovery
+R8568:8579 keymgmt_ideal_functionality <> KeyMgmtState rec
+binder 8560:8564 <> state:89
+R8588:8596 uc_framework <> Namespace def
+binder 8583:8584 <> ns:90
+R8606:8610 uc_framework <> KeyId def
+binder 8600:8602 <> kid:91
+R8649:8656 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8642:8644 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8618:8628 keymgmt_ideal_functionality <> key_deleted def
+R8630:8634 keymgmt_ideal_functionality <> state:89 var
+R8636:8637 keymgmt_ideal_functionality <> ns:90 var
+R8639:8641 keymgmt_ideal_functionality <> kid:91 var
+R8645:8648 Corelib.Init.Datatypes <> true constr
+R8676:8689 uc_framework <> ClientIdentity rec
+binder 8665:8672 <> identity:92
+R8734:8736 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8699:8711 keymgmt_ideal_functionality <> ideal_get_key def
+R8713:8717 keymgmt_ideal_functionality <> state:89 var
+R8719:8720 keymgmt_ideal_functionality <> ns:90 var
+R8722:8724 keymgmt_ideal_functionality <> kid:91 var
+R8726:8733 keymgmt_ideal_functionality <> identity:92 var
+R8737:8740 Corelib.Init.Datatypes <> None constr
+prf 8835:8848 <> access_control
+R8870:8881 keymgmt_ideal_functionality <> KeyMgmtState rec
+binder 8862:8866 <> state:93
+R8890:8898 uc_framework <> Namespace def
+binder 8885:8886 <> ns:94
+R8908:8912 uc_framework <> KeyId def
+binder 8902:8904 <> kid:95
+R8927:8940 uc_framework <> ClientIdentity rec
+binder 8916:8923 <> identity:96
+R8954:8966 keymgmt_ideal_functionality <> ideal_get_key def
+R8968:8972 keymgmt_ideal_functionality <> state:93 var
+R8974:8975 keymgmt_ideal_functionality <> ns:94 var
+R8977:8979 keymgmt_ideal_functionality <> kid:95 var
+R8981:8988 keymgmt_ideal_functionality <> identity:96 var
+R9001:9004 Corelib.Init.Datatypes <> Some constr
+R9006:9006 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9008:9009 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9018:9019 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9021:9021 Corelib.Init.Datatypes <> ::core_scope:'('_x_','_x_','_'..'_','_x_')' not
+R9111:9113 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R9087:9092 keymgmt_ideal_functionality <> in_acl def
+R9094:9101 keymgmt_ideal_functionality <> identity:96 var
+R9114:9117 Corelib.Init.Datatypes <> true constr
+R9125:9128 Corelib.Init.Datatypes <> None constr
+R9133:9136 Corelib.Init.Logic <> True ind
+ax 9299:9307 <> F_keymgmt
+R9311:9320 uc_framework <> IdealState defax
+ax 9358:9374 <> F_keymgmt_correct
+R9378:9388 uc_framework <> Correctness defax
+R9390:9398 keymgmt_ideal_functionality <> F_keymgmt defax
+ax 9434:9452 <> F_keymgmt_integrity
+R9456:9464 uc_framework <> Integrity defax
+R9466:9474 keymgmt_ideal_functionality <> F_keymgmt defax

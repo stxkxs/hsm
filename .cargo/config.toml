@@ -1,0 +1,15 @@
+# Cargo configuration for HSM project
+
+# macOS Homebrew Z3 configuration using opt symlink (stable across versions)
+# On Linux CI, z3-sys auto-detects via system installation
+[target.aarch64-apple-darwin]
+rustflags = ["-L", "/opt/homebrew/opt/z3/lib", "-C", "link-arg=-Wl,-rpath,/opt/homebrew/opt/z3/lib"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-L", "/opt/homebrew/opt/z3/lib", "-C", "link-arg=-Wl,-rpath,/opt/homebrew/opt/z3/lib"]
+
+[env]
+# Z3 header location for macOS. On Linux, omit this or set to empty.
+Z3_SYS_Z3_HEADER = "/opt/homebrew/opt/z3/include/z3.h"
+# Ensure linker can find Z3 library on macOS
+DYLD_LIBRARY_PATH = "/opt/homebrew/opt/z3/lib"

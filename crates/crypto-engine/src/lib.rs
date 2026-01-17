@@ -69,6 +69,7 @@
 use zeroize::Zeroize;
 
 pub mod asymmetric;
+pub mod constant_time;
 pub mod error;
 pub mod hash;
 pub mod kdf;
@@ -200,7 +201,7 @@ pub enum HashAlgorithm {
 /// // Key is automatically zeroized when dropped
 /// drop(key);
 /// ```
-#[derive(Zeroize, Clone)]
+#[derive(Zeroize, Clone, serde::Serialize, serde::Deserialize)]
 #[zeroize(drop)]
 pub struct KeyMaterial {
     bytes: Vec<u8>,

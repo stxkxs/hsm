@@ -35,6 +35,15 @@ pub enum Error {
 
     #[error("Crypto engine error: {0}")]
     CryptoEngine(#[from] hsm_crypto_engine::CryptoError),
+
+    #[error("Storage error: {0}")]
+    StorageError(String),
+
+    #[error("Hardware backend not available")]
+    HardwareNotAvailable,
+
+    #[error("Hardware error: {0}")]
+    HardwareError(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
