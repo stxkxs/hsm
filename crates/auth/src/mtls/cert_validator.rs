@@ -193,14 +193,34 @@ impl CertificateValidator {
         Err(AuthError::IdentityNotFound)
     }
 
-    /// Check key usage extension
+    /// Check key usage extension for client authentication
+    ///
+    /// For client authentication, we require:
+    /// - KeyUsage: digitalSignature bit must be set (if KeyUsage extension exists)
+    /// - ExtendedKeyUsage: clientAuth must be true (if EKU extension exists)
     fn check_key_usage(&self, cert: &X509Certificate) -> Result<()> {
-        // In production, verify the key usage extension allows client authentication
-        // For now, we accept all key usages
-        // TODO: Implement strict key usage checking
-        if let Ok(Some(_key_usage)) = cert.key_usage() {
-            // Key usage extension exists, validation would go here
+        // Check KeyUsage extension (if present)
+        if let Ok(Some(key_usage)) = cert.key_usage() {
+            // For client auth, digitalSignature is required
+            if !key_usage.value.digital_signature() {
+                return Err(AuthError::InvalidCertificate(
+                    "Certificate KeyUsage does not include digitalSignature".to_string(),
+                ));
+            }
         }
+
+        // Check ExtendedKeyUsage extension (if present)
+        if let Ok(Some(ext_key_usage)) = cert.extended_key_usage() {
+            // ExtendedKeyUsage has boolean fields for common usages
+            // client_auth: true means id-kp-clientAuth (1.3.6.1.5.5.7.3.2) is present
+            // any: true means anyExtendedKeyUsage (2.5.29.37.0) is present
+            if !ext_key_usage.value.client_auth && !ext_key_usage.value.any {
+                return Err(AuthError::InvalidCertificate(
+                    "Certificate ExtendedKeyUsage does not include clientAuth".to_string(),
+                ));
+            }
+        }
+
         Ok(())
     }
 

@@ -134,15 +134,7 @@ impl ZkAuditLoggerWrapper {
 
     /// Check if ZK proofs are available
     fn check_zk_availability() -> bool {
-        // In production, check if zk-proofs crate is compiled in
-        #[cfg(feature = "zk-proofs")]
-        {
-            true
-        }
-        #[cfg(not(feature = "zk-proofs"))]
-        {
-            false
-        }
+        cfg!(feature = "zk-proofs")
     }
 
     /// Check if ZK proofs are enabled

@@ -49,8 +49,6 @@ criterion = { version = "0.8", features = ["html_reports"] }
 hex = "0.4"
 serde_json = "1.0"
 proptest = "1.9"
-dudect-bencher = "0.5"
-clap = "2.34"  # Required by dudect-bencher's ctbench_main! macro
 
 [[bench]]
 name = "crypto_benches"

@@ -142,7 +142,8 @@ impl ShamirVerifier {
 
         // Two different secrets
         let secret1 = Int::from_i64(&ctx, 42);
-        let secret2 = Int::from_i64(&ctx, 99);
+        // Use even value for integer arithmetic (odd values require non-integer coefficients)
+        let secret2 = Int::from_i64(&ctx, 100);
 
         // Two shares (x₁, y₁) and (x₂, y₂) - these are the k-1 shares
         let x1 = Int::from_i64(&ctx, 1);
@@ -182,7 +183,7 @@ impl ShamirVerifier {
             SatResult::Sat => {
                 if let Some(model) = solver.get_model() {
                     println!("        Information-theoretic security verified:");
-                    println!("          Same 2 shares consistent with both secret1=42 and secret2=99");
+                    println!("          Same 2 shares consistent with both secret1=42 and secret2=100");
                     if let Some(a1_1_val) = model.eval(&a1_1, true) {
                         println!("          For secret1: a1={}", a1_1_val);
                     }

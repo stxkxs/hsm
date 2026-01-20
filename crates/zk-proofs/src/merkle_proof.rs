@@ -206,11 +206,16 @@ impl ConstraintSynthesizer<Fr> for MerkleProofCircuit {
         let computed_root = Self::compute_merkle_root(&self.leaf_hashes);
         let computed_root_field = Self::bytes_to_field(&computed_root);
 
-        // Constraint: merkle_root_var == computed_root_field
+        // Allocate computed root as a witness and constrain it to the public input
+        let computed_root_var = cs.new_witness_variable(|| Ok(computed_root_field))?;
+
+        // Constraint: merkle_root_var == computed_root_var
+        // Using: merkle_root - computed_root = 0
+        // Which is: (merkle_root - computed_root) * 1 = 0
         cs.enforce_constraint(
-            lc!() + merkle_root_var,
+            lc!() + merkle_root_var - computed_root_var,
             lc!() + Variable::One,
-            lc!() + (computed_root_field, Variable::One),
+            lc!(),
         )?;
 
         Ok(())
@@ -227,6 +232,9 @@ pub struct MerkleProofSystem {
 
     /// Prepared verifying key for faster verification
     pvk: Option<PreparedVerifyingKey<Bn254>>,
+
+    /// Maximum number of leaves (circuit structure size)
+    max_leaves: usize,
 }
 
 impl MerkleProofSystem {
@@ -236,6 +244,7 @@ impl MerkleProofSystem {
             proving_key: None,
             verifying_key: None,
             pvk: None,
+            max_leaves: 0,
         }
     }
 
@@ -243,9 +252,10 @@ impl MerkleProofSystem {
     ///
     /// This should be done once during initialization.
     pub fn setup<R: RngCore + CryptoRng>(&mut self, max_leaves: usize, rng: &mut R) -> MerkleProofResult<()> {
-        // Create a dummy circuit for setup
+        // Create a dummy circuit for setup with consistent data
         let dummy_leaves = vec![[0u8; 32]; max_leaves];
-        let dummy_root = [0u8; 32];
+        // Compute the actual Merkle root for these leaves to ensure constraints are satisfied
+        let dummy_root = MerkleProofCircuit::compute_merkle_root(&dummy_leaves);
         let circuit = MerkleProofCircuit::new(dummy_leaves, dummy_root);
 
         // Generate proving and verifying keys using Groth16::generate_random_parameters
@@ -259,11 +269,14 @@ impl MerkleProofSystem {
         self.proving_key = Some(pk);
         self.verifying_key = Some(vk);
         self.pvk = Some(pvk);
+        self.max_leaves = max_leaves;
 
         Ok(())
     }
 
     /// Generate a ZK proof for Merkle tree integrity
+    ///
+    /// Note: The number of leaves must match the max_leaves used during setup.
     pub fn prove<R: RngCore + CryptoRng>(
         &self,
         request: &MerkleProofRequest,
@@ -273,6 +286,15 @@ impl MerkleProofSystem {
             .proving_key
             .as_ref()
             .ok_or_else(|| MerkleProofError::ProofGenerationFailed("Setup not called".to_string()))?;
+
+        // Validate leaf count matches setup
+        if request.leaf_hashes.len() != self.max_leaves {
+            return Err(MerkleProofError::InvalidTree(format!(
+                "Number of leaves ({}) must match setup size ({})",
+                request.leaf_hashes.len(),
+                self.max_leaves
+            )));
+        }
 
         // Create circuit
         let circuit = MerkleProofCircuit::new(
@@ -313,7 +335,7 @@ impl MerkleProofSystem {
 
         // Verify proof using SNARK trait
         let valid = <Groth16<Bn254> as SNARK<Fr>>::verify_with_processed_vk(pvk, &public_inputs, &proof.proof)
-            .map_err(|_| MerkleProofError::VerificationFailed("Verification failed".to_string()))?;
+            .map_err(|e| MerkleProofError::VerificationFailed(format!("Verification failed: {}", e)))?;
 
         Ok(valid)
     }
@@ -374,11 +396,11 @@ mod tests {
     fn test_merkle_proof_generation_and_verification() {
         let mut rng = StdRng::seed_from_u64(0);
 
-        // Setup proof system
+        // Setup proof system with 4 leaves
         let mut proof_system = MerkleProofSystem::new();
-        proof_system.setup(8, &mut rng).unwrap();
+        proof_system.setup(4, &mut rng).unwrap();
 
-        // Create request
+        // Create request with same number of leaves as setup
         let leaves = vec![
             [1u8; 32],
             [2u8; 32],
@@ -408,7 +430,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(1);
 
         let mut proof_system = MerkleProofSystem::new();
-        proof_system.setup(4, &mut rng).unwrap();
+        proof_system.setup(2, &mut rng).unwrap();
 
         let leaves = vec![[5u8; 32], [6u8; 32]];
         let root = MerkleProofCircuit::compute_merkle_root(&leaves);

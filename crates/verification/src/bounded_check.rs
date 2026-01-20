@@ -5,7 +5,7 @@
 //! This module implements bounded verification techniques to formally verify
 //! cryptographic operations within bounded field sizes using SMT solvers.
 
-use z3::ast::{Ast, BV};
+use z3::ast::{Ast, Bool, BV};
 use z3::{Context, Solver, SatResult};
 
 use crate::error::{Result, VerificationError};
@@ -252,17 +252,25 @@ mod tests {
     fn test_modular_arithmetic_property() {
         let cfg = Config::new();
         let ctx = Context::new(&cfg);
+        // Use 8-bit bitvectors but constrain inputs to prevent overflow
         let checker = BoundedChecker::new(&ctx, 8);
 
         // Property: ∀a, b, m. (a mod m + b mod m) mod m = (a + b) mod m
+        // This holds only when a + b doesn't overflow the bitvector width
         let a = checker.encoder().bv_const("a");
         let b = checker.encoder().bv_const("b");
-        let m = checker.encoder().bv_from_u64(100); // Fixed modulus
+        let m = checker.encoder().bv_from_u64(50); // Fixed modulus
+
+        // Constrain a, b < 128 so a + b < 256 (no overflow in 8-bit)
+        let max_val = checker.encoder().bv_from_u64(128);
+        let a_bounded = a.bvult(&max_val);
+        let b_bounded = b.bvult(&max_val);
 
         let lhs = a.bvurem(&m).bvadd(&b.bvurem(&m)).bvurem(&m);
         let rhs = a.bvadd(&b).bvurem(&m);
 
-        let property = lhs._eq(&rhs);
+        // Property holds when inputs don't overflow
+        let property = Bool::and(&ctx, &[&a_bounded, &b_bounded]).implies(&lhs._eq(&rhs));
 
         let result = checker.verify_property_forall(&property).unwrap();
         assert_eq!(result, VerificationResult::Verified);

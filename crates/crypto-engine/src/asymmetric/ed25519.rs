@@ -20,6 +20,8 @@
 
 use crate::{CryptoError, KeyMaterial, Result};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+#[cfg(not(miri))]
+use ed25519_dalek::verify_batch;
 use rayon::prelude::*;
 
 /// Ed25519 cryptographic engine.
@@ -312,6 +314,129 @@ impl Ed25519Engine {
                 .collect())
         }
     }
+
+    /// Batch verifies all signatures using native SIMD-optimized batch verification.
+    ///
+    /// This is an all-or-nothing operation: returns `Ok(true)` only if ALL
+    /// signatures are valid. If any signature fails, returns `Ok(false)`.
+    ///
+    /// # Performance
+    ///
+    /// Uses ed25519-dalek's native batch verification which is ~2.5-3x faster
+    /// than verifying signatures individually. This is because it uses:
+    /// - Optimized multi-scalar multiplication
+    /// - SIMD operations (AVX2/AVX512 when available)
+    /// - Amortized computation across all signatures
+    ///
+    /// # Arguments
+    ///
+    /// * `public_keys` - Slice of 32-byte public keys
+    /// * `messages` - Slice of messages (one per signature)
+    /// * `signatures` - Slice of 64-byte signatures
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(true)` if ALL signatures are valid
+    /// - `Ok(false)` if ANY signature is invalid
+    /// - `Err` if array lengths don't match or if there are parsing errors
+    ///
+    /// # Use Cases
+    ///
+    /// Ideal for scenarios where you need to verify all signatures before
+    /// proceeding, such as:
+    /// - Multi-signature transactions
+    /// - Batch audit log verification
+    /// - Certificate chain validation
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use hsm_crypto_engine::asymmetric::ed25519::Ed25519Engine;
+    ///
+    /// let (sk1, pk1) = Ed25519Engine::generate_keypair().unwrap();
+    /// let (sk2, pk2) = Ed25519Engine::generate_keypair().unwrap();
+    /// let msg1 = b"message 1";
+    /// let msg2 = b"message 2";
+    ///
+    /// let sig1 = Ed25519Engine::sign(&sk1, msg1).unwrap();
+    /// let sig2 = Ed25519Engine::sign(&sk2, msg2).unwrap();
+    ///
+    /// let all_valid = Ed25519Engine::batch_verify_all(
+    ///     &[pk1.as_bytes(), pk2.as_bytes()],
+    ///     &[&msg1[..], &msg2[..]],
+    ///     &[&sig1[..], &sig2[..]]
+    /// ).unwrap();
+    /// assert!(all_valid);
+    /// ```
+    #[cfg(not(miri))]
+    pub fn batch_verify_all(
+        public_keys: &[&[u8]],
+        messages: &[&[u8]],
+        signatures: &[&[u8]],
+    ) -> Result<bool> {
+        if public_keys.len() != messages.len() || messages.len() != signatures.len() {
+            return Err(CryptoError::Internal(
+                "Batch verify requires equal length arrays".into(),
+            ));
+        }
+
+        if public_keys.is_empty() {
+            return Ok(true); // Empty batch is trivially valid
+        }
+
+        // Parse all public keys
+        let mut verifying_keys = Vec::with_capacity(public_keys.len());
+        for pk_bytes in public_keys {
+            if pk_bytes.len() != 32 {
+                return Err(CryptoError::InvalidKeySize {
+                    expected: 32,
+                    actual: pk_bytes.len(),
+                });
+            }
+            let pk_array: [u8; 32] = (*pk_bytes).try_into().map_err(|_| {
+                CryptoError::InvalidKey("Invalid public key size".into())
+            })?;
+            let vk = VerifyingKey::from_bytes(&pk_array)
+                .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
+            verifying_keys.push(vk);
+        }
+
+        // Parse all signatures
+        let mut sigs = Vec::with_capacity(signatures.len());
+        for sig_bytes in signatures {
+            if sig_bytes.len() != 64 {
+                return Err(CryptoError::InvalidSignatureSize {
+                    expected: 64,
+                    actual: sig_bytes.len(),
+                });
+            }
+            let sig_array: [u8; 64] = (*sig_bytes).try_into().map_err(|_| {
+                CryptoError::InvalidSignatureSize {
+                    expected: 64,
+                    actual: sig_bytes.len(),
+                }
+            })?;
+            let sig = Signature::from_bytes(&sig_array);
+            sigs.push(sig);
+        }
+
+        // Use native batch verification (SIMD-optimized)
+        match verify_batch(messages, &sigs, &verifying_keys) {
+            Ok(()) => Ok(true),
+            Err(_) => Ok(false),
+        }
+    }
+
+    /// MIRI-compatible version that falls back to sequential verification
+    #[cfg(miri)]
+    pub fn batch_verify_all(
+        public_keys: &[&[u8]],
+        messages: &[&[u8]],
+        signatures: &[&[u8]],
+    ) -> Result<bool> {
+        let results = Self::batch_verify(public_keys, messages, signatures)?;
+        Ok(results.iter().all(|&v| v))
+    }
 }
 
 #[cfg(test)]
@@ -364,5 +489,46 @@ mod tests {
 
         let results = Ed25519Engine::batch_verify(&pk_refs, &messages, &sig_refs).unwrap();
         assert_eq!(results, vec![true, true, true]);
+    }
+
+    #[test]
+    fn test_batch_verify_all_valid() {
+        let (sk1, pk1) = Ed25519Engine::generate_keypair().unwrap();
+        let (sk2, pk2) = Ed25519Engine::generate_keypair().unwrap();
+
+        let msg1 = b"message one";
+        let msg2 = b"message two";
+
+        let sig1 = Ed25519Engine::sign(&sk1, msg1).unwrap();
+        let sig2 = Ed25519Engine::sign(&sk2, msg2).unwrap();
+
+        let all_valid = Ed25519Engine::batch_verify_all(
+            &[pk1.as_slice(), pk2.as_slice()],
+            &[&msg1[..], &msg2[..]],
+            &[&sig1[..], &sig2[..]],
+        ).unwrap();
+
+        assert!(all_valid);
+    }
+
+    #[test]
+    fn test_batch_verify_all_one_invalid() {
+        let (sk1, pk1) = Ed25519Engine::generate_keypair().unwrap();
+        let (sk2, pk2) = Ed25519Engine::generate_keypair().unwrap();
+
+        let msg1 = b"message one";
+        let msg2 = b"message two";
+
+        let sig1 = Ed25519Engine::sign(&sk1, msg1).unwrap();
+        // Sign msg2 with sk1 (wrong key), should fail verification with pk2
+        let sig2_wrong = Ed25519Engine::sign(&sk1, msg2).unwrap();
+
+        let all_valid = Ed25519Engine::batch_verify_all(
+            &[pk1.as_slice(), pk2.as_slice()],
+            &[&msg1[..], &msg2[..]],
+            &[&sig1[..], &sig2_wrong[..]],
+        ).unwrap();
+
+        assert!(!all_valid); // Should fail because one signature is invalid
     }
 }

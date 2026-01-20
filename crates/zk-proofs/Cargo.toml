@@ -15,15 +15,18 @@ sha2 = "0.10"
 hex = "0.4"
 
 # ZK proof libraries - using arkworks ecosystem for flexibility
+# Note: ark-relations is patched at workspace level to remove tracing-subscriber
+# dependency (RUSTSEC-2025-0055 - ANSI escape injection vulnerability)
 ark-ff = "0.5"
 ark-ec = "0.5"
 ark-std = "0.5"
 ark-poly = "0.5"
 ark-serialize = "0.5"
-ark-relations = "0.5"  # R1CS constraints
+ark-relations = "0.5"  # R1CS constraints (patched at workspace level)
 ark-bn254 = "0.5"  # BN254 curve for efficient pairings
 ark-groth16 = "0.5"  # Groth16 SNARK
 ark-snark = "0.5"  # SNARK trait
+ark-crypto-primitives = "0.5"
 
 # Polynomial commitments for Lasso-style lookups
 ark-poly-commit = "0.5"
