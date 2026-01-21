@@ -91,27 +91,32 @@ fn test_session_hijacking_detection_ip_mismatch() {
     let identity = create_test_identity("client1", "default", vec![Role::User]);
 
     // Create session with IP
-    let session = session_manager.create_session_with_metadata(
+    let result = session_manager.create_session_with_metadata(
         identity.clone(),
         Some("192.168.1.1".to_string()),
         Some("Mozilla/5.0".to_string()),
+        None, // TLS fingerprint
     );
 
     // Validation with same IP should succeed
     assert!(session_manager
         .validate_session_with_metadata(
-            &session.id,
+            &result.session.id,
+            &result.token,
             Some("192.168.1.1".to_string()),
-            Some("Mozilla/5.0".to_string())
+            Some("Mozilla/5.0".to_string()),
+            None,
         )
         .is_ok());
 
     // Validation with different IP should fail (hijacking detected)
     assert!(session_manager
         .validate_session_with_metadata(
-            &session.id,
+            &result.session.id,
+            &result.token,
             Some("192.168.1.2".to_string()),
-            Some("Mozilla/5.0".to_string())
+            Some("Mozilla/5.0".to_string()),
+            None,
         )
         .is_err());
 }
@@ -121,10 +126,10 @@ fn test_expired_session_rejected() {
     let session_manager = SessionManager::new(-1); // Expired immediately
     let identity = create_test_identity("client1", "default", vec![Role::User]);
 
-    let session = session_manager.create_session(identity);
+    let result = session_manager.create_session(identity);
 
     // Expired session should be rejected
-    assert!(session_manager.validate_session(&session.id).is_err());
+    assert!(session_manager.validate_session(&result.session.id).is_err());
 }
 
 #[test]
@@ -132,13 +137,13 @@ fn test_deleted_session_rejected() {
     let session_manager = SessionManager::new(3600);
     let identity = create_test_identity("client1", "default", vec![Role::User]);
 
-    let session = session_manager.create_session(identity);
+    let result = session_manager.create_session(identity);
 
     // Delete session
-    session_manager.delete_session(&session.id).unwrap();
+    session_manager.delete_session(&result.session.id).expect("delete session should succeed");
 
     // Deleted session should be rejected
-    assert!(session_manager.validate_session(&session.id).is_err());
+    assert!(session_manager.validate_session(&result.session.id).is_err());
 }
 
 #[test]
@@ -356,8 +361,8 @@ fn test_concurrent_session_access_safe() {
     let session_manager = Arc::new(SessionManager::new(3600));
     let identity = create_test_identity("client1", "default", vec![Role::User]);
 
-    let session = session_manager.create_session(identity.clone());
-    let session_id = session.id.clone();
+    let result = session_manager.create_session(identity.clone());
+    let session_id = result.session.id.clone();
 
     // Spawn multiple threads accessing the same session
     let mut handles = vec![];
@@ -372,7 +377,7 @@ fn test_concurrent_session_access_safe() {
     }
 
     for handle in handles {
-        handle.join().unwrap();
+        handle.join().expect("thread should join successfully");
     }
 
     // Session should still be valid

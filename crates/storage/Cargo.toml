@@ -13,6 +13,7 @@ sha2 = "0.10"
 rand = "0.8"
 zeroize = { version = "1.8", features = ["derive"] }
 hmac = "0.12"
+subtle = "2.6"  # Constant-time operations for cryptographic comparisons
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

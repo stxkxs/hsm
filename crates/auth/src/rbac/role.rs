@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 /// Roles that can be assigned to clients
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -16,6 +17,32 @@ pub enum Role {
     Auditor,
 }
 
+/// Error returned when parsing an invalid role string
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseRoleError(String);
+
+impl std::fmt::Display for ParseRoleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid role: {}", self.0)
+    }
+}
+
+impl std::error::Error for ParseRoleError {}
+
+impl FromStr for Role {
+    type Err = ParseRoleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "admin" => Ok(Role::Admin),
+            "operator" => Ok(Role::Operator),
+            "user" => Ok(Role::User),
+            "auditor" => Ok(Role::Auditor),
+            _ => Err(ParseRoleError(s.to_string())),
+        }
+    }
+}
+
 impl Role {
     /// Get the string representation of the role
     pub fn as_str(&self) -> &'static str {
@@ -27,15 +54,9 @@ impl Role {
         }
     }
 
-    /// Parse a role from a string
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "admin" => Some(Role::Admin),
-            "operator" => Some(Role::Operator),
-            "user" => Some(Role::User),
-            "auditor" => Some(Role::Auditor),
-            _ => None,
-        }
+    /// Parse a role from a string (convenience method)
+    pub fn parse(s: &str) -> Option<Self> {
+        s.parse().ok()
     }
 
     /// Get all available roles
@@ -84,11 +105,11 @@ mod tests {
 
     #[test]
     fn test_role_from_str() {
-        assert_eq!(Role::from_str("admin"), Some(Role::Admin));
-        assert_eq!(Role::from_str("OPERATOR"), Some(Role::Operator));
-        assert_eq!(Role::from_str("User"), Some(Role::User));
-        assert_eq!(Role::from_str("auditor"), Some(Role::Auditor));
-        assert_eq!(Role::from_str("invalid"), None);
+        assert_eq!("admin".parse::<Role>().ok(), Some(Role::Admin));
+        assert_eq!("OPERATOR".parse::<Role>().ok(), Some(Role::Operator));
+        assert_eq!("User".parse::<Role>().ok(), Some(Role::User));
+        assert_eq!("auditor".parse::<Role>().ok(), Some(Role::Auditor));
+        assert!("invalid".parse::<Role>().is_err());
     }
 
     #[test]

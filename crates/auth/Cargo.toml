@@ -43,6 +43,8 @@ governor = "0.10"
 rand = "0.8"
 sha2 = "0.10"
 hex = "0.4"
+subtle = "2.6"  # Constant-time operations for cryptographic comparisons
+zeroize = { version = "1.8", features = ["derive"] }  # Secure memory zeroization
 
 # Circuit Breaker
 failsafe = "1.3"
@@ -53,6 +55,7 @@ metrics = "0.24"
 [dev-dependencies]
 rcgen = "0.14"  # For generating test certificates
 criterion = "0.8"  # For benchmarking
+proptest = "1.6"  # For property-based testing
 
 # Benchmarks
 [[bench]]

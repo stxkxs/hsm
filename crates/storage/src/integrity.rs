@@ -7,6 +7,7 @@ use crate::master_key::EncryptedData;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use subtle::ConstantTimeEq;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -43,16 +44,21 @@ impl IntegrityProtectedKey {
     /// # Arguments
     ///
     /// * `integrity_key` - HMAC key to verify with
+    ///
+    /// # Security
+    ///
+    /// Uses constant-time comparison to prevent timing attacks.
     pub fn verify(&self, integrity_key: &[u8]) -> StorageResult<()> {
         let expected_hmac = Self::compute_hmac(&self.encrypted_key, integrity_key)?;
 
-        if expected_hmac != self.hmac {
-            return Err(StorageError::CorruptionDetected(
+        // Use constant-time comparison to prevent timing attacks
+        if expected_hmac.ct_eq(&self.hmac).into() {
+            Ok(())
+        } else {
+            Err(StorageError::CorruptionDetected(
                 "HMAC verification failed".to_string(),
-            ));
+            ))
         }
-
-        Ok(())
     }
 
     /// Compute HMAC for encrypted data

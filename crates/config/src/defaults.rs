@@ -3,19 +3,6 @@
 use crate::schema::*;
 use std::path::PathBuf;
 
-impl Default for HsmConfig {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            storage: StorageConfig::default(),
-            security: SecurityConfig::default(),
-            logging: LoggingConfig::default(),
-            metrics: MetricsConfig::default(),
-            namespaces: Default::default(),
-        }
-    }
-}
-
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {

@@ -44,7 +44,7 @@ impl ParallelProcessor {
         }
 
         // Configure thread pool if specified
-        let result = if self.num_threads > 0 {
+        if self.num_threads > 0 {
             rayon::ThreadPoolBuilder::new()
                 .num_threads(self.num_threads)
                 .build()
@@ -52,9 +52,7 @@ impl ParallelProcessor {
                 .install(|| self.parallel_process(&keys, &process_fn))
         } else {
             self.parallel_process(&keys, &process_fn)
-        };
-
-        result
+        }
     }
 
     fn parallel_process<F, R>(&self, keys: &[ParallelKey], process_fn: &F) -> Result<Vec<R>>
@@ -127,7 +125,7 @@ impl ParallelProcessor {
             return 1;
         }
 
-        (num_keys + ideal_batches - 1) / ideal_batches
+        num_keys.div_ceil(ideal_batches)
     }
 
     /// Get number of available CPUs

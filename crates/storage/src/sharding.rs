@@ -134,7 +134,7 @@
 //! ```
 
 use crate::KeyId;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Number of shards (256 = 00-ff in hex)
 const SHARD_COUNT: u64 = 256;
@@ -153,7 +153,7 @@ const SHARD_COUNT: u64 = 256;
 /// # Returns
 ///
 /// Path with shard directory: base_path/XX/key_id where XX is 00-ff
-pub fn get_sharded_path(base_path: &PathBuf, key_id: &KeyId) -> PathBuf {
+pub fn get_sharded_path(base_path: &Path, key_id: &KeyId) -> PathBuf {
     // Hash the key ID
     let hash = seahash::hash(key_id.as_str().as_bytes());
 

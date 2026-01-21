@@ -53,18 +53,24 @@ fn test_session_lifecycle() {
 
     // Create identity and session
     let identity = create_test_identity("client1", "default", vec![Role::User]);
-    let session = sessions.create_session(identity.clone());
+    let result = sessions.create_session(identity.clone());
 
-    // Validate session
-    let validated = sessions.validate_session(&session.id).unwrap();
+    // Validate session (without token)
+    let validated = sessions.validate_session(&result.session.id).expect("validate session should succeed");
+    assert_eq!(validated.identity.common_name, "client1");
+
+    // Validate session with token
+    let validated = sessions
+        .validate_session_with_token(&result.session.id, &result.token)
+        .expect("validate session with token should succeed");
     assert_eq!(validated.identity.common_name, "client1");
 
     // Extend session
-    sessions.extend_session(&session.id, 1800).unwrap();
+    sessions.extend_session(&result.session.id, 1800).expect("extend session should succeed");
 
     // Delete session
-    sessions.delete_session(&session.id).unwrap();
-    assert!(sessions.get_session(&session.id).is_err());
+    sessions.delete_session(&result.session.id).expect("delete session should succeed");
+    assert!(sessions.get_session(&result.session.id).is_err());
 }
 
 #[test]

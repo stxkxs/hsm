@@ -120,7 +120,7 @@ impl MasterKey {
                 StorageError::Serialization(format!("Failed to serialize master key: {}", e))
             })?,
         )
-        .map_err(|e| StorageError::Io(e))?;
+        .map_err(StorageError::Io)?;
 
         Ok(())
     }

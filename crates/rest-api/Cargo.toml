@@ -1,0 +1,43 @@
+[package]
+name = "hsm-rest-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "REST/JSON API Gateway for HSM"
+
+[dependencies]
+# HTTP Server
+axum = { version = "0.8", features = ["json", "macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "request-id"] }
+hyper = { version = "1.6", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# HSM dependencies
+hsm-auth = { path = "../auth" }
+hsm-crypto-engine = { path = "../crypto-engine" }
+hsm-key-manager = { path = "../key-manager" }
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Logging and metrics
+tracing = "0.1"
+metrics = "0.24"
+
+# Utilities
+uuid = { version = "1.16", features = ["v4", "serde"] }
+hex = "0.4"
+base64 = "0.22"
+chrono = { workspace = true }
+
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+tokio-test = "0.4"

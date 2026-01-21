@@ -125,11 +125,7 @@ impl CompressionStats {
 
     /// Get total space saved
     pub fn space_saved(&self) -> u64 {
-        if self.total_input > self.total_output {
-            self.total_input - self.total_output
-        } else {
-            0
-        }
+        self.total_input.saturating_sub(self.total_output)
     }
 
     /// Get space saved as a percentage

@@ -1,0 +1,34 @@
+[package]
+name = "hsm-auth-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+hsm-auth = { path = ".." }
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_cert_parsing"
+path = "fuzz_targets/fuzz_cert_parsing.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_session_token"
+path = "fuzz_targets/fuzz_session_token.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_rbac_policy"
+path = "fuzz_targets/fuzz_rbac_policy.rs"
+test = false
+doc = false

@@ -7,12 +7,18 @@ use std::sync::Arc;
 
 const HOT_CACHE_SIZE: usize = 256;
 
+/// Composite key type for namespace + key ID
+type CompositeKey = (String, KeyId);
+
+/// Hot cache type alias to reduce type complexity
+type HotCache = LruCache<CompositeKey, Arc<Key>>;
+
 /// Thread-safe in-memory key store with lock-free concurrent access
 pub struct KeyStore {
     // Lock-free concurrent hashmap: (namespace, KeyId) -> Arc<Key>
-    keys: Arc<DashMap<(String, KeyId), Arc<Key>>>,
+    keys: Arc<DashMap<CompositeKey, Arc<Key>>>,
     // LRU cache for hot keys
-    hot_cache: Arc<Mutex<LruCache<(String, KeyId), Arc<Key>>>>,
+    hot_cache: Arc<Mutex<HotCache>>,
 }
 
 impl KeyStore {

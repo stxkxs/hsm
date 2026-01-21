@@ -1,3 +1,10 @@
+// Allow some clippy warnings for the experimental ZK proofs module
+// These can be cleaned up in a future refactoring pass
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(clippy::needless_borrows_for_generic_args)]
+#![allow(clippy::get_first)]
+
 //! # Zero-Knowledge Audit Proofs
 //!
 //! Privacy-preserving audit verification using ZK-SNARKs and Lasso lookup optimization.

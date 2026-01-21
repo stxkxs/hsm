@@ -6,6 +6,7 @@ members = [
     "crates/key-manager",
     "crates/auth",
     "crates/grpc-api",
+    "crates/rest-api",
     "crates/audit",
     "crates/metrics",
     "crates/storage",

@@ -139,7 +139,7 @@ impl CertificateValidator {
         let fingerprint = CertFingerprint::from_der(client_cert_der);
         let expires_at =
             chrono::DateTime::from_timestamp(client_cert.validity().not_after.timestamp(), 0)
-                .unwrap_or_else(|| Utc::now());
+                .unwrap_or_else(Utc::now);
 
         Ok(ValidationResult {
             fingerprint,

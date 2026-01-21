@@ -38,3 +38,39 @@ name = "fuzz_aes_gcm_decrypt"
 path = "fuzz_targets/fuzz_aes_gcm_decrypt.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "fuzz_ecdsa_sign"
+path = "fuzz_targets/fuzz_ecdsa_sign.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_ecdsa_verify"
+path = "fuzz_targets/fuzz_ecdsa_verify.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_rsa_sign"
+path = "fuzz_targets/fuzz_rsa_sign.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_rsa_verify"
+path = "fuzz_targets/fuzz_rsa_verify.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_key_parsing"
+path = "fuzz_targets/fuzz_key_parsing.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_hash_functions"
+path = "fuzz_targets/fuzz_hash_functions.rs"
+test = false
+doc = false

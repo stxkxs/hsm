@@ -229,11 +229,10 @@ impl Ed25519Engine {
                     actual: key.as_bytes().len(),
                 })?;
 
-        let signing_key = SigningKey::from_bytes(&key_bytes);
-
         // Use sequential iteration under MIRI to avoid rayon compatibility issues
         #[cfg(miri)]
         {
+            let signing_key = SigningKey::from_bytes(&key_bytes);
             Ok(messages
                 .iter()
                 .map(|msg| {
@@ -253,7 +252,7 @@ impl Ed25519Engine {
                 .par_iter()
                 .map(|msg| {
                     // Each thread creates its own SigningKey from the shared key bytes
-                    let signing_key = SigningKey::from_bytes(&*key_bytes);
+                    let signing_key = SigningKey::from_bytes(&key_bytes);
                     let signature = signing_key.sign(msg);
                     signature.to_bytes().to_vec()
                 })
@@ -362,7 +361,7 @@ impl Ed25519Engine {
     /// let sig2 = Ed25519Engine::sign(&sk2, msg2).unwrap();
     ///
     /// let all_valid = Ed25519Engine::batch_verify_all(
-    ///     &[pk1.as_bytes(), pk2.as_bytes()],
+    ///     &[&pk1[..], &pk2[..]],
     ///     &[&msg1[..], &msg2[..]],
     ///     &[&sig1[..], &sig2[..]]
     /// ).unwrap();

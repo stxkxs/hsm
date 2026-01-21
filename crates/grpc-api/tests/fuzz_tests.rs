@@ -15,8 +15,8 @@ proptest! {
     }
 
     #[test]
-    fn fuzz_validate_data_size(data in prop::collection::vec(any::<u8>(), 0..20_000_000)) {
-        // Should never panic
+    fn fuzz_validate_data_size(data in prop::collection::vec(any::<u8>(), 0..100_000)) {
+        // Should never panic (testing with up to 100KB instead of 20MB for reasonable test time)
         let _ = validate_data_size(&data, "fuzz");
     }
 

@@ -14,6 +14,12 @@ use governor::{
     Quota, RateLimiter as GovernorLimiter,
 };
 
+/// Type alias for the governor rate limiter to reduce type complexity
+type BucketLimiter = GovernorLimiter<NotKeyed, InMemoryState, DefaultClock>;
+
+/// Type alias for a map of string keys to rate limiters
+type LimiterMap = DashMap<String, Arc<BucketLimiter>>;
+
 /// Rate limiter configuration
 #[derive(Debug, Clone)]
 pub struct RateLimitConfig {
@@ -38,14 +44,13 @@ impl Default for RateLimitConfig {
 /// Rate limiter for authentication and authorization operations
 pub struct RateLimiter {
     /// Global rate limiter
-    global: Arc<GovernorLimiter<NotKeyed, InMemoryState, DefaultClock>>,
+    global: Arc<BucketLimiter>,
 
     /// Per-identity rate limiters (keyed by common name)
-    per_identity: Arc<DashMap<String, Arc<GovernorLimiter<NotKeyed, InMemoryState, DefaultClock>>>>,
+    per_identity: Arc<LimiterMap>,
 
     /// Per-namespace rate limiters
-    per_namespace:
-        Arc<DashMap<String, Arc<GovernorLimiter<NotKeyed, InMemoryState, DefaultClock>>>>,
+    per_namespace: Arc<LimiterMap>,
 
     /// Configuration
     config: RateLimitConfig,

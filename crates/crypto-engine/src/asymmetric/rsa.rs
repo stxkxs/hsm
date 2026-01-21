@@ -8,6 +8,12 @@
 //! side-channel that can leak private key information. For new deployments, prefer
 //! Ed25519 or ECDSA which have constant-time guarantees.
 //!
+//! # Deprecation Notice
+//!
+//! RSA usage is deprecated for new applications. All RSA operations emit:
+//! - A warning log message recommending Ed25519/ECDSA
+//! - Metrics tracking RSA vs modern algorithm usage
+//!
 //! # Recommendations
 //!
 //! - **New applications**: Use Ed25519 (fastest, most secure)
@@ -23,6 +29,28 @@ use rsa::pss::{SigningKey as PssSigningKey, VerifyingKey as PssVerifyingKey};
 use rsa::signature::{RandomizedSigner, SignatureEncoding, Verifier};
 use rsa::{RsaPrivateKey, RsaPublicKey};
 use sha2::Sha256;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Static flag to control deprecation warning frequency (warn once per session)
+static RSA_DEPRECATION_WARNED: AtomicBool = AtomicBool::new(false);
+
+/// Log a deprecation warning for RSA usage (once per session)
+fn log_rsa_deprecation_warning(operation: &str) {
+    // Only warn once per session to avoid log spam
+    if !RSA_DEPRECATION_WARNED.swap(true, Ordering::Relaxed) {
+        tracing::warn!(
+            operation = operation,
+            advisory = "RUSTSEC-2023-0071",
+            "RSA usage is deprecated due to Marvin Attack vulnerability. \
+             Consider migrating to Ed25519 or ECDSA for new key generation. \
+             See: https://rustsec.org/advisories/RUSTSEC-2023-0071"
+        );
+    }
+
+    // Always increment metrics for monitoring
+    metrics::counter!("crypto.rsa.usage", "operation" => operation.to_string()).increment(1);
+    metrics::counter!("crypto.algorithm.legacy").increment(1);
+}
 
 /// RSA cryptographic engine.
 ///
@@ -79,6 +107,8 @@ impl RsaEngine {
     /// - 3072-bit: ~500ms
     /// - 4096-bit: ~2000ms
     pub fn generate_keypair(bits: usize) -> Result<(KeyMaterial, Vec<u8>)> {
+        log_rsa_deprecation_warning("generate_keypair");
+
         let mut rng = OsRng;
         let private_key =
             RsaPrivateKey::new(&mut rng, bits).map_err(|e| CryptoError::Internal(e.to_string()))?;
@@ -118,6 +148,8 @@ impl RsaEngine {
     ///
     /// Additionally, RUSTSEC-2023-0071 affects this implementation.
     pub fn sign_pkcs1v15_sha256(key: &KeyMaterial, message: &[u8]) -> Result<Vec<u8>> {
+        log_rsa_deprecation_warning("sign_pkcs1v15");
+
         let private_key = RsaPrivateKey::from_pkcs8_der(key.as_bytes())
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
@@ -147,6 +179,8 @@ impl RsaEngine {
         message: &[u8],
         signature: &[u8],
     ) -> Result<bool> {
+        log_rsa_deprecation_warning("verify_pkcs1v15");
+
         let public_key = RsaPublicKey::from_pkcs1_der(public_key)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
@@ -185,6 +219,8 @@ impl RsaEngine {
     ///
     /// PSS is slightly slower than PKCS#1 v1.5 due to more complex padding.
     pub fn sign_pss_sha256(key: &KeyMaterial, message: &[u8]) -> Result<Vec<u8>> {
+        log_rsa_deprecation_warning("sign_pss");
+
         let private_key = RsaPrivateKey::from_pkcs8_der(key.as_bytes())
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
@@ -210,6 +246,8 @@ impl RsaEngine {
     ///
     /// Returns error if key cannot be parsed, signature is invalid, or verification fails.
     pub fn verify_pss_sha256(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<bool> {
+        log_rsa_deprecation_warning("verify_pss");
+
         let public_key = RsaPublicKey::from_pkcs1_der(public_key)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 

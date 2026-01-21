@@ -5,6 +5,7 @@
 use crate::backend::{StorageError, StorageResult};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 /// Size of SHA-256 checksum in bytes
 const CHECKSUM_SIZE: usize = 32;
@@ -33,14 +34,20 @@ impl Checksum {
     /// # Errors
     ///
     /// Returns an error if the checksum doesn't match
+    ///
+    /// # Security
+    ///
+    /// Uses constant-time comparison to prevent timing attacks.
     pub fn verify(&self, data: &[u8]) -> StorageResult<()> {
         let computed = Self::compute(data);
-        if computed != *self {
-            return Err(StorageError::CorruptionDetected(
+        // Use constant-time comparison to prevent timing attacks
+        if computed.0.ct_eq(&self.0).into() {
+            Ok(())
+        } else {
+            Err(StorageError::CorruptionDetected(
                 "Checksum mismatch".to_string(),
-            ));
+            ))
         }
-        Ok(())
     }
 
     /// Get the raw checksum bytes

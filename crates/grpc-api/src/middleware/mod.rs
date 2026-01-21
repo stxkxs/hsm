@@ -51,10 +51,11 @@
 //! ```
 //! use grpc_api::middleware::auth::AuthInterceptor;
 //!
-//! let auth = AuthInterceptor::new();
+//! // Create a stub interceptor for development/testing
+//! let auth = AuthInterceptor::new_stub();
 //!
-//! // In your gRPC handler:
-//! // let user_id = auth.authenticate_and_authorize(&request, namespace).await?;
+//! // In production, use with AuthService:
+//! // let auth = AuthInterceptor::new(Some(auth_service));
 //! ```
 
 pub mod auth;

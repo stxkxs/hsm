@@ -55,9 +55,9 @@ impl IntegrityManager {
     }
 
     /// Create a verified backup with integrity tag
-    pub fn create_verified<T: Serialize>(&self, data: &T) -> Result<VerifiedBackup<T>>
+    pub fn create_verified<T>(&self, data: &T) -> Result<VerifiedBackup<T>>
     where
-        T: Clone,
+        T: Serialize + Clone,
     {
         let data_bytes =
             postcard::to_allocvec(data).map_err(|e| BackupError::Serialization(e.to_string()))?;

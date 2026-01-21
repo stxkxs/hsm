@@ -292,6 +292,7 @@ pub mod cache;
 pub mod circuit_breaker;
 pub mod config;
 pub mod error;
+pub mod grpc_web;
 pub mod middleware;
 pub mod server;
 pub mod tracing_support;
@@ -335,6 +336,9 @@ pub use cache::{CacheKey, ResponseCache};
 
 // Re-export circuit breaker
 pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
+
+// Re-export gRPC-Web support
+pub use grpc_web::{create_cors_layer, create_grpc_web_layer, grpc_web_layer, GrpcWebConfig};
 
 #[cfg(test)]
 mod tests {

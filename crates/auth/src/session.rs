@@ -7,13 +7,60 @@ use rand::Rng;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Session ID type (cryptographically secure)
 pub type SessionId = String;
 
-/// Session token (opaque, hashed)
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Session token (opaque, securely generated)
+///
+/// The plaintext token is returned to the client once and zeroized on drop.
+/// Only the hash is stored server-side.
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct SessionToken(String);
+
+impl std::fmt::Debug for SessionToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SessionToken([REDACTED])")
+    }
+}
+
+impl PartialEq for SessionToken {
+    fn eq(&self, other: &Self) -> bool {
+        // Use constant-time comparison for token equality
+        self.0.as_bytes().ct_eq(other.0.as_bytes()).into()
+    }
+}
+
+impl Eq for SessionToken {}
+
+/// Hashed session token for secure storage.
+///
+/// Only the SHA-256 hash of the token is stored, never the plaintext.
+/// This prevents token leakage if the session store is compromised.
+#[derive(Debug, Clone)]
+pub struct HashedToken([u8; 32]);
+
+impl HashedToken {
+    /// Create a hashed token from a plaintext token
+    pub fn from_token(token: &SessionToken) -> Self {
+        let mut hasher = Sha256::new();
+        hasher.update(token.0.as_bytes());
+        let result = hasher.finalize();
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(&result);
+        Self(hash)
+    }
+
+    /// Verify that a plaintext token matches this hash
+    ///
+    /// Uses constant-time comparison to prevent timing attacks.
+    pub fn verify(&self, token: &SessionToken) -> bool {
+        let computed = Self::from_token(token);
+        self.0.ct_eq(&computed.0).into()
+    }
+}
 
 /// Client session information with expiration and hijacking detection.
 ///
@@ -49,10 +96,11 @@ pub struct SessionToken(String);
 ///     "serial-123".to_string(),
 /// );
 ///
-/// let session = Session::new(identity, 3600); // 1 hour TTL
+/// let result = Session::create(identity, 3600); // 1 hour TTL
 ///
-/// assert!(session.is_valid());
-/// assert!(!session.is_expired());
+/// assert!(result.session.is_valid());
+/// assert!(!result.session.is_expired());
+/// // result.token contains the plaintext token to send to the client
 /// ```
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -71,8 +119,14 @@ pub struct Session {
     /// Session expiration time
     pub expires_at: DateTime<Utc>,
 
-    /// Session token (for rotation)
-    pub token: SessionToken,
+    /// Hashed session token (only hash is stored, never plaintext)
+    pub token_hash: HashedToken,
+
+    /// Number of operations performed in this session (for auto-rotation)
+    pub operation_count: u64,
+
+    /// TLS fingerprint (JA3) for hijacking detection
+    pub tls_fingerprint: Option<String>,
 
     /// Session metadata for hijacking detection
     pub client_ip: Option<String>,
@@ -105,24 +159,43 @@ impl Default for SessionToken {
     }
 }
 
+/// Session creation result containing the session and the plaintext token.
+///
+/// The plaintext token is returned only once during session creation.
+/// It should be sent to the client and never stored server-side.
+pub struct SessionCreationResult {
+    /// The session (with hashed token)
+    pub session: Session,
+    /// The plaintext token (returned to client once, then discarded)
+    pub token: SessionToken,
+}
+
 impl Session {
     /// Create a new session with secure token
-    pub fn new(identity: ClientIdentity, ttl_seconds: i64) -> Self {
+    ///
+    /// Returns a SessionCreationResult containing the session (with hashed token)
+    /// and the plaintext token to be sent to the client.
+    pub fn create(identity: ClientIdentity, ttl_seconds: i64) -> SessionCreationResult {
         let now = Utc::now();
         let expires_at = now + Duration::seconds(ttl_seconds);
         let id = Self::generate_session_id();
         let token = SessionToken::new();
+        let token_hash = HashedToken::from_token(&token);
 
-        Self {
+        let session = Self {
             id,
             identity,
             created_at: now,
             last_accessed: now,
             expires_at,
-            token,
+            token_hash,
+            operation_count: 0,
+            tls_fingerprint: None,
             client_ip: None,
             user_agent: None,
-        }
+        };
+
+        SessionCreationResult { session, token }
     }
 
     /// Create a new session with metadata for hijacking detection
@@ -131,11 +204,31 @@ impl Session {
         ttl_seconds: i64,
         client_ip: Option<String>,
         user_agent: Option<String>,
-    ) -> Self {
-        let mut session = Self::new(identity, ttl_seconds);
+        tls_fingerprint: Option<String>,
+    ) -> SessionCreationResult {
+        let result = Self::create(identity, ttl_seconds);
+        let mut session = result.session;
         session.client_ip = client_ip;
         session.user_agent = user_agent;
-        session
+        session.tls_fingerprint = tls_fingerprint;
+        SessionCreationResult {
+            session,
+            token: result.token,
+        }
+    }
+
+    /// Verify a token against this session's stored hash
+    ///
+    /// Uses constant-time comparison to prevent timing attacks.
+    pub fn verify_token(&self, token: &SessionToken) -> bool {
+        self.token_hash.verify(token)
+    }
+
+    /// Increment operation count and check if rotation is needed
+    pub fn increment_operation(&mut self) -> bool {
+        self.operation_count += 1;
+        // Recommend rotation after 1000 operations
+        self.operation_count >= 1000
     }
 
     /// Generate a cryptographically secure session ID
@@ -146,14 +239,20 @@ impl Session {
 
         // Hash for additional security
         let mut hasher = Sha256::new();
-        hasher.update(&session_id_bytes);
+        hasher.update(session_id_bytes);
         hex::encode(hasher.finalize())
     }
 
     /// Rotate session token (for security)
-    pub fn rotate_token(&mut self) {
-        self.token = SessionToken::new();
+    ///
+    /// Returns the new plaintext token to be sent to the client.
+    /// The old token is invalidated immediately.
+    pub fn rotate_token(&mut self) -> SessionToken {
+        let new_token = SessionToken::new();
+        self.token_hash = HashedToken::from_token(&new_token);
+        self.operation_count = 0; // Reset operation count after rotation
         metrics::counter!("auth.session.token_rotation").increment(1);
+        new_token
     }
 
     /// Check if the session is expired
@@ -173,7 +272,7 @@ impl Session {
 
     /// Extend the session expiration
     pub fn extend(&mut self, additional_seconds: i64) {
-        self.expires_at = self.expires_at + Duration::seconds(additional_seconds);
+        self.expires_at += Duration::seconds(additional_seconds);
     }
 }
 
@@ -241,18 +340,22 @@ impl Session {
 ///     "serial-123".to_string(),
 /// );
 ///
-/// // Create session
-/// let session = manager.create_session(identity);
+/// // Create session - returns session + plaintext token
+/// let result = manager.create_session(identity);
+/// // result.token should be returned to client (send only once!)
 ///
-/// // Later: validate session
-/// let validated = manager.validate_session(&session.id).unwrap();
-/// assert_eq!(validated.id, session.id);
+/// // Later: validate session by ID
+/// let validated = manager.validate_session(&result.session.id).unwrap();
+/// assert_eq!(validated.id, result.session.id);
+///
+/// // Or validate with token (more secure)
+/// let validated = manager.validate_session_with_token(&result.session.id, &result.token).unwrap();
 ///
 /// // Extend session lifetime
-/// manager.extend_session(&session.id, 1800).unwrap(); // +30 minutes
+/// manager.extend_session(&result.session.id, 1800).unwrap(); // +30 minutes
 ///
 /// // Delete when done
-/// manager.delete_session(&session.id).unwrap();
+/// manager.delete_session(&result.session.id).unwrap();
 /// ```
 ///
 /// ## Session hijacking detection
@@ -270,28 +373,33 @@ impl Session {
 /// #     "serial-123".to_string(),
 /// # );
 ///
-/// // Create session with metadata
-/// let session = manager.create_session_with_metadata(
+/// // Create session with metadata (including TLS fingerprint)
+/// let result = manager.create_session_with_metadata(
 ///     identity,
 ///     Some("192.168.1.100".to_string()),
 ///     Some("HSM Client/1.0".to_string()),
+///     None, // TLS fingerprint (JA3)
 /// );
 ///
 /// // Validate with IP check (detects hijacking)
-/// let result = manager.validate_session_with_metadata(
-///     &session.id,
+/// let validated = manager.validate_session_with_metadata(
+///     &result.session.id,
+///     &result.token,
 ///     Some("192.168.1.100".to_string()), // Same IP = OK
 ///     Some("HSM Client/1.0".to_string()),
-/// );
-/// assert!(result.is_ok());
-///
-/// // Different IP would fail with hijacking error
-/// let result = manager.validate_session_with_metadata(
-///     &session.id,
-///     Some("10.0.0.1".to_string()), // Different IP = Hijacking!
 ///     None,
 /// );
-/// assert!(result.is_err()); // Returns InvalidSession error
+/// assert!(validated.is_ok());
+///
+/// // Different IP would fail with hijacking error
+/// let rejected = manager.validate_session_with_metadata(
+///     &result.session.id,
+///     &result.token,
+///     Some("10.0.0.1".to_string()), // Different IP = Hijacking!
+///     None,
+///     None,
+/// );
+/// assert!(rejected.is_err()); // Returns InvalidSession error
 /// ```
 ///
 /// ## Periodic cleanup
@@ -337,24 +445,39 @@ impl SessionManager {
     }
 
     /// Create a new session for a client (lock-free, concurrent)
-    pub fn create_session(&self, identity: ClientIdentity) -> Session {
-        let session = Session::new(identity, self.default_ttl);
-        self.sessions.insert(session.id.clone(), session.clone());
+    ///
+    /// Returns the session ID and the plaintext token. The token should be
+    /// returned to the client once and never stored server-side.
+    pub fn create_session(&self, identity: ClientIdentity) -> SessionCreationResult {
+        let result = Session::create(identity, self.default_ttl);
+        self.sessions
+            .insert(result.session.id.clone(), result.session.clone());
         metrics::counter!("auth.session.created").increment(1);
-        session
+        result
     }
 
     /// Create a session with metadata for hijacking detection
+    ///
+    /// Returns the session ID and the plaintext token. The token should be
+    /// returned to the client once and never stored server-side.
     pub fn create_session_with_metadata(
         &self,
         identity: ClientIdentity,
         client_ip: Option<String>,
         user_agent: Option<String>,
-    ) -> Session {
-        let session = Session::new_with_metadata(identity, self.default_ttl, client_ip, user_agent);
-        self.sessions.insert(session.id.clone(), session.clone());
+        tls_fingerprint: Option<String>,
+    ) -> SessionCreationResult {
+        let result = Session::new_with_metadata(
+            identity,
+            self.default_ttl,
+            client_ip,
+            user_agent,
+            tls_fingerprint,
+        );
+        self.sessions
+            .insert(result.session.id.clone(), result.session.clone());
         metrics::counter!("auth.session.created").increment(1);
-        session
+        result
     }
 
     /// Get a session by ID (lock-free read)
@@ -382,12 +505,50 @@ impl SessionManager {
         Ok(session_ref.clone())
     }
 
-    /// Validate session with hijacking detection
+    /// Validate session with token verification
+    ///
+    /// This method validates the session by checking both the session ID and token.
+    /// Uses constant-time token comparison to prevent timing attacks.
+    pub fn validate_session_with_token(
+        &self,
+        session_id: &str,
+        token: &SessionToken,
+    ) -> Result<Session> {
+        let mut session_ref = self
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| AuthError::InvalidSession("Session not found".to_string()))?;
+
+        if session_ref.is_expired() {
+            metrics::counter!("auth.session.expired").increment(1);
+            return Err(AuthError::SessionExpired);
+        }
+
+        // Verify token with constant-time comparison
+        if !session_ref.verify_token(token) {
+            metrics::counter!("auth.session.invalid_token").increment(1);
+            return Err(AuthError::InvalidSession("Invalid session token".to_string()));
+        }
+
+        // Check if token rotation is recommended
+        let needs_rotation = session_ref.increment_operation();
+        if needs_rotation {
+            metrics::counter!("auth.session.rotation_recommended").increment(1);
+        }
+
+        session_ref.touch();
+        metrics::counter!("auth.session.validated").increment(1);
+        Ok(session_ref.clone())
+    }
+
+    /// Validate session with hijacking detection (IP, User-Agent, TLS fingerprint)
     pub fn validate_session_with_metadata(
         &self,
         session_id: &str,
+        token: &SessionToken,
         client_ip: Option<String>,
-        _user_agent: Option<String>,
+        user_agent: Option<String>,
+        tls_fingerprint: Option<String>,
     ) -> Result<Session> {
         let session_ref = self
             .sessions
@@ -399,13 +560,43 @@ impl SessionManager {
             return Err(AuthError::SessionExpired);
         }
 
-        // Session hijacking detection
+        // Verify token first with constant-time comparison
+        if !session_ref.verify_token(token) {
+            metrics::counter!("auth.session.invalid_token").increment(1);
+            return Err(AuthError::InvalidSession("Invalid session token".to_string()));
+        }
+
+        // Session hijacking detection: IP check
         if let Some(ref stored_ip) = session_ref.client_ip {
             if let Some(ref current_ip) = client_ip {
                 if stored_ip != current_ip {
-                    metrics::counter!("auth.session.hijacking_attempt").increment(1);
+                    metrics::counter!("auth.session.hijacking_ip_mismatch").increment(1);
                     return Err(AuthError::InvalidSession(
-                        "Session hijacking detected: IP mismatch".to_string(),
+                        "Session validation failed".to_string(), // Generic message for security
+                    ));
+                }
+            }
+        }
+
+        // Session hijacking detection: User-Agent check
+        if let Some(ref stored_ua) = session_ref.user_agent {
+            if let Some(ref current_ua) = user_agent {
+                if stored_ua != current_ua {
+                    metrics::counter!("auth.session.hijacking_ua_mismatch").increment(1);
+                    return Err(AuthError::InvalidSession(
+                        "Session validation failed".to_string(), // Generic message for security
+                    ));
+                }
+            }
+        }
+
+        // Session hijacking detection: TLS fingerprint (JA3) check
+        if let Some(ref stored_fp) = session_ref.tls_fingerprint {
+            if let Some(ref current_fp) = tls_fingerprint {
+                if stored_fp != current_fp {
+                    metrics::counter!("auth.session.hijacking_tls_mismatch").increment(1);
+                    return Err(AuthError::InvalidSession(
+                        "Session validation failed".to_string(), // Generic message for security
                     ));
                 }
             }
@@ -413,8 +604,15 @@ impl SessionManager {
 
         drop(session_ref);
 
-        // Touch the session
-        let mut session_mut = self.sessions.get_mut(session_id).unwrap();
+        // Touch the session and increment operation count
+        let mut session_mut = self
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| AuthError::InvalidSession("Session not found".to_string()))?;
+        let needs_rotation = session_mut.increment_operation();
+        if needs_rotation {
+            metrics::counter!("auth.session.rotation_recommended").increment(1);
+        }
         session_mut.touch();
         metrics::counter!("auth.session.validated").increment(1);
         Ok(session_mut.clone())
@@ -441,14 +639,38 @@ impl SessionManager {
     }
 
     /// Rotate session token for security
+    ///
+    /// Returns the new plaintext token to be sent to the client.
+    /// The old token is invalidated immediately. Rotation should occur:
+    /// - After N operations (recommended: 1000)
+    /// - When client permissions change
+    /// - Periodically for long-lived sessions
     pub fn rotate_session_token(&self, session_id: &str) -> Result<SessionToken> {
         let mut session = self
             .sessions
             .get_mut(session_id)
             .ok_or_else(|| AuthError::InvalidSession("Session not found".to_string()))?;
 
-        session.rotate_token();
-        Ok(session.token.clone())
+        let new_token = session.rotate_token();
+        Ok(new_token)
+    }
+
+    /// Force rotate tokens for a client when their permissions change
+    ///
+    /// This invalidates all existing tokens for the client and returns
+    /// new tokens that must be distributed to the client.
+    pub fn rotate_client_tokens(&self, client_cn: &str) -> Vec<(SessionId, SessionToken)> {
+        let mut results = Vec::new();
+
+        for mut entry in self.sessions.iter_mut() {
+            if entry.identity.common_name == client_cn {
+                let new_token = entry.rotate_token();
+                results.push((entry.id.clone(), new_token));
+            }
+        }
+
+        metrics::counter!("auth.session.permission_rotation").increment(results.len() as u64);
+        results
     }
 
     /// Clean up expired sessions (concurrent-safe)
@@ -517,17 +739,44 @@ mod tests {
     #[test]
     fn test_create_session() {
         let identity = create_test_identity("client1");
-        let session = Session::new(identity.clone(), 3600);
+        let result = Session::create(identity.clone(), 3600);
 
-        assert_eq!(session.identity.common_name, "client1");
-        assert!(session.is_valid());
-        assert!(!session.is_expired());
+        assert_eq!(result.session.identity.common_name, "client1");
+        assert!(result.session.is_valid());
+        assert!(!result.session.is_expired());
+    }
+
+    #[test]
+    fn test_session_token_verification() {
+        let identity = create_test_identity("client1");
+        let result = Session::create(identity, 3600);
+
+        // Token should verify against the session
+        assert!(result.session.verify_token(&result.token));
+
+        // Wrong token should not verify
+        let wrong_token = SessionToken::new();
+        assert!(!result.session.verify_token(&wrong_token));
+    }
+
+    #[test]
+    fn test_hashed_token_constant_time() {
+        let token = SessionToken::new();
+        let hash = HashedToken::from_token(&token);
+
+        // Same token should verify
+        assert!(hash.verify(&token));
+
+        // Different token should not verify
+        let other_token = SessionToken::new();
+        assert!(!hash.verify(&other_token));
     }
 
     #[test]
     fn test_session_expiration() {
         let identity = create_test_identity("client1");
-        let mut session = Session::new(identity, -1); // Already expired
+        let result = Session::create(identity, -1); // Already expired
+        let mut session = result.session;
 
         assert!(!session.is_valid());
         assert!(session.is_expired());
@@ -541,18 +790,41 @@ mod tests {
     fn test_session_manager_create() {
         let manager = SessionManager::new(3600);
         let identity = create_test_identity("client1");
-        let session = manager.create_session(identity);
+        let result = manager.create_session(identity);
 
-        assert!(manager.get_session(&session.id).is_ok());
+        assert!(manager.get_session(&result.session.id).is_ok());
+    }
+
+    #[test]
+    fn test_session_manager_validate_with_token() {
+        let manager = SessionManager::new(3600);
+        let identity = create_test_identity("client1");
+        let result = manager.create_session(identity);
+
+        // Should validate with correct token
+        assert!(manager
+            .validate_session_with_token(&result.session.id, &result.token)
+            .is_ok());
+
+        // Should fail with wrong token
+        let wrong_token = SessionToken::new();
+        assert!(manager
+            .validate_session_with_token(&result.session.id, &wrong_token)
+            .is_err());
+
+        // Should fail with wrong session ID
+        assert!(manager
+            .validate_session_with_token("invalid-id", &result.token)
+            .is_err());
     }
 
     #[test]
     fn test_session_manager_validate() {
         let manager = SessionManager::new(3600);
         let identity = create_test_identity("client1");
-        let session = manager.create_session(identity);
+        let result = manager.create_session(identity);
 
-        assert!(manager.validate_session(&session.id).is_ok());
+        assert!(manager.validate_session(&result.session.id).is_ok());
         assert!(manager.validate_session("invalid-id").is_err());
     }
 
@@ -560,23 +832,72 @@ mod tests {
     fn test_session_manager_delete() {
         let manager = SessionManager::new(3600);
         let identity = create_test_identity("client1");
-        let session = manager.create_session(identity);
+        let result = manager.create_session(identity);
 
-        assert!(manager.delete_session(&session.id).is_ok());
-        assert!(manager.get_session(&session.id).is_err());
+        assert!(manager.delete_session(&result.session.id).is_ok());
+        assert!(manager.get_session(&result.session.id).is_err());
     }
 
     #[test]
     fn test_session_manager_extend() {
         let manager = SessionManager::new(3600);
         let identity = create_test_identity("client1");
-        let session = manager.create_session(identity);
+        let result = manager.create_session(identity);
 
-        let original_expires = session.expires_at;
-        manager.extend_session(&session.id, 1800).unwrap();
+        let original_expires = result.session.expires_at;
+        manager
+            .extend_session(&result.session.id, 1800)
+            .expect("extend should succeed");
 
-        let updated = manager.get_session(&session.id).unwrap();
+        let updated = manager
+            .get_session(&result.session.id)
+            .expect("session should exist");
         assert!(updated.expires_at > original_expires);
+    }
+
+    #[test]
+    fn test_token_rotation() {
+        let manager = SessionManager::new(3600);
+        let identity = create_test_identity("client1");
+        let result = manager.create_session(identity);
+
+        // Original token should work
+        assert!(manager
+            .validate_session_with_token(&result.session.id, &result.token)
+            .is_ok());
+
+        // Rotate the token
+        let new_token = manager
+            .rotate_session_token(&result.session.id)
+            .expect("rotation should succeed");
+
+        // Old token should no longer work
+        assert!(manager
+            .validate_session_with_token(&result.session.id, &result.token)
+            .is_err());
+
+        // New token should work
+        assert!(manager
+            .validate_session_with_token(&result.session.id, &new_token)
+            .is_ok());
+    }
+
+    #[test]
+    fn test_operation_count_for_rotation() {
+        let identity = create_test_identity("client1");
+        let result = Session::create(identity, 3600);
+        let mut session = result.session;
+
+        // Operation count starts at 0
+        assert_eq!(session.operation_count, 0);
+
+        // Should not recommend rotation initially
+        for _ in 0..999 {
+            assert!(!session.increment_operation());
+        }
+
+        // Should recommend rotation at 1000 operations
+        assert!(session.increment_operation());
     }
 
     #[test]
@@ -631,5 +952,75 @@ mod tests {
         let identity = create_test_identity("client1");
         manager.create_session(identity);
         assert_eq!(manager.active_session_count(), 1);
+    }
+
+    #[test]
+    fn test_rotate_client_tokens() {
+        let manager = SessionManager::new(3600);
+        let identity = create_test_identity("client1");
+
+        let result1 = manager.create_session(identity.clone());
+        let result2 = manager.create_session(identity.clone());
+
+        // Rotate all tokens for client1
+        let rotated = manager.rotate_client_tokens("client1");
+        assert_eq!(rotated.len(), 2);
+
+        // Old tokens should no longer work
+        assert!(manager
+            .validate_session_with_token(&result1.session.id, &result1.token)
+            .is_err());
+        assert!(manager
+            .validate_session_with_token(&result2.session.id, &result2.token)
+            .is_err());
+
+        // New tokens should work
+        for (session_id, new_token) in rotated {
+            assert!(manager
+                .validate_session_with_token(&session_id, &new_token)
+                .is_ok());
+        }
+    }
+
+    #[test]
+    fn test_hijacking_detection_ip() {
+        let manager = SessionManager::new(3600);
+        let identity = create_test_identity("client1");
+        let result = manager.create_session_with_metadata(
+            identity,
+            Some("192.168.1.100".to_string()),
+            Some("TestClient/1.0".to_string()),
+            None,
+        );
+
+        // Same IP should work
+        assert!(manager
+            .validate_session_with_metadata(
+                &result.session.id,
+                &result.token,
+                Some("192.168.1.100".to_string()),
+                Some("TestClient/1.0".to_string()),
+                None,
+            )
+            .is_ok());
+
+        // Different IP should fail (hijacking detection)
+        assert!(manager
+            .validate_session_with_metadata(
+                &result.session.id,
+                &result.token,
+                Some("10.0.0.1".to_string()),
+                Some("TestClient/1.0".to_string()),
+                None,
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn test_session_token_debug_redacts() {
+        let token = SessionToken::new();
+        let debug_output = format!("{:?}", token);
+        assert!(debug_output.contains("REDACTED"));
+        assert!(!debug_output.contains(token.as_str()));
     }
 }

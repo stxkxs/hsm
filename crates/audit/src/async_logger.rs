@@ -375,8 +375,11 @@ impl AsyncAuditLogger {
         // Drop the sender to signal shutdown
         let _ = self.tx.write().take();
 
-        // Wait for writer task to complete
-        if let Some(handle) = self.writer_handle.write().take() {
+        // Take the handle first, releasing the lock before awaiting
+        let handle = self.writer_handle.write().take();
+
+        // Wait for writer task to complete (outside of lock scope)
+        if let Some(handle) = handle {
             let _ = handle.await;
         }
 

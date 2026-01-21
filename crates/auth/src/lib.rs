@@ -212,15 +212,16 @@
 //!
 //! // Authenticate client and create session
 //! let client_cert_der = std::fs::read("client.der")?;
-//! let session = auth_service.authenticate_and_create_session(&client_cert_der)?;
+//! let result = auth_service.authenticate_and_create_session(&client_cert_der)?;
+//! // result.token should be sent to client once (never stored server-side)
 //!
-//! println!("Session created: {}", session.id);
-//! println!("Client: {}", session.identity.common_name);
-//! println!("Roles: {:?}", session.identity.roles);
+//! println!("Session created: {}", result.session.id);
+//! println!("Client: {}", result.session.identity.common_name);
+//! println!("Roles: {:?}", result.session.identity.roles);
 //!
 //! // Later: authorize key access
 //! auth_service.authorize_session(
-//!     &session.id,
+//!     &result.session.id,
 //!     "key-123",
 //!     "default",
 //!     &Permission::Sign,
@@ -242,8 +243,8 @@
 //! # let server_key = std::fs::read("server.key")?;
 //! # let auth_service = AuthService::new(&ca_cert, &server_cert, &server_key, 3600)?;
 //! # let client_cert_der = std::fs::read("client.der")?;
-//! # let session = auth_service.authenticate_and_create_session(&client_cert_der)?;
-//! # let identity = &session.identity;
+//! # let result = auth_service.authenticate_and_create_session(&client_cert_der)?;
+//! # let identity = &result.session.identity;
 //! # let key_id = "key-123";
 //! # let namespace = "production";
 //!
@@ -276,15 +277,19 @@
 //!     "serial-123".to_string(),
 //! );
 //!
-//! // Create session
-//! let session = session_manager.create_session(identity);
+//! // Create session - returns session + token
+//! let result = session_manager.create_session(identity);
+//! // result.token should be sent to client once
 //!
-//! // Validate session (updates last_accessed timestamp)
-//! let validated = session_manager.validate_session(&session.id).unwrap();
-//! assert_eq!(validated.id, session.id);
+//! // Validate session by ID (updates last_accessed timestamp)
+//! let validated = session_manager.validate_session(&result.session.id).unwrap();
+//! assert_eq!(validated.id, result.session.id);
+//!
+//! // Or validate with token (more secure)
+//! let validated = session_manager.validate_session_with_token(&result.session.id, &result.token).unwrap();
 //!
 //! // Extend session
-//! session_manager.extend_session(&session.id, 1800).unwrap(); // +30 minutes
+//! session_manager.extend_session(&result.session.id, 1800).unwrap(); // +30 minutes
 //!
 //! // Cleanup expired sessions
 //! let removed_count = session_manager.cleanup_expired();
@@ -338,7 +343,7 @@ pub use mtls::{CertificateValidator, ClientIdentity, MtlsAuthenticator};
 pub use namespace::NamespaceManager;
 pub use rate_limit::{RateLimitConfig, RateLimiter};
 pub use rbac::{Permission, PermissionFlags, RbacPolicy, Role};
-pub use session::{Session, SessionId, SessionManager, SessionToken};
+pub use session::{HashedToken, Session, SessionCreationResult, SessionId, SessionManager, SessionToken};
 
 use std::sync::Arc;
 
@@ -410,10 +415,13 @@ impl AuthService {
     }
 
     /// Authenticate a client and create a session
-    pub fn authenticate_and_create_session(&self, cert_der: &[u8]) -> Result<Session> {
+    ///
+    /// Returns a SessionCreationResult containing the session and the plaintext token.
+    /// The token should be returned to the client once and never stored server-side.
+    pub fn authenticate_and_create_session(&self, cert_der: &[u8]) -> Result<SessionCreationResult> {
         let identity = self.authenticator.authenticate(cert_der)?;
-        let session = self.sessions.create_session(identity);
-        Ok(session)
+        let result = self.sessions.create_session(identity);
+        Ok(result)
     }
 
     /// Validate a session and return the identity

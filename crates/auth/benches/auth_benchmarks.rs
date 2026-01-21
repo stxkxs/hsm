@@ -148,17 +148,27 @@ fn bench_session_operations(c: &mut Criterion) {
     });
 
     // Session lookup (target: < 50μs)
-    let session = session_manager.create_session(identity.clone());
+    let result = session_manager.create_session(identity.clone());
     group.bench_function("lookup_session", |b| {
         b.iter(|| {
-            let _ = session_manager.get_session(black_box(&session.id));
+            let _ = session_manager.get_session(black_box(&result.session.id));
         });
     });
 
     // Session validation (target: < 50μs)
     group.bench_function("validate_session", |b| {
         b.iter(|| {
-            let _ = session_manager.validate_session(black_box(&session.id));
+            let _ = session_manager.validate_session(black_box(&result.session.id));
+        });
+    });
+
+    // Session validation with token (new benchmark)
+    group.bench_function("validate_session_with_token", |b| {
+        b.iter(|| {
+            let _ = session_manager.validate_session_with_token(
+                black_box(&result.session.id),
+                black_box(&result.token),
+            );
         });
     });
 

@@ -267,7 +267,6 @@ pub fn log(event: AuditEvent) {
 }
 
 /// Helper functions for common audit events
-
 pub fn log_authentication_success(identity: ClientIdentity) {
     log(AuditEvent::new(
         AuditEventType::AuthenticationSuccess,

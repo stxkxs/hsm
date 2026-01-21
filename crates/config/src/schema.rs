@@ -154,7 +154,7 @@ use std::path::PathBuf;
 use validator::Validate;
 
 /// Root configuration structure for the HSM system.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Validate, Default)]
 pub struct HsmConfig {
     /// Server configuration
     #[validate(nested)]
@@ -388,8 +388,8 @@ pub struct SecurityConfig {
 /// Returns validation error if key size is not in the allowed list.
 fn validate_key_size(key_size: u32) -> Result<(), validator::ValidationError> {
     // Allow common secure key sizes: 256, 384, 521 (ECC), 2048, 3072, 4096 (RSA)
-    let allowed = vec![256, 384, 521, 2048, 3072, 4096];
-    if allowed.contains(&key_size) {
+    const ALLOWED: [u32; 6] = [256, 384, 521, 2048, 3072, 4096];
+    if ALLOWED.contains(&key_size) {
         Ok(())
     } else {
         Err(validator::ValidationError::new("invalid_key_size"))
