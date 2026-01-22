@@ -247,7 +247,6 @@ impl HardwareKeyManager {
         namespace: &str,
         message: &[u8],
     ) -> Result<Vec<u8>> {
-
         // Verify key exists and is usable
         let _key = self.get_key_async(key_id, namespace).await?;
 
@@ -282,7 +281,11 @@ impl HardwareKeyManager {
             // Convert storage KeyId back to KeyManager KeyId
             if let Ok(key_id) = KeyId::from_string(storage_key_id.as_str()) {
                 // Load key to apply filters
-                if let Ok(key_bytes) = self.storage.load_key_async(&storage_key_id, namespace).await {
+                if let Ok(key_bytes) = self
+                    .storage
+                    .load_key_async(&storage_key_id, namespace)
+                    .await
+                {
                     if let Ok(key) = postcard::from_bytes::<Key>(&key_bytes) {
                         // Apply filters
                         if let Some(key_type) = filter.key_type {
@@ -325,7 +328,10 @@ impl HardwareKeyManager {
         // Update new key to reference old key and increment version
         // Load new key, modify, and store back
         let storage_new_key_id = hsm_storage::KeyId::new(new_key_id.as_string());
-        let new_key_bytes = self.storage.load_key_async(&storage_new_key_id, namespace).await
+        let new_key_bytes = self
+            .storage
+            .load_key_async(&storage_new_key_id, namespace)
+            .await
             .map_err(|e| Error::StorageError(e.to_string()))?;
 
         let mut new_key: Key = postcard::from_bytes(&new_key_bytes)
@@ -337,11 +343,14 @@ impl HardwareKeyManager {
         let updated_bytes = postcard::to_allocvec(&new_key)
             .map_err(|e| Error::StorageError(format!("Failed to serialize key: {}", e)))?;
 
-        self.storage.store_key_async(&storage_new_key_id, &updated_bytes, namespace).await
+        self.storage
+            .store_key_async(&storage_new_key_id, &updated_bytes, namespace)
+            .await
             .map_err(|e| Error::StorageError(e.to_string()))?;
 
         // Deactivate old key
-        self.update_state_async(key_id, namespace, KeyState::Deactivated).await?;
+        self.update_state_async(key_id, namespace, KeyState::Deactivated)
+            .await?;
 
         Ok(new_key_id)
     }
@@ -355,7 +364,10 @@ impl HardwareKeyManager {
     ) -> Result<()> {
         let storage_key_id = hsm_storage::KeyId::new(key_id.as_string());
 
-        let key_bytes = self.storage.load_key_async(&storage_key_id, namespace).await
+        let key_bytes = self
+            .storage
+            .load_key_async(&storage_key_id, namespace)
+            .await
             .map_err(|e| Error::StorageError(e.to_string()))?;
 
         let mut key: Key = postcard::from_bytes(&key_bytes)
@@ -366,7 +378,9 @@ impl HardwareKeyManager {
         let updated_bytes = postcard::to_allocvec(&key)
             .map_err(|e| Error::StorageError(format!("Failed to serialize key: {}", e)))?;
 
-        self.storage.store_key_async(&storage_key_id, &updated_bytes, namespace).await
+        self.storage
+            .store_key_async(&storage_key_id, &updated_bytes, namespace)
+            .await
             .map_err(|e| Error::StorageError(e.to_string()))?;
 
         Ok(())
@@ -375,7 +389,8 @@ impl HardwareKeyManager {
     /// Delete a key (async)
     pub async fn delete_key_async(&self, key_id: &KeyId, namespace: &str) -> Result<()> {
         // Mark as destroyed first
-        self.update_state_async(key_id, namespace, KeyState::Destroyed).await?;
+        self.update_state_async(key_id, namespace, KeyState::Destroyed)
+            .await?;
 
         // Delete from storage (key material zeroized by hardware backend)
         let storage_key_id = hsm_storage::KeyId::new(key_id.as_string());
@@ -388,14 +403,13 @@ impl HardwareKeyManager {
     }
 
     /// Increment operation counter (async)
-    pub async fn increment_operations_async(
-        &self,
-        key_id: &KeyId,
-        namespace: &str,
-    ) -> Result<()> {
+    pub async fn increment_operations_async(&self, key_id: &KeyId, namespace: &str) -> Result<()> {
         let storage_key_id = hsm_storage::KeyId::new(key_id.as_string());
 
-        let key_bytes = self.storage.load_key_async(&storage_key_id, namespace).await
+        let key_bytes = self
+            .storage
+            .load_key_async(&storage_key_id, namespace)
+            .await
             .map_err(|e| Error::StorageError(e.to_string()))?;
 
         let mut key: Key = postcard::from_bytes(&key_bytes)
@@ -406,7 +420,9 @@ impl HardwareKeyManager {
         let updated_bytes = postcard::to_allocvec(&key)
             .map_err(|e| Error::StorageError(format!("Failed to serialize key: {}", e)))?;
 
-        self.storage.store_key_async(&storage_key_id, &updated_bytes, namespace).await
+        self.storage
+            .store_key_async(&storage_key_id, &updated_bytes, namespace)
+            .await
             .map_err(|e| Error::StorageError(e.to_string()))?;
 
         Ok(())
@@ -421,12 +437,23 @@ pub trait AsyncKeyManager: Send + Sync {
     async fn generate_key_async(&self, spec: KeySpec) -> Result<KeyId>;
     async fn get_key_async(&self, key_id: &KeyId, namespace: &str) -> Result<Arc<Key>>;
     async fn get_metadata_async(&self, key_id: &KeyId, namespace: &str) -> Result<KeyMetadata>;
-    async fn list_keys_async(&self, namespace: &str, filter: KeyFilter) -> Result<Vec<KeyMetadata>>;
+    async fn list_keys_async(&self, namespace: &str, filter: KeyFilter)
+        -> Result<Vec<KeyMetadata>>;
     async fn rotate_key_async(&self, key_id: &KeyId, namespace: &str) -> Result<KeyId>;
-    async fn update_state_async(&self, key_id: &KeyId, namespace: &str, state: KeyState) -> Result<()>;
+    async fn update_state_async(
+        &self,
+        key_id: &KeyId,
+        namespace: &str,
+        state: KeyState,
+    ) -> Result<()>;
     async fn delete_key_async(&self, key_id: &KeyId, namespace: &str) -> Result<()>;
     async fn increment_operations_async(&self, key_id: &KeyId, namespace: &str) -> Result<()>;
-    async fn remote_sign_async(&self, key_id: &KeyId, namespace: &str, message: &[u8]) -> Result<Vec<u8>>;
+    async fn remote_sign_async(
+        &self,
+        key_id: &KeyId,
+        namespace: &str,
+        message: &[u8],
+    ) -> Result<Vec<u8>>;
 }
 
 #[async_trait]
@@ -444,7 +471,11 @@ impl AsyncKeyManager for HardwareKeyManager {
         Ok(KeyMetadata::from_key(&key))
     }
 
-    async fn list_keys_async(&self, namespace: &str, filter: KeyFilter) -> Result<Vec<KeyMetadata>> {
+    async fn list_keys_async(
+        &self,
+        namespace: &str,
+        filter: KeyFilter,
+    ) -> Result<Vec<KeyMetadata>> {
         self.list_keys_async(namespace, filter).await
     }
 
@@ -452,7 +483,12 @@ impl AsyncKeyManager for HardwareKeyManager {
         self.rotate_key_async(key_id, namespace).await
     }
 
-    async fn update_state_async(&self, key_id: &KeyId, namespace: &str, state: KeyState) -> Result<()> {
+    async fn update_state_async(
+        &self,
+        key_id: &KeyId,
+        namespace: &str,
+        state: KeyState,
+    ) -> Result<()> {
         self.update_state_async(key_id, namespace, state).await
     }
 
@@ -464,7 +500,12 @@ impl AsyncKeyManager for HardwareKeyManager {
         self.increment_operations_async(key_id, namespace).await
     }
 
-    async fn remote_sign_async(&self, key_id: &KeyId, namespace: &str, message: &[u8]) -> Result<Vec<u8>> {
+    async fn remote_sign_async(
+        &self,
+        key_id: &KeyId,
+        namespace: &str,
+        message: &[u8],
+    ) -> Result<Vec<u8>> {
         self.remote_sign_async(key_id, namespace, message).await
     }
 }
@@ -475,17 +516,17 @@ impl AsyncKeyManager for HardwareKeyManager {
 /// For async contexts, use AsyncKeyManager trait instead.
 impl KeyManager for HardwareKeyManager {
     fn generate_key(&self, spec: KeySpec) -> Result<KeyId> {
-        tokio::runtime::Handle::current()
-            .block_on(self.generate_key_async(spec))
+        tokio::runtime::Handle::current().block_on(self.generate_key_async(spec))
     }
 
     fn import_key(&self, _key_data: Vec<u8>, _spec: KeySpec) -> Result<KeyId> {
-        Err(Error::NotImplemented("Key import not yet implemented for hardware backend".into()))
+        Err(Error::NotImplemented(
+            "Key import not yet implemented for hardware backend".into(),
+        ))
     }
 
     fn get_key(&self, key_id: &KeyId, namespace: &str) -> Result<Arc<Key>> {
-        tokio::runtime::Handle::current()
-            .block_on(self.get_key_async(key_id, namespace))
+        tokio::runtime::Handle::current().block_on(self.get_key_async(key_id, namespace))
     }
 
     fn get_metadata(&self, key_id: &KeyId, namespace: &str) -> Result<KeyMetadata> {
@@ -494,17 +535,24 @@ impl KeyManager for HardwareKeyManager {
     }
 
     fn list_keys(&self, namespace: &str, filter: KeyFilter) -> Result<Vec<KeyMetadata>> {
-        tokio::runtime::Handle::current()
-            .block_on(self.list_keys_async(namespace, filter))
+        tokio::runtime::Handle::current().block_on(self.list_keys_async(namespace, filter))
     }
 
-    fn list_keys_batch(&self, namespace: &str, offset: usize, limit: usize) -> Result<Vec<KeyMetadata>> {
+    fn list_keys_batch(
+        &self,
+        namespace: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<KeyMetadata>> {
         // Load all keys and paginate in-memory
-        let all_metadata = self.list_keys(namespace, KeyFilter {
-            key_type: None,
-            state: None,
-            labels: std::collections::HashMap::new(),
-        })?;
+        let all_metadata = self.list_keys(
+            namespace,
+            KeyFilter {
+                key_type: None,
+                state: None,
+                labels: std::collections::HashMap::new(),
+            },
+        )?;
         let start = offset;
         let end = (offset + limit).min(all_metadata.len());
         Ok(all_metadata[start..end].to_vec())
@@ -527,8 +575,7 @@ impl KeyManager for HardwareKeyManager {
     }
 
     fn rotate_key(&self, key_id: &KeyId, namespace: &str) -> Result<KeyId> {
-        tokio::runtime::Handle::current()
-            .block_on(self.rotate_key_async(key_id, namespace))
+        tokio::runtime::Handle::current().block_on(self.rotate_key_async(key_id, namespace))
     }
 
     fn update_state(&self, key_id: &KeyId, namespace: &str, state: KeyState) -> Result<()> {
@@ -537,8 +584,7 @@ impl KeyManager for HardwareKeyManager {
     }
 
     fn delete_key(&self, key_id: &KeyId, namespace: &str) -> Result<()> {
-        tokio::runtime::Handle::current()
-            .block_on(self.delete_key_async(key_id, namespace))
+        tokio::runtime::Handle::current().block_on(self.delete_key_async(key_id, namespace))
     }
 
     fn increment_operations(&self, key_id: &KeyId, namespace: &str) -> Result<()> {

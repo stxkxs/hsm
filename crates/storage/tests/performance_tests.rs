@@ -49,7 +49,10 @@ fn test_write_throughput() {
     // Realistic target for production-grade durability is 10+ ops/sec
     perf_target!(
         ops_per_sec > 10.0,
-        format!("Write throughput below target: {:.2} ops/sec (target: >10)", ops_per_sec)
+        format!(
+            "Write throughput below target: {:.2} ops/sec (target: >10)",
+            ops_per_sec
+        )
     );
 }
 
@@ -88,7 +91,10 @@ fn test_read_throughput() {
 
     perf_target!(
         ops_per_sec > 50.0,
-        format!("Read throughput below target: {:.2} ops/sec (target: >50)", ops_per_sec)
+        format!(
+            "Read throughput below target: {:.2} ops/sec (target: >50)",
+            ops_per_sec
+        )
     );
 }
 
@@ -129,7 +135,10 @@ fn test_mixed_workload() {
 
     perf_target!(
         ops_per_sec > 15.0,
-        format!("Mixed workload throughput below target: {:.2} ops/sec (target: >15)", ops_per_sec)
+        format!(
+            "Mixed workload throughput below target: {:.2} ops/sec (target: >15)",
+            ops_per_sec
+        )
     );
 }
 
@@ -163,7 +172,10 @@ fn test_large_key_performance() {
     // With encryption and journaling overhead, 1+ MB/sec is acceptable
     perf_target!(
         mb_per_sec > 1.0,
-        format!("Large key write throughput below target: {:.2} MB/sec (target: >1.0)", mb_per_sec)
+        format!(
+            "Large key write throughput below target: {:.2} MB/sec (target: >1.0)",
+            mb_per_sec
+        )
     );
 }
 
@@ -195,7 +207,10 @@ fn test_small_key_performance() {
 
     perf_target!(
         ops_per_sec > 30.0,
-        format!("Small key write throughput below target: {:.2} ops/sec (target: >30)", ops_per_sec)
+        format!(
+            "Small key write throughput below target: {:.2} ops/sec (target: >30)",
+            ops_per_sec
+        )
     );
 }
 
@@ -233,7 +248,10 @@ fn test_list_keys_performance() {
 
     perf_target!(
         lists_per_sec > 10.0,
-        format!("List keys throughput below target: {:.2} lists/sec (target: >10)", lists_per_sec)
+        format!(
+            "List keys throughput below target: {:.2} lists/sec (target: >10)",
+            lists_per_sec
+        )
     );
 }
 
@@ -272,7 +290,10 @@ fn test_delete_performance() {
 
     perf_target!(
         ops_per_sec > 50.0,
-        format!("Delete throughput below target: {:.2} ops/sec (target: >50)", ops_per_sec)
+        format!(
+            "Delete throughput below target: {:.2} ops/sec (target: >50)",
+            ops_per_sec
+        )
     );
 }
 
@@ -300,7 +321,10 @@ fn test_namespace_operations_performance() {
 
     perf_target!(
         ops_per_sec > 20.0,
-        format!("Namespace creation below target: {:.2} ops/sec (target: >20)", ops_per_sec)
+        format!(
+            "Namespace creation below target: {:.2} ops/sec (target: >20)",
+            ops_per_sec
+        )
     );
 
     // Test listing
@@ -351,7 +375,10 @@ fn test_sync_performance() {
 
     perf_target!(
         syncs_per_sec > 10.0,
-        format!("Sync throughput below target: {:.2} syncs/sec (target: >10)", syncs_per_sec)
+        format!(
+            "Sync throughput below target: {:.2} syncs/sec (target: >10)",
+            syncs_per_sec
+        )
     );
 }
 
@@ -386,7 +413,10 @@ fn test_concurrent_namespace_performance() {
 
     perf_target!(
         ops_per_sec > 10.0,
-        format!("Multi-namespace throughput below target: {:.2} ops/sec (target: >10)", ops_per_sec)
+        format!(
+            "Multi-namespace throughput below target: {:.2} ops/sec (target: >10)",
+            ops_per_sec
+        )
     );
 }
 
@@ -424,6 +454,9 @@ fn test_reopen_performance() {
     // Allow up to 1 second for reopen (includes journal replay and recovery)
     perf_target!(
         avg_open_time < 1000,
-        format!("Reopen time slower than target: {} ms (target: <1000ms)", avg_open_time)
+        format!(
+            "Reopen time slower than target: {} ms (target: <1000ms)",
+            avg_open_time
+        )
     );
 }

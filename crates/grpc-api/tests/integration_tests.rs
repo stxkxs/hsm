@@ -39,7 +39,7 @@ mod config_tests {
 
 #[cfg(test)]
 mod validation_tests {
-    
+
     use grpc_api::validation::*;
 
     #[test]

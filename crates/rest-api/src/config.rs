@@ -133,7 +133,9 @@ impl RestApiConfig {
     pub fn validate(&self) -> Result<(), String> {
         // Check for wildcard origins in production
         if self.cors.allowed_origins.contains(&"*".to_string()) && self.tls.is_some() {
-            return Err("Wildcard CORS origin should not be used with TLS in production".to_string());
+            return Err(
+                "Wildcard CORS origin should not be used with TLS in production".to_string(),
+            );
         }
 
         // Ensure reasonable limits

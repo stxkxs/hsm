@@ -515,13 +515,17 @@ mod tests {
     #[tokio::test]
     async fn test_sgx_backend_creation() {
         let config = SgxConfig::default();
-        let _backend = SgxBackend::new(config).await.expect("Failed to create SGX backend");
+        let _backend = SgxBackend::new(config)
+            .await
+            .expect("Failed to create SGX backend");
     }
 
     #[tokio::test]
     async fn test_sgx_seal_unseal() {
         let config = SgxConfig::default();
-        let backend = SgxBackend::new(config).await.expect("Failed to create SGX backend");
+        let backend = SgxBackend::new(config)
+            .await
+            .expect("Failed to create SGX backend");
 
         let plaintext = PlaintextKey::new(vec![1, 2, 3, 4, 5]);
         let sealed = backend.seal_key(&plaintext).await.expect("Seal failed");

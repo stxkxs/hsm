@@ -527,7 +527,9 @@ impl SessionManager {
         // Verify token with constant-time comparison
         if !session_ref.verify_token(token) {
             metrics::counter!("auth.session.invalid_token").increment(1);
-            return Err(AuthError::InvalidSession("Invalid session token".to_string()));
+            return Err(AuthError::InvalidSession(
+                "Invalid session token".to_string(),
+            ));
         }
 
         // Check if token rotation is recommended
@@ -563,7 +565,9 @@ impl SessionManager {
         // Verify token first with constant-time comparison
         if !session_ref.verify_token(token) {
             metrics::counter!("auth.session.invalid_token").increment(1);
-            return Err(AuthError::InvalidSession("Invalid session token".to_string()));
+            return Err(AuthError::InvalidSession(
+                "Invalid session token".to_string(),
+            ));
         }
 
         // Session hijacking detection: IP check

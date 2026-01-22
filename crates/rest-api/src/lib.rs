@@ -54,4 +54,5 @@ pub mod types;
 
 pub use config::RestApiConfig;
 pub use error::{ApiError, Result};
+pub use routes::{create_router, create_router_with_cors};
 pub use server::RestApiServer;

@@ -15,17 +15,17 @@
 //! - Event existence proofs
 //! - Batch proof generation
 
+use ark_bn254::Fr;
+use ark_std::{rand::SeedableRng, test_rng};
 use audit::{AuditEventBuilder, EventType, OperationResult};
 use chrono::Utc;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use zk_proofs::{
     event_proof::EventProofRequest,
-    merkle_proof::MerkleProofRequest,
     lasso::{LookupArgument, LookupTable},
+    merkle_proof::MerkleProofRequest,
     proof_system::ProofSystem,
 };
-use ark_bn254::Fr;
-use ark_std::{rand::SeedableRng, test_rng};
 
 /// Create a test audit event
 fn create_test_event(sequence: u64) -> audit::AuditEvent {
@@ -59,17 +59,13 @@ fn bench_lasso_lookup(c: &mut Criterion) {
 
         let indices: Vec<usize> = (0..(*table_size / 2)).collect();
 
-        group.bench_with_input(
-            BenchmarkId::new("prove", table_size),
-            table_size,
-            |b, _| {
-                let mut rng = test_rng();
-                b.iter(|| {
-                    let proof = lookup_arg.prove(black_box(&indices), &mut rng);
-                    black_box(proof)
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("prove", table_size), table_size, |b, _| {
+            let mut rng = test_rng();
+            b.iter(|| {
+                let proof = lookup_arg.prove(black_box(&indices), &mut rng);
+                black_box(proof)
+            });
+        });
 
         let mut rng = test_rng();
         let proof = lookup_arg.prove(&indices, &mut rng).unwrap();
@@ -182,7 +178,8 @@ fn bench_event_proof_generation(c: &mut Criterion) {
     let event = create_test_event(42);
 
     for merkle_depth in [0, 2, 4, 8].iter() {
-        let merkle_path: Vec<[u8; 32]> = (0..*merkle_depth).map(|i| [(i % 256) as u8; 32]).collect();
+        let merkle_path: Vec<[u8; 32]> =
+            (0..*merkle_depth).map(|i| [(i % 256) as u8; 32]).collect();
 
         let request = EventProofRequest {
             event: event.clone(),
@@ -248,7 +245,9 @@ fn bench_proof_size(c: &mut Criterion) {
         expected_root: [0u8; 32],
     };
 
-    let (merkle_proof, merkle_metrics) = proof_system.prove_merkle_integrity(&merkle_request).unwrap();
+    let (merkle_proof, merkle_metrics) = proof_system
+        .prove_merkle_integrity(&merkle_request)
+        .unwrap();
     println!("Merkle proof size: {} bytes", merkle_metrics.proof_size);
     assert!(
         merkle_metrics.proof_size < 1024,

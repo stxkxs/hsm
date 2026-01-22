@@ -2,9 +2,7 @@
 //!
 //! This module defines the core `HardwareBackend` trait that all TEE implementations must provide.
 
-use crate::{
-    error::HardwareResult, AttestationReport, PlaintextKey, SealedKey, TeeMeasurements,
-};
+use crate::{error::HardwareResult, AttestationReport, PlaintextKey, SealedKey, TeeMeasurements};
 use async_trait::async_trait;
 
 /// Core hardware backend trait for TEE operations

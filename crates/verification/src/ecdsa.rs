@@ -5,12 +5,12 @@
 //! - Signature correctness
 //! - Deterministic vs randomized nonce generation
 
-use z3::ast::{Ast, BV};
+use z3::ast::Ast;
 use z3::{Config, Context};
 
 use crate::bounded_check::{BoundedChecker, VerificationResult};
 use crate::error::{Result, VerificationError};
-use crate::smt_encoder::{FiniteFieldEncoder, P256Field};
+use crate::smt_encoder::P256Field;
 
 /// ECDSA verification properties
 pub struct EcdsaVerifier;
@@ -35,13 +35,13 @@ impl EcdsaVerifier {
         let message2 = encoder.bv_const("message2");
 
         // Same private key
-        let private_key = encoder.bv_const("private_key");
+        let _private_key = encoder.bv_const("private_key");
 
         // Nonces generated for each message
         let nonce1 = encoder.bv_const("nonce1");
         let nonce2 = encoder.bv_const("nonce2");
 
-        let field = P256Field::new();
+        let _field = P256Field::new();
 
         // Property: If messages are different, nonces must be different
         // (assuming proper nonce generation with randomness or RFC 6979 deterministic)
@@ -81,14 +81,14 @@ impl EcdsaVerifier {
         let s = encoder.bv_const("s");
 
         // Message hash
-        let h = encoder.bv_const("H_m");
+        let _h = encoder.bv_const("H_m");
 
         // Curve order (simplified)
         let n = encoder.bv_from_u64(1u64 << 52);
 
         // Constraints: r and s must be in valid range [1, n-1]
         let zero = encoder.bv_from_u64(0);
-        let one = encoder.bv_from_u64(1);
+        let _one = encoder.bv_from_u64(1);
 
         let r_valid = &r.bvugt(&zero) & &r.bvult(&n);
         let s_valid = &s.bvugt(&zero) & &s.bvult(&n);
@@ -118,7 +118,7 @@ impl EcdsaVerifier {
         let encoder = checker.encoder();
 
         let s = encoder.bv_const("s");
-        let n = encoder.bv_from_u64(1u64 << 52);
+        let _n = encoder.bv_from_u64(1u64 << 52);
         let n_half = encoder.bv_from_u64(1u64 << 51);
 
         // Property: s should be in lower half [0, n/2]
@@ -148,7 +148,7 @@ impl EcdsaVerifier {
         let k1 = encoder.bv_const("k1");
         let k2 = encoder.bv_const("k2");
 
-        let n = encoder.bv_from_u64(1u64 << 52);
+        let _n = encoder.bv_from_u64(1u64 << 52);
 
         // Property: k1 ≠ k2 prevents the attack
         let nonces_different = k1._eq(&k2).not();

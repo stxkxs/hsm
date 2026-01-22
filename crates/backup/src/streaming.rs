@@ -48,8 +48,8 @@ impl<W: AsyncWrite + Unpin> StreamingBackupWriter<W> {
     /// Create a new streaming backup writer
     pub async fn new(mut writer: W, header: StreamingBackupHeader) -> Result<Self> {
         // Write header
-        let header_bytes =
-            postcard::to_allocvec(&header).map_err(|e| BackupError::Serialization(e.to_string()))?;
+        let header_bytes = postcard::to_allocvec(&header)
+            .map_err(|e| BackupError::Serialization(e.to_string()))?;
 
         // Write header length
         writer.write_u32(header_bytes.len() as u32).await?;

@@ -101,7 +101,9 @@ impl GrpcWebConfig {
 
         // Warn about wildcard origins (but allow them)
         if self.allowed_origins.contains(&"*".to_string()) {
-            tracing::warn!("gRPC-Web CORS configured with wildcard origin - not recommended for production");
+            tracing::warn!(
+                "gRPC-Web CORS configured with wildcard origin - not recommended for production"
+            );
         }
 
         Ok(())
@@ -191,7 +193,9 @@ mod tests {
     fn test_development_config() {
         let config = GrpcWebConfig::development();
         assert!(config.enabled);
-        assert!(config.allowed_origins.contains(&"http://localhost:3000".to_string()));
+        assert!(config
+            .allowed_origins
+            .contains(&"http://localhost:3000".to_string()));
     }
 
     #[test]

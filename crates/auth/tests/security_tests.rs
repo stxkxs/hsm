@@ -129,7 +129,9 @@ fn test_expired_session_rejected() {
     let result = session_manager.create_session(identity);
 
     // Expired session should be rejected
-    assert!(session_manager.validate_session(&result.session.id).is_err());
+    assert!(session_manager
+        .validate_session(&result.session.id)
+        .is_err());
 }
 
 #[test]
@@ -140,10 +142,14 @@ fn test_deleted_session_rejected() {
     let result = session_manager.create_session(identity);
 
     // Delete session
-    session_manager.delete_session(&result.session.id).expect("delete session should succeed");
+    session_manager
+        .delete_session(&result.session.id)
+        .expect("delete session should succeed");
 
     // Deleted session should be rejected
-    assert!(session_manager.validate_session(&result.session.id).is_err());
+    assert!(session_manager
+        .validate_session(&result.session.id)
+        .is_err());
 }
 
 #[test]

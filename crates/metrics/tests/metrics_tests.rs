@@ -32,9 +32,7 @@ fn test_metrics_collector_lifecycle() {
 
     // Verify specific metrics exist
     assert!(
-        metrics
-            .iter()
-            .any(|m| m.name() == "hsm_operations_total"),
+        metrics.iter().any(|m| m.name() == "hsm_operations_total"),
         "Operations total metric missing"
     );
     assert!(
@@ -62,9 +60,7 @@ fn test_connection_metrics() {
 
     let metrics = collector.gather();
     assert!(
-        metrics
-            .iter()
-            .any(|m| m.name() == "hsm_active_connections"),
+        metrics.iter().any(|m| m.name() == "hsm_active_connections"),
         "Active connections metric missing"
     );
 }
@@ -83,9 +79,7 @@ fn test_resource_metrics() {
 
     let metrics = collector.gather();
     assert!(
-        metrics
-            .iter()
-            .any(|m| m.name() == "hsm_memory_usage_bytes"),
+        metrics.iter().any(|m| m.name() == "hsm_memory_usage_bytes"),
         "Memory usage metric missing"
     );
     assert!(
@@ -445,9 +439,7 @@ fn test_key_management_metrics() {
     assert!(metrics
         .iter()
         .any(|m| m.name() == "hsm_key_generation_total"));
-    assert!(metrics
-        .iter()
-        .any(|m| m.name() == "hsm_key_deletion_total"));
+    assert!(metrics.iter().any(|m| m.name() == "hsm_key_deletion_total"));
     assert!(metrics.iter().any(|m| m.name() == "hsm_active_keys"));
 }
 
@@ -467,9 +459,7 @@ fn test_authentication_metrics() {
     assert!(metrics
         .iter()
         .any(|m| m.name() == "hsm_auth_failures_total"));
-    assert!(metrics
-        .iter()
-        .any(|m| m.name() == "hsm_active_sessions"));
+    assert!(metrics.iter().any(|m| m.name() == "hsm_active_sessions"));
 }
 
 #[test]
@@ -505,9 +495,7 @@ fn test_audit_metrics() {
     assert!(metrics
         .iter()
         .any(|m| m.name() == "hsm_audit_events_written_total"));
-    assert!(metrics
-        .iter()
-        .any(|m| m.name() == "hsm_audit_queue_depth"));
+    assert!(metrics.iter().any(|m| m.name() == "hsm_audit_queue_depth"));
     assert!(metrics
         .iter()
         .any(|m| m.name() == "hsm_audit_write_duration_seconds"));
@@ -525,19 +513,11 @@ fn test_health_metrics() {
     collector.set_cpu_usage(45.5);
 
     let metrics = collector.gather();
-    assert!(metrics
-        .iter()
-        .any(|m| m.name() == "hsm_component_health"));
+    assert!(metrics.iter().any(|m| m.name() == "hsm_component_health"));
     assert!(metrics.iter().any(|m| m.name() == "hsm_cpu_saturation"));
-    assert!(metrics
-        .iter()
-        .any(|m| m.name() == "hsm_memory_saturation"));
-    assert!(metrics
-        .iter()
-        .any(|m| m.name() == "hsm_disk_saturation"));
-    assert!(metrics
-        .iter()
-        .any(|m| m.name() == "hsm_cpu_usage_percent"));
+    assert!(metrics.iter().any(|m| m.name() == "hsm_memory_saturation"));
+    assert!(metrics.iter().any(|m| m.name() == "hsm_disk_saturation"));
+    assert!(metrics.iter().any(|m| m.name() == "hsm_cpu_usage_percent"));
 }
 
 #[test]
@@ -595,9 +575,7 @@ fn test_cardinality_monitoring() {
     assert_eq!(collector.get_cardinality(), 3);
 
     let metrics = collector.gather();
-    assert!(metrics
-        .iter()
-        .any(|m| m.name() == "hsm_metric_cardinality"));
+    assert!(metrics.iter().any(|m| m.name() == "hsm_metric_cardinality"));
 }
 
 #[test]
@@ -612,12 +590,8 @@ fn test_saturation_clamping() {
     // Metrics should be clamped (verified in implementation)
     let metrics = collector.gather();
     assert!(metrics.iter().any(|m| m.name() == "hsm_cpu_saturation"));
-    assert!(metrics
-        .iter()
-        .any(|m| m.name() == "hsm_memory_saturation"));
-    assert!(metrics
-        .iter()
-        .any(|m| m.name() == "hsm_disk_saturation"));
+    assert!(metrics.iter().any(|m| m.name() == "hsm_memory_saturation"));
+    assert!(metrics.iter().any(|m| m.name() == "hsm_disk_saturation"));
 }
 
 #[test]

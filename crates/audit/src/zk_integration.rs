@@ -3,7 +3,7 @@
 //! This module integrates ZK proofs with the audit logger, enabling
 //! privacy-preserving verification of audit logs.
 
-use crate::{AuditLogger, AuditError};
+use crate::{AuditError, AuditLogger};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -57,7 +57,10 @@ pub trait ZkAuditLogger {
     ///
     /// This proves that an event with the given sequence number exists
     /// in the audit log without revealing sensitive details.
-    fn generate_zk_proof(&self, request: ZkProofRequest) -> Result<ZkProofResponse, ZkIntegrationError>;
+    fn generate_zk_proof(
+        &self,
+        request: ZkProofRequest,
+    ) -> Result<ZkProofResponse, ZkIntegrationError>;
 
     /// Verify a ZK proof
     fn verify_zk_proof(&self, proof: &ZkProofResponse) -> Result<bool, ZkIntegrationError>;
@@ -67,7 +70,10 @@ pub trait ZkAuditLogger {
 }
 
 impl ZkAuditLogger for AuditLogger {
-    fn generate_zk_proof(&self, request: ZkProofRequest) -> Result<ZkProofResponse, ZkIntegrationError> {
+    fn generate_zk_proof(
+        &self,
+        request: ZkProofRequest,
+    ) -> Result<ZkProofResponse, ZkIntegrationError> {
         // Get the event
         let event = self
             .get_event(request.sequence)
@@ -100,8 +106,9 @@ impl ZkAuditLogger for AuditLogger {
             .map_err(ZkIntegrationError::AuditError)?;
 
         // Decode hex string to bytes
-        let root_bytes_vec = hex::decode(&root_hex)
-            .map_err(|e| ZkIntegrationError::ProofGenerationFailed(format!("Hex decode failed: {}", e)))?;
+        let root_bytes_vec = hex::decode(&root_hex).map_err(|e| {
+            ZkIntegrationError::ProofGenerationFailed(format!("Hex decode failed: {}", e))
+        })?;
 
         let mut root_bytes = [0u8; 32];
         if root_bytes_vec.len() >= 32 {
@@ -143,7 +150,10 @@ impl ZkAuditLoggerWrapper {
     }
 
     /// Generate a ZK proof (if enabled)
-    pub fn generate_proof(&self, request: ZkProofRequest) -> Result<ZkProofResponse, ZkIntegrationError> {
+    pub fn generate_proof(
+        &self,
+        request: ZkProofRequest,
+    ) -> Result<ZkProofResponse, ZkIntegrationError> {
         if !self.zk_enabled {
             return Err(ZkIntegrationError::NotAvailable);
         }
@@ -223,7 +233,13 @@ mod tests {
         let logger = AuditLogger::new(config).unwrap();
 
         logger
-            .log_success(EventType::KeyGeneration, "gen_key", "default", "client1", None)
+            .log_success(
+                EventType::KeyGeneration,
+                "gen_key",
+                "default",
+                "client1",
+                None,
+            )
             .unwrap();
 
         let root = logger.get_merkle_root_for_zk().unwrap();

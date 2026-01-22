@@ -57,9 +57,7 @@ impl HardwareBackend for MockHardwareBackend {
 
     async fn unseal_key(&self, sealed: &SealedKey) -> Result<PlaintextKey, HardwareError> {
         if self.fail_unseal {
-            return Err(HardwareError::UnsealingFailed(
-                "Mocked failure".to_string(),
-            ));
+            return Err(HardwareError::UnsealingFailed("Mocked failure".to_string()));
         }
 
         Ok(PlaintextKey::new(sealed.ciphertext.clone()))
@@ -105,7 +103,10 @@ async fn test_hardware_storage_basic_operations() {
     // Store key using async API
     let key_id = KeyId::new("test-key-1");
     let data = b"secret key material";
-    storage.store_key_async(&key_id, data, "test").await.unwrap();
+    storage
+        .store_key_async(&key_id, data, "test")
+        .await
+        .unwrap();
 
     // Verify key exists (sync check is fine)
     assert!(storage.key_exists(&key_id, "test").unwrap());
@@ -179,8 +180,14 @@ async fn test_hardware_storage_namespace_isolation() {
         .unwrap();
 
     // Verify isolation using async API
-    let data_a = storage.load_key_async(&key_id, "namespace-a").await.unwrap();
-    let data_b = storage.load_key_async(&key_id, "namespace-b").await.unwrap();
+    let data_a = storage
+        .load_key_async(&key_id, "namespace-a")
+        .await
+        .unwrap();
+    let data_b = storage
+        .load_key_async(&key_id, "namespace-b")
+        .await
+        .unwrap();
 
     assert_eq!(b"data-a", data_a.as_slice());
     assert_eq!(b"data-b", data_b.as_slice());
@@ -201,7 +208,10 @@ async fn test_hardware_storage_persistence() {
             .unwrap();
 
         storage.create_namespace_async("test").await.unwrap();
-        storage.store_key_async(&key_id, data, "test").await.unwrap();
+        storage
+            .store_key_async(&key_id, data, "test")
+            .await
+            .unwrap();
     }
 
     // Create new storage instance and verify key persisted
@@ -237,10 +247,7 @@ async fn test_hardware_storage_async_operations() {
         .unwrap();
 
     // Load key asynchronously
-    let loaded = storage_mut
-        .load_key_async(&key_id, "test")
-        .await
-        .unwrap();
+    let loaded = storage_mut.load_key_async(&key_id, "test").await.unwrap();
 
     assert_eq!(b"async data", loaded.as_slice());
 }

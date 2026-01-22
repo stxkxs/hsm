@@ -995,9 +995,7 @@ mod tests {
         collector.record_operation("sign", "rsa", "default", OperationStatus::Success);
 
         let metrics = collector.gather();
-        assert!(metrics
-            .iter()
-            .any(|m| m.name() == "hsm_operations_total"));
+        assert!(metrics.iter().any(|m| m.name() == "hsm_operations_total"));
     }
 
     #[test]
@@ -1028,9 +1026,7 @@ mod tests {
         collector.decrement_active_connections("grpc");
 
         let metrics = collector.gather();
-        assert!(metrics
-            .iter()
-            .any(|m| m.name() == "hsm_active_connections"));
+        assert!(metrics.iter().any(|m| m.name() == "hsm_active_connections"));
     }
 
     #[test]

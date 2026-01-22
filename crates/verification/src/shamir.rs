@@ -7,14 +7,11 @@
 //!
 //! This is based on polynomial interpolation over finite fields (GF(2^8) or GF(256)).
 
-use num_bigint::BigUint;
-use num_traits::{One, Zero};
-use z3::ast::{Ast, BV, Int};
-use z3::{Config, Context, Solver, SatResult};
+use z3::ast::{Ast, Int};
+use z3::{Config, Context, SatResult, Solver};
 
-use crate::bounded_check::{BoundedChecker, VerificationResult};
+use crate::bounded_check::VerificationResult;
 use crate::error::{Result, VerificationError};
-use crate::smt_encoder::FiniteFieldEncoder;
 
 /// Shamir's Secret Sharing verifier
 pub struct ShamirVerifier;
@@ -65,8 +62,8 @@ impl ShamirVerifier {
         // Linear polynomial: P(x) = a₀ + a₁·x
 
         // Points: (x₁, y₁) = (1, y₁), (x₂, y₂) = (2, y₂)
-        let x1 = Int::from_i64(&ctx, 1);
-        let x2 = Int::from_i64(&ctx, 2);
+        let _x1 = Int::from_i64(&ctx, 1);
+        let _x2 = Int::from_i64(&ctx, 2);
         let y1 = Int::new_const(&ctx, "y1");
         let y2 = Int::new_const(&ctx, "y2");
 
@@ -146,8 +143,8 @@ impl ShamirVerifier {
         let secret2 = Int::from_i64(&ctx, 100);
 
         // Two shares (x₁, y₁) and (x₂, y₂) - these are the k-1 shares
-        let x1 = Int::from_i64(&ctx, 1);
-        let x2 = Int::from_i64(&ctx, 2);
+        let _x1 = Int::from_i64(&ctx, 1);
+        let _x2 = Int::from_i64(&ctx, 2);
         let y1 = Int::from_i64(&ctx, 10); // Fixed share value
         let y2 = Int::from_i64(&ctx, 20); // Fixed share value
 
@@ -164,7 +161,8 @@ impl ShamirVerifier {
         // Polynomial 1: P₁(x) = secret1 + a₁¹x + a₂¹x²
         // Must satisfy: P₁(1) = y₁, P₁(2) = y₂
         let p1_at_1 = &(&secret1 + &a1_1) + &a2_1;
-        let p1_at_2 = &(&secret1 + &(&a1_1 * &Int::from_i64(&ctx, 2))) + &(&a2_1 * &Int::from_i64(&ctx, 4));
+        let p1_at_2 =
+            &(&secret1 + &(&a1_1 * &Int::from_i64(&ctx, 2))) + &(&a2_1 * &Int::from_i64(&ctx, 4));
 
         solver.assert(&p1_at_1._eq(&y1));
         solver.assert(&p1_at_2._eq(&y2));
@@ -172,7 +170,8 @@ impl ShamirVerifier {
         // Polynomial 2: P₂(x) = secret2 + a₁²x + a₂²x²
         // Must satisfy: P₂(1) = y₁, P₂(2) = y₂ (same share values!)
         let p2_at_1 = &(&secret2 + &a1_2) + &a2_2;
-        let p2_at_2 = &(&secret2 + &(&a1_2 * &Int::from_i64(&ctx, 2))) + &(&a2_2 * &Int::from_i64(&ctx, 4));
+        let p2_at_2 =
+            &(&secret2 + &(&a1_2 * &Int::from_i64(&ctx, 2))) + &(&a2_2 * &Int::from_i64(&ctx, 4));
 
         solver.assert(&p2_at_1._eq(&y1));
         solver.assert(&p2_at_2._eq(&y2));
@@ -183,7 +182,9 @@ impl ShamirVerifier {
             SatResult::Sat => {
                 if let Some(model) = solver.get_model() {
                     println!("        Information-theoretic security verified:");
-                    println!("          Same 2 shares consistent with both secret1=42 and secret2=100");
+                    println!(
+                        "          Same 2 shares consistent with both secret1=42 and secret2=100"
+                    );
                     if let Some(a1_1_val) = model.eval(&a1_1, true) {
                         println!("          For secret1: a1={}", a1_1_val);
                     }
@@ -258,7 +259,9 @@ impl ShamirVerifier {
         // To avoid fractions, multiply by 8:
         // 8·P(0) = 15·y₁ - 10·y₃ + 3·y₅
 
-        let secret_135_times_8 = &(&(&shares_y[0] * &Int::from_i64(&ctx, 15)) + &(&shares_y[2] * &Int::from_i64(&ctx, -10))) + &(&shares_y[4] * &Int::from_i64(&ctx, 3));
+        let secret_135_times_8 = &(&(&shares_y[0] * &Int::from_i64(&ctx, 15))
+            + &(&shares_y[2] * &Int::from_i64(&ctx, -10)))
+            + &(&shares_y[4] * &Int::from_i64(&ctx, 3));
 
         // Property: secret_123 = a₀ (direct reconstruction)
         // Property: secret_135_times_8 = 8·a₀ (scaled reconstruction)

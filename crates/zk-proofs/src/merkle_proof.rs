@@ -18,18 +18,17 @@
 //! - Proof verification: < 10ms
 //! - Proof size: < 1KB
 
-use crate::lasso::{LookupArgument, LookupTable, HashLookupTable};
+use crate::lasso::{HashLookupTable, LookupArgument, LookupTable};
 use ark_bn254::{Bn254, Fr};
 use ark_groth16::{
-    Groth16, PreparedVerifyingKey, Proof, ProvingKey, VerifyingKey,
-    prepare_verifying_key,
+    prepare_verifying_key, Groth16, PreparedVerifyingKey, Proof, ProvingKey, VerifyingKey,
 };
-use ark_snark::SNARK;
 use ark_relations::{
     lc,
     r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable},
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_snark::SNARK;
 use ark_std::{
     rand::{CryptoRng, RngCore},
     UniformRand,
@@ -251,7 +250,11 @@ impl MerkleProofSystem {
     /// Setup the proof system (generates proving and verifying keys)
     ///
     /// This should be done once during initialization.
-    pub fn setup<R: RngCore + CryptoRng>(&mut self, max_leaves: usize, rng: &mut R) -> MerkleProofResult<()> {
+    pub fn setup<R: RngCore + CryptoRng>(
+        &mut self,
+        max_leaves: usize,
+        rng: &mut R,
+    ) -> MerkleProofResult<()> {
         // Create a dummy circuit for setup with consistent data
         let dummy_leaves = vec![[0u8; 32]; max_leaves];
         // Compute the actual Merkle root for these leaves to ensure constraints are satisfied
@@ -282,10 +285,9 @@ impl MerkleProofSystem {
         request: &MerkleProofRequest,
         rng: &mut R,
     ) -> MerkleProofResult<MerkleTreeProof> {
-        let pk = self
-            .proving_key
-            .as_ref()
-            .ok_or_else(|| MerkleProofError::ProofGenerationFailed("Setup not called".to_string()))?;
+        let pk = self.proving_key.as_ref().ok_or_else(|| {
+            MerkleProofError::ProofGenerationFailed("Setup not called".to_string())
+        })?;
 
         // Validate leaf count matches setup
         if request.leaf_hashes.len() != self.max_leaves {
@@ -297,10 +299,7 @@ impl MerkleProofSystem {
         }
 
         // Create circuit
-        let circuit = MerkleProofCircuit::new(
-            request.leaf_hashes.clone(),
-            request.expected_root,
-        );
+        let circuit = MerkleProofCircuit::new(request.leaf_hashes.clone(), request.expected_root);
 
         // Generate proof using Groth16::prove
         let proof = Groth16::<Bn254>::prove(pk, circuit, rng)
@@ -308,11 +307,11 @@ impl MerkleProofSystem {
 
         // Calculate proof size
         let mut bytes = Vec::new();
-        proof
-            .serialize_compressed(&mut bytes)
-            .map_err(|_: ark_serialize::SerializationError| {
+        proof.serialize_compressed(&mut bytes).map_err(
+            |_: ark_serialize::SerializationError| {
                 MerkleProofError::SerializationError("Serialization failed".to_string())
-            })?;
+            },
+        )?;
 
         Ok(MerkleTreeProof {
             proof,
@@ -334,8 +333,12 @@ impl MerkleProofSystem {
         let public_inputs = vec![merkle_root_field];
 
         // Verify proof using SNARK trait
-        let valid = <Groth16<Bn254> as SNARK<Fr>>::verify_with_processed_vk(pvk, &public_inputs, &proof.proof)
-            .map_err(|e| MerkleProofError::VerificationFailed(format!("Verification failed: {}", e)))?;
+        let valid = <Groth16<Bn254> as SNARK<Fr>>::verify_with_processed_vk(
+            pvk,
+            &public_inputs,
+            &proof.proof,
+        )
+        .map_err(|e| MerkleProofError::VerificationFailed(format!("Verification failed: {}", e)))?;
 
         Ok(valid)
     }
@@ -368,8 +371,7 @@ mod proof_serde {
         D: Deserializer<'de>,
     {
         let bytes: Vec<u8> = serde::de::Deserialize::deserialize(deserializer)?;
-        Proof::<Bn254>::deserialize_compressed(&bytes[..])
-            .map_err(serde::de::Error::custom)
+        Proof::<Bn254>::deserialize_compressed(&bytes[..]).map_err(serde::de::Error::custom)
     }
 }
 
@@ -381,12 +383,7 @@ mod tests {
 
     #[test]
     fn test_merkle_root_computation() {
-        let leaves = vec![
-            [1u8; 32],
-            [2u8; 32],
-            [3u8; 32],
-            [4u8; 32],
-        ];
+        let leaves = vec![[1u8; 32], [2u8; 32], [3u8; 32], [4u8; 32]];
 
         let root = MerkleProofCircuit::compute_merkle_root(&leaves);
         assert_ne!(root, [0u8; 32]);
@@ -401,12 +398,7 @@ mod tests {
         proof_system.setup(4, &mut rng).unwrap();
 
         // Create request with same number of leaves as setup
-        let leaves = vec![
-            [1u8; 32],
-            [2u8; 32],
-            [3u8; 32],
-            [4u8; 32],
-        ];
+        let leaves = vec![[1u8; 32], [2u8; 32], [3u8; 32], [4u8; 32]];
         let root = MerkleProofCircuit::compute_merkle_root(&leaves);
 
         let request = MerkleProofRequest {

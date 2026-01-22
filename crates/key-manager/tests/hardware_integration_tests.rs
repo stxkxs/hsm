@@ -64,9 +64,7 @@ impl HardwareBackend for MockHardwareBackend {
 
     async fn unseal_key(&self, sealed: &SealedKey) -> Result<PlaintextKey, HardwareError> {
         if self.fail_unseal {
-            return Err(HardwareError::UnsealingFailed(
-                "Mocked failure".to_string(),
-            ));
+            return Err(HardwareError::UnsealingFailed("Mocked failure".to_string()));
         }
 
         Ok(PlaintextKey::new(sealed.ciphertext.clone()))
@@ -86,7 +84,9 @@ impl HardwareBackend for MockHardwareBackend {
 
     async fn remote_sign(&self, _key_id: &str, message: &[u8]) -> Result<Vec<u8>, HardwareError> {
         if self.fail_sign {
-            return Err(HardwareError::RemoteSigningFailed("Mocked failure".to_string()));
+            return Err(HardwareError::RemoteSigningFailed(
+                "Mocked failure".to_string(),
+            ));
         }
 
         // Return a mock signature (hash of message)
@@ -111,9 +111,12 @@ async fn test_hardware_key_manager_generation() {
     let temp_dir = TempDir::new().unwrap();
     let hw_backend = Box::new(MockHardwareBackend::new());
 
-    let storage = HardwareStorageBackend::new(temp_dir.path().to_path_buf(), Box::new(MockHardwareBackend::new()))
-        .await
-        .unwrap();
+    let storage = HardwareStorageBackend::new(
+        temp_dir.path().to_path_buf(),
+        Box::new(MockHardwareBackend::new()),
+    )
+    .await
+    .unwrap();
 
     let manager = HardwareKeyManager::new(storage, hw_backend).await.unwrap();
 
@@ -141,9 +144,12 @@ async fn test_hardware_key_manager_remote_sign() {
     let temp_dir = TempDir::new().unwrap();
     let hw_backend = Box::new(MockHardwareBackend::new());
 
-    let storage = HardwareStorageBackend::new(temp_dir.path().to_path_buf(), Box::new(MockHardwareBackend::new()))
-        .await
-        .unwrap();
+    let storage = HardwareStorageBackend::new(
+        temp_dir.path().to_path_buf(),
+        Box::new(MockHardwareBackend::new()),
+    )
+    .await
+    .unwrap();
 
     let manager = HardwareKeyManager::new(storage, hw_backend).await.unwrap();
 
@@ -177,9 +183,12 @@ async fn test_hardware_key_manager_list_keys() {
     let temp_dir = TempDir::new().unwrap();
     let hw_backend = Box::new(MockHardwareBackend::new());
 
-    let storage = HardwareStorageBackend::new(temp_dir.path().to_path_buf(), Box::new(MockHardwareBackend::new()))
-        .await
-        .unwrap();
+    let storage = HardwareStorageBackend::new(
+        temp_dir.path().to_path_buf(),
+        Box::new(MockHardwareBackend::new()),
+    )
+    .await
+    .unwrap();
 
     let manager = HardwareKeyManager::new(storage, hw_backend).await.unwrap();
 
@@ -203,33 +212,42 @@ async fn test_hardware_key_manager_list_keys() {
 
     // List all keys
     let all_keys = manager
-        .list_keys_async("test", KeyFilter {
-            key_type: None,
-            state: None,
-            labels: HashMap::new(),
-        })
+        .list_keys_async(
+            "test",
+            KeyFilter {
+                key_type: None,
+                state: None,
+                labels: HashMap::new(),
+            },
+        )
         .await
         .unwrap();
     assert_eq!(all_keys.len(), 5);
 
     // List only Ed25519 keys
     let ed25519_keys = manager
-        .list_keys_async("test", KeyFilter {
-            key_type: Some(KeyType::Ed25519),
-            state: None,
-            labels: HashMap::new(),
-        })
+        .list_keys_async(
+            "test",
+            KeyFilter {
+                key_type: Some(KeyType::Ed25519),
+                state: None,
+                labels: HashMap::new(),
+            },
+        )
         .await
         .unwrap();
     assert_eq!(ed25519_keys.len(), 3);
 
     // List only ECDSA keys
     let ecdsa_keys = manager
-        .list_keys_async("test", KeyFilter {
-            key_type: Some(KeyType::EcdsaP256),
-            state: None,
-            labels: HashMap::new(),
-        })
+        .list_keys_async(
+            "test",
+            KeyFilter {
+                key_type: Some(KeyType::EcdsaP256),
+                state: None,
+                labels: HashMap::new(),
+            },
+        )
         .await
         .unwrap();
     assert_eq!(ecdsa_keys.len(), 2);
@@ -240,9 +258,12 @@ async fn test_hardware_key_manager_key_rotation() {
     let temp_dir = TempDir::new().unwrap();
     let hw_backend = Box::new(MockHardwareBackend::new());
 
-    let storage = HardwareStorageBackend::new(temp_dir.path().to_path_buf(), Box::new(MockHardwareBackend::new()))
-        .await
-        .unwrap();
+    let storage = HardwareStorageBackend::new(
+        temp_dir.path().to_path_buf(),
+        Box::new(MockHardwareBackend::new()),
+    )
+    .await
+    .unwrap();
 
     let manager = HardwareKeyManager::new(storage, hw_backend).await.unwrap();
 
@@ -260,10 +281,7 @@ async fn test_hardware_key_manager_key_rotation() {
     let old_key_id = manager.generate_key_async(spec).await.unwrap();
 
     // Rotate key
-    let new_key_id = manager
-        .rotate_key_async(&old_key_id, "test")
-        .await
-        .unwrap();
+    let new_key_id = manager.rotate_key_async(&old_key_id, "test").await.unwrap();
 
     // Verify new key exists
     let new_key = manager.get_key_async(&new_key_id, "test").await.unwrap();
@@ -281,9 +299,12 @@ async fn test_hardware_key_manager_delete_key() {
     let temp_dir = TempDir::new().unwrap();
     let hw_backend = Box::new(MockHardwareBackend::new());
 
-    let storage = HardwareStorageBackend::new(temp_dir.path().to_path_buf(), Box::new(MockHardwareBackend::new()))
-        .await
-        .unwrap();
+    let storage = HardwareStorageBackend::new(
+        temp_dir.path().to_path_buf(),
+        Box::new(MockHardwareBackend::new()),
+    )
+    .await
+    .unwrap();
 
     let manager = HardwareKeyManager::new(storage, hw_backend).await.unwrap();
 
@@ -313,9 +334,12 @@ async fn test_hardware_key_manager_namespace_isolation() {
     let temp_dir = TempDir::new().unwrap();
     let hw_backend = Box::new(MockHardwareBackend::new());
 
-    let storage = HardwareStorageBackend::new(temp_dir.path().to_path_buf(), Box::new(MockHardwareBackend::new()))
-        .await
-        .unwrap();
+    let storage = HardwareStorageBackend::new(
+        temp_dir.path().to_path_buf(),
+        Box::new(MockHardwareBackend::new()),
+    )
+    .await
+    .unwrap();
 
     let manager = HardwareKeyManager::new(storage, hw_backend).await.unwrap();
 
@@ -342,12 +366,24 @@ async fn test_hardware_key_manager_namespace_isolation() {
     let key_id_b = manager.generate_key_async(spec_b).await.unwrap();
 
     // Can access key from its own namespace
-    assert!(manager.get_key_async(&key_id_a, "namespace-a").await.is_ok());
-    assert!(manager.get_key_async(&key_id_b, "namespace-b").await.is_ok());
+    assert!(manager
+        .get_key_async(&key_id_a, "namespace-a")
+        .await
+        .is_ok());
+    assert!(manager
+        .get_key_async(&key_id_b, "namespace-b")
+        .await
+        .is_ok());
 
     // Cannot access key from different namespace
-    assert!(manager.get_key_async(&key_id_a, "namespace-b").await.is_err());
-    assert!(manager.get_key_async(&key_id_b, "namespace-a").await.is_err());
+    assert!(manager
+        .get_key_async(&key_id_a, "namespace-b")
+        .await
+        .is_err());
+    assert!(manager
+        .get_key_async(&key_id_b, "namespace-a")
+        .await
+        .is_err());
 }
 
 #[tokio::test]
@@ -355,9 +391,12 @@ async fn test_hardware_key_manager_sync_api() {
     let temp_dir = TempDir::new().unwrap();
     let hw_backend = Box::new(MockHardwareBackend::new());
 
-    let storage = HardwareStorageBackend::new(temp_dir.path().to_path_buf(), Box::new(MockHardwareBackend::new()))
-        .await
-        .unwrap();
+    let storage = HardwareStorageBackend::new(
+        temp_dir.path().to_path_buf(),
+        Box::new(MockHardwareBackend::new()),
+    )
+    .await
+    .unwrap();
 
     let manager = HardwareKeyManager::new(storage, hw_backend).await.unwrap();
 
@@ -386,9 +425,12 @@ async fn test_hardware_key_manager_operation_counter() {
     let temp_dir = TempDir::new().unwrap();
     let hw_backend = Box::new(MockHardwareBackend::new());
 
-    let storage = HardwareStorageBackend::new(temp_dir.path().to_path_buf(), Box::new(MockHardwareBackend::new()))
-        .await
-        .unwrap();
+    let storage = HardwareStorageBackend::new(
+        temp_dir.path().to_path_buf(),
+        Box::new(MockHardwareBackend::new()),
+    )
+    .await
+    .unwrap();
 
     let manager = HardwareKeyManager::new(storage, hw_backend).await.unwrap();
 
@@ -421,9 +463,7 @@ async fn test_hardware_key_manager_operation_counter() {
     }
 
     // 6th operation should fail (max_operations reached)
-    let result = manager
-        .remote_sign_async(&key_id, "test", b"message")
-        .await;
+    let result = manager.remote_sign_async(&key_id, "test", b"message").await;
     assert!(result.is_err());
 }
 
@@ -434,9 +474,12 @@ async fn test_hardware_key_manager_persistence() {
     let key_id = {
         // Create first instance
         let hw_backend = Box::new(MockHardwareBackend::new());
-        let storage = HardwareStorageBackend::new(temp_dir.path().to_path_buf(), Box::new(MockHardwareBackend::new()))
-            .await
-            .unwrap();
+        let storage = HardwareStorageBackend::new(
+            temp_dir.path().to_path_buf(),
+            Box::new(MockHardwareBackend::new()),
+        )
+        .await
+        .unwrap();
 
         let manager = HardwareKeyManager::new(storage, hw_backend).await.unwrap();
         manager.create_namespace_async("test").await.unwrap();
@@ -455,9 +498,12 @@ async fn test_hardware_key_manager_persistence() {
     // Create second instance and verify key persisted
     {
         let hw_backend = Box::new(MockHardwareBackend::new());
-        let storage = HardwareStorageBackend::new(temp_dir.path().to_path_buf(), Box::new(MockHardwareBackend::new()))
-            .await
-            .unwrap();
+        let storage = HardwareStorageBackend::new(
+            temp_dir.path().to_path_buf(),
+            Box::new(MockHardwareBackend::new()),
+        )
+        .await
+        .unwrap();
 
         let manager = HardwareKeyManager::new(storage, hw_backend).await.unwrap();
 

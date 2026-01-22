@@ -1,4 +1,5 @@
-  //! Cryptographic hash functions.
+
+//! Cryptographic hash functions.
 //!
 //! This module provides implementations of cryptographically secure hash
 //! algorithms from the SHA-2 and SHA-3 families.

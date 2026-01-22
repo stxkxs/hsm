@@ -210,18 +210,13 @@ impl HardwareStorageBackend {
             sealed_at: sealed.metadata.sealed_at,
             algorithm: sealed.metadata.algorithm.clone(),
         };
-        self.persist_metadata(key_id, &metadata, namespace)
-            .await?;
+        self.persist_metadata(key_id, &metadata, namespace).await?;
 
         Ok(())
     }
 
     /// Load sealed key from disk
-    async fn load_sealed_key(
-        &self,
-        key_id: &KeyId,
-        namespace: &str,
-    ) -> StorageResult<SealedKey> {
+    async fn load_sealed_key(&self, key_id: &KeyId, namespace: &str) -> StorageResult<SealedKey> {
         let path = self.sealed_key_path(key_id, namespace);
 
         if !path.exists() {
@@ -264,11 +259,7 @@ impl HardwareStorageBackend {
     }
 
     /// Load metadata from disk
-    async fn load_metadata(
-        &self,
-        key_id: &KeyId,
-        namespace: &str,
-    ) -> StorageResult<KeyMetadata> {
+    async fn load_metadata(&self, key_id: &KeyId, namespace: &str) -> StorageResult<KeyMetadata> {
         // Check cache first
         let cache_key = format!("{}:{}", namespace, key_id.as_str());
         if let Some(metadata) = self.metadata_cache.get(&cache_key) {
@@ -309,30 +300,22 @@ impl StorageBackend for HardwareStorageBackend {
         // StorageBackend trait is sync, but we need async
         // Use tokio runtime to block on async operation
         let runtime = tokio::runtime::Handle::current();
-        runtime.block_on(async {
-            self.store_key_async(key_id, data, namespace).await
-        })
+        runtime.block_on(async { self.store_key_async(key_id, data, namespace).await })
     }
 
     fn load_key(&self, key_id: &KeyId, namespace: &str) -> StorageResult<Vec<u8>> {
         let runtime = tokio::runtime::Handle::current();
-        runtime.block_on(async {
-            self.load_key_async(key_id, namespace).await
-        })
+        runtime.block_on(async { self.load_key_async(key_id, namespace).await })
     }
 
     fn delete_key(&mut self, key_id: &KeyId, namespace: &str) -> StorageResult<()> {
         let runtime = tokio::runtime::Handle::current();
-        runtime.block_on(async {
-            self.delete_key_async(key_id, namespace).await
-        })
+        runtime.block_on(async { self.delete_key_async(key_id, namespace).await })
     }
 
     fn list_keys(&self, namespace: &str) -> StorageResult<Vec<KeyId>> {
         let runtime = tokio::runtime::Handle::current();
-        runtime.block_on(async {
-            self.list_keys_async(namespace).await
-        })
+        runtime.block_on(async { self.list_keys_async(namespace).await })
     }
 
     fn key_exists(&self, key_id: &KeyId, namespace: &str) -> StorageResult<bool> {
@@ -423,19 +406,14 @@ impl HardwareStorageBackend {
 
         info!(
             "Stored key {} (backend: {:?})",
-            key_id,
-            sealed.metadata.backend_type
+            key_id, sealed.metadata.backend_type
         );
 
         Ok(())
     }
 
     /// Async version of load_key
-    pub async fn load_key_async(
-        &self,
-        key_id: &KeyId,
-        namespace: &str,
-    ) -> StorageResult<Vec<u8>> {
+    pub async fn load_key_async(&self, key_id: &KeyId, namespace: &str) -> StorageResult<Vec<u8>> {
         debug!(
             "Loading key {} from namespace {} (hardware-backed)",
             key_id, namespace
@@ -457,11 +435,7 @@ impl HardwareStorageBackend {
     }
 
     /// Async version of delete_key
-    pub async fn delete_key_async(
-        &self,
-        key_id: &KeyId,
-        namespace: &str,
-    ) -> StorageResult<()> {
+    pub async fn delete_key_async(&self, key_id: &KeyId, namespace: &str) -> StorageResult<()> {
         debug!("Deleting key {} from namespace {}", key_id, namespace);
 
         let sealed_path = self.sealed_key_path(key_id, namespace);
@@ -605,7 +579,10 @@ mod tests {
 
     #[async_trait::async_trait]
     impl HardwareBackend for MockHardwareBackend {
-        async fn seal_key(&self, plaintext: &PlaintextKey) -> Result<SealedKey, hsm_hardware_backend::HardwareError> {
+        async fn seal_key(
+            &self,
+            plaintext: &PlaintextKey,
+        ) -> Result<SealedKey, hsm_hardware_backend::HardwareError> {
             use hsm_hardware_backend::{BackendType, SealedKeyMetadata};
 
             Ok(SealedKey {
@@ -621,11 +598,18 @@ mod tests {
             })
         }
 
-        async fn unseal_key(&self, sealed: &SealedKey) -> Result<PlaintextKey, hsm_hardware_backend::HardwareError> {
+        async fn unseal_key(
+            &self,
+            sealed: &SealedKey,
+        ) -> Result<PlaintextKey, hsm_hardware_backend::HardwareError> {
             Ok(PlaintextKey::new(sealed.ciphertext.clone())) // Mock: just copy ciphertext
         }
 
-        async fn attest(&self, _nonce: Option<&[u8]>) -> Result<hsm_hardware_backend::AttestationReport, hsm_hardware_backend::HardwareError> {
+        async fn attest(
+            &self,
+            _nonce: Option<&[u8]>,
+        ) -> Result<hsm_hardware_backend::AttestationReport, hsm_hardware_backend::HardwareError>
+        {
             unimplemented!("Mock backend doesn't support attestation")
         }
 
@@ -637,7 +621,11 @@ mod tests {
             unimplemented!("Mock backend doesn't support attestation")
         }
 
-        async fn remote_sign(&self, _key_id: &str, _message: &[u8]) -> Result<Vec<u8>, hsm_hardware_backend::HardwareError> {
+        async fn remote_sign(
+            &self,
+            _key_id: &str,
+            _message: &[u8],
+        ) -> Result<Vec<u8>, hsm_hardware_backend::HardwareError> {
             unimplemented!("Mock backend doesn't support signing")
         }
 

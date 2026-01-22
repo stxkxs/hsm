@@ -8,21 +8,15 @@ use hsm_verification::*;
 
 fn bench_ed25519_verification(c: &mut Criterion) {
     c.bench_function("ed25519_signature_soundness", |b| {
-        b.iter(|| {
-            black_box(ed25519::Ed25519Verifier::verify_signature_soundness()).unwrap()
-        })
+        b.iter(|| black_box(ed25519::Ed25519Verifier::verify_signature_soundness()).unwrap())
     });
 
     c.bench_function("ed25519_scalar_mult_properties", |b| {
-        b.iter(|| {
-            black_box(ed25519::Ed25519Verifier::verify_scalar_mult_properties()).unwrap()
-        })
+        b.iter(|| black_box(ed25519::Ed25519Verifier::verify_scalar_mult_properties()).unwrap())
     });
 
     c.bench_function("ed25519_verification_equation", |b| {
-        b.iter(|| {
-            black_box(ed25519::Ed25519Verifier::verify_verification_equation()).unwrap()
-        })
+        b.iter(|| black_box(ed25519::Ed25519Verifier::verify_verification_equation()).unwrap())
     });
 }
 
@@ -40,9 +34,7 @@ fn bench_ecdsa_verification(c: &mut Criterion) {
     });
 
     c.bench_function("ecdsa_nonce_reuse_prevention", |b| {
-        b.iter(|| {
-            black_box(ecdsa::EcdsaVerifier::verify_nonce_reuse_attack_prevention()).unwrap()
-        })
+        b.iter(|| black_box(ecdsa::EcdsaVerifier::verify_nonce_reuse_attack_prevention()).unwrap())
     });
 }
 
@@ -66,9 +58,7 @@ fn bench_rsa_verification(c: &mut Criterion) {
 
 fn bench_shamir_verification(c: &mut Criterion) {
     c.bench_function("shamir_polynomial_construction", |b| {
-        b.iter(|| {
-            black_box(shamir::ShamirVerifier::verify_polynomial_construction()).unwrap()
-        })
+        b.iter(|| black_box(shamir::ShamirVerifier::verify_polynomial_construction()).unwrap())
     });
 
     c.bench_function("shamir_lagrange_interpolation", |b| {

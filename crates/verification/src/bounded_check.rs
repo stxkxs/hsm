@@ -5,10 +5,10 @@
 //! This module implements bounded verification techniques to formally verify
 //! cryptographic operations within bounded field sizes using SMT solvers.
 
-use z3::ast::{Ast, Bool, BV};
-use z3::{Context, Solver, SatResult};
+use z3::ast::{Ast, BV};
+use z3::{Context, SatResult, Solver};
 
-use crate::error::{Result, VerificationError};
+use crate::error::Result;
 use crate::smt_encoder::FiniteFieldEncoder;
 
 /// Result of a bounded verification check
@@ -24,6 +24,7 @@ pub enum VerificationResult {
 
 /// Bounded verification checker
 pub struct BoundedChecker<'ctx> {
+    #[allow(dead_code)]
     context: &'ctx Context,
     solver: Solver<'ctx>,
     encoder: FiniteFieldEncoder<'ctx>,
@@ -192,6 +193,7 @@ pub fn verify_collision_resistance<'ctx>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use z3::ast::Bool;
     use z3::Config;
 
     #[test]

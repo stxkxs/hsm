@@ -331,7 +331,8 @@ mod tests {
     #[test]
     fn test_sign_request_deserialization() {
         let json = r#"{"data": "SGVsbG8gV29ybGQ="}"#;
-        let request: SignRequest = serde_json::from_str(json).expect("deserialization should succeed");
+        let request: SignRequest =
+            serde_json::from_str(json).expect("deserialization should succeed");
         assert_eq!(request.data, "SGVsbG8gV29ybGQ=");
     }
 }

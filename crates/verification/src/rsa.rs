@@ -6,12 +6,11 @@
 //! - Encryption/decryption correctness
 //! - Signature generation and verification
 
-use z3::ast::{Ast, BV};
+use z3::ast::Ast;
 use z3::{Config, Context};
 
 use crate::bounded_check::{BoundedChecker, VerificationResult};
 use crate::error::{Result, VerificationError};
-use crate::smt_encoder::FiniteFieldEncoder;
 
 /// RSA verification properties
 pub struct RsaVerifier;
@@ -30,8 +29,8 @@ impl RsaVerifier {
 
         // Symbolic variables
         let m = encoder.bv_const("message");
-        let e = encoder.bv_const("public_exponent");
-        let d = encoder.bv_const("private_exponent");
+        let _e = encoder.bv_const("public_exponent");
+        let _d = encoder.bv_const("private_exponent");
         let n = encoder.bv_const("modulus");
 
         // Constraint: message < modulus
@@ -105,7 +104,7 @@ impl RsaVerifier {
 
         // Constant-time equality check
         let eq1 = encoder.ct_eq(&padding1, &expected);
-        let eq2 = encoder.ct_eq(&padding2, &expected);
+        let _eq2 = encoder.ct_eq(&padding2, &expected);
 
         // Property: Both comparisons should execute (symbolically) in constant time
         // This is verified by ensuring both paths are feasible
@@ -129,8 +128,8 @@ impl RsaVerifier {
         let encoder = checker.encoder();
 
         // PSS components
-        let message_hash = encoder.bv_const("message_hash");
-        let salt = encoder.bv_const("salt");
+        let _message_hash = encoder.bv_const("message_hash");
+        let _salt = encoder.bv_const("salt");
         let salt_length = encoder.bv_const("salt_length");
 
         // Typical salt length is 32 bytes (256 bits) for SHA-256
@@ -138,7 +137,8 @@ impl RsaVerifier {
         let max_salt_length = encoder.bv_from_u64(64); // Up to 64 bytes
 
         // Property: Salt length is in valid range
-        let salt_valid = &salt_length.bvuge(&min_salt_length) & &salt_length.bvule(&max_salt_length);
+        let salt_valid =
+            &salt_length.bvuge(&min_salt_length) & &salt_length.bvule(&max_salt_length);
 
         checker.verify_property(&salt_valid)
     }
@@ -153,7 +153,7 @@ impl RsaVerifier {
         let encoder = checker.encoder();
 
         // Message and signature
-        let message = encoder.bv_const("message");
+        let _message = encoder.bv_const("message");
         let signature = encoder.bv_const("signature");
         let modulus = encoder.bv_const("modulus");
 

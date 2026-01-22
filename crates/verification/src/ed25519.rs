@@ -6,12 +6,12 @@
 //! - Scalar multiplication correctness
 //! - Base point properties
 
-use z3::ast::{Ast, BV};
+use z3::ast::Ast;
 use z3::{Config, Context};
 
 use crate::bounded_check::{BoundedChecker, VerificationResult};
 use crate::error::{Result, VerificationError};
-use crate::smt_encoder::{Ed25519Field, FiniteFieldEncoder};
+use crate::smt_encoder::Ed25519Field;
 
 /// Ed25519 verification properties
 pub struct Ed25519Verifier;
@@ -30,11 +30,11 @@ impl Ed25519Verifier {
         let encoder = checker.encoder();
 
         // Create symbolic variables
-        let message = encoder.bv_const("message");
+        let _message = encoder.bv_const("message");
         let private_key = encoder.bv_const("private_key");
-        let public_key = encoder.bv_const("public_key");
+        let _public_key = encoder.bv_const("public_key");
 
-        let field = Ed25519Field::new();
+        let _field = Ed25519Field::new();
 
         // Constraint: private key must be in valid range [0, l)
         let l_bv = encoder.bv_from_u64(1u64 << 52); // Simplified for bounded verification
@@ -68,7 +68,7 @@ impl Ed25519Verifier {
         let k1 = encoder.bv_const("k1");
         let k2 = encoder.bv_const("k2");
 
-        let field = Ed25519Field::new();
+        let _field = Ed25519Field::new();
         let l_bv = encoder.bv_from_u64(1u64 << 52); // Simplified order
 
         // Property: (k1 + k2) mod l is commutative
@@ -100,7 +100,7 @@ impl Ed25519Verifier {
 
         // For bounded verification, we verify that the hash is deterministic
         // Property: ∀ m. H(m) is unique
-        let message = encoder.bv_const("message");
+        let _message = encoder.bv_const("message");
         let hash1 = encoder.bv_const("hash1");
         let hash2 = encoder.bv_const("hash2");
 
@@ -126,13 +126,13 @@ impl Ed25519Verifier {
 
         // Symbolic variables for verification equation
         let s = encoder.bv_const("S"); // Signature scalar
-        let r_x = encoder.bv_const("R_x"); // Signature point R x-coordinate
-        let r_y = encoder.bv_const("R_y"); // Signature point R y-coordinate
-        let a_x = encoder.bv_const("A_x"); // Public key A x-coordinate
-        let a_y = encoder.bv_const("A_y"); // Public key A y-coordinate
+        let _r_x = encoder.bv_const("R_x"); // Signature point R x-coordinate
+        let _r_y = encoder.bv_const("R_y"); // Signature point R y-coordinate
+        let _a_x = encoder.bv_const("A_x"); // Public key A x-coordinate
+        let _a_y = encoder.bv_const("A_y"); // Public key A y-coordinate
         let h = encoder.bv_const("H"); // Hash value
 
-        let field = Ed25519Field::new();
+        let _field = Ed25519Field::new();
         let l_bv = encoder.bv_from_u64(1u64 << 52); // Simplified order
 
         // Constraint: S must be in valid range

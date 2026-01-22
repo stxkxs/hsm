@@ -318,7 +318,10 @@ fn test_stress_test_large_chain() {
 
     // Should complete in reasonable time (< 5 seconds)
     if duration.as_secs() >= 5 {
-        eprintln!("⚠️  PERFORMANCE WARNING: Verification slower than target: {:?} (target: <5s)", duration);
+        eprintln!(
+            "⚠️  PERFORMANCE WARNING: Verification slower than target: {:?} (target: <5s)",
+            duration
+        );
     }
 }
 

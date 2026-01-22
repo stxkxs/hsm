@@ -139,7 +139,12 @@ async fn test_sgx_different_key_sizes() {
         let original = PlaintextKey::new(vec![0x42; size]);
         let sealed = backend.seal_key(&original).await.expect("Seal failed");
         let unsealed = backend.unseal_key(&sealed).await.expect("Unseal failed");
-        assert_eq!(original.as_bytes(), unsealed.as_bytes(), "Failed for size {}", size);
+        assert_eq!(
+            original.as_bytes(),
+            unsealed.as_bytes(),
+            "Failed for size {}",
+            size
+        );
     }
 }
 
@@ -233,7 +238,10 @@ async fn test_cross_backend_unseal_fails() {
 
     // Seal with SGX
     let original = PlaintextKey::new(vec![1, 2, 3, 4, 5]);
-    let sealed_sgx = sgx_backend.seal_key(&original).await.expect("SGX seal failed");
+    let sealed_sgx = sgx_backend
+        .seal_key(&original)
+        .await
+        .expect("SGX seal failed");
 
     // Try to unseal with SEV (should fail)
     let result = sev_backend.unseal_key(&sealed_sgx).await;
@@ -305,6 +313,9 @@ async fn test_attestation_verification() {
     #[cfg(feature = "intel-sgx")]
     {
         let result = SgxBackend::verify_attestation_static(&report, &wrong_measurements).await;
-        assert!(result.is_err(), "Attestation verification should fail with wrong measurements");
+        assert!(
+            result.is_err(),
+            "Attestation verification should fail with wrong measurements"
+        );
     }
 }

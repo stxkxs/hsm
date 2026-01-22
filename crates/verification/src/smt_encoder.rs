@@ -6,11 +6,11 @@
 //! Based on "Bounded Verification for Finite-Field-Blasting" (Wahby et al., 2023/2025)
 
 use num_bigint::BigUint;
-use num_traits::{One, Zero};
+use num_traits::One;
 use z3::ast::{Ast, BV};
 use z3::Context;
 
-use crate::error::{Result, VerificationError};
+use crate::error::Result;
 
 /// Encoder for finite-field arithmetic in SMT
 pub struct FiniteFieldEncoder<'ctx> {
@@ -39,14 +39,18 @@ impl<'ctx> FiniteFieldEncoder<'ctx> {
     /// Create a bitvector from a BigUint value
     pub fn bv_from_biguint(&self, value: &BigUint) -> Result<BV<'ctx>> {
         let bytes = value.to_bytes_le();
-        let hex_str = hex::encode(&bytes);
+        let _hex_str = hex::encode(&bytes);
 
         // Pad to correct bit width
-        let byte_width = (self.field_bits + 7) / 8;
+        let byte_width = self.field_bits.div_ceil(8);
         let mut padded_bytes = bytes.clone();
         padded_bytes.resize(byte_width as usize, 0);
 
-        Ok(BV::from_u64(self.context, value.try_into().unwrap_or(0), self.field_bits))
+        Ok(BV::from_u64(
+            self.context,
+            value.try_into().unwrap_or(0),
+            self.field_bits,
+        ))
     }
 
     /// Create a bitvector from u64
@@ -81,8 +85,8 @@ impl<'ctx> FiniteFieldEncoder<'ctx> {
         // For larger ones, this should be done symbolically or with bounded unrolling
 
         // Start with result = 1
-        let one = self.bv_from_u64(1);
-        let zero = self.bv_from_u64(0);
+        let _one = self.bv_from_u64(1);
+        let _zero = self.bv_from_u64(0);
 
         // For bounded verification, we use a simplified approach
         // In practice, this would need to be more sophisticated
@@ -99,7 +103,8 @@ impl<'ctx> FiniteFieldEncoder<'ctx> {
         let zero = self.bv_from_u64(0);
 
         // Check if diff == 0
-        diff._eq(&zero).ite(&self.bv_from_u64(1), &self.bv_from_u64(0))
+        diff._eq(&zero)
+            .ite(&self.bv_from_u64(1), &self.bv_from_u64(0))
     }
 
     /// Create a constraint that value is in range [0, max)
@@ -114,10 +119,10 @@ impl<'ctx> FiniteFieldEncoder<'ctx> {
     pub fn scalar_mult_constraint(
         &self,
         scalar: &BV<'ctx>,
-        point_x: &BV<'ctx>,
-        point_y: &BV<'ctx>,
-        result_x: &BV<'ctx>,
-        result_y: &BV<'ctx>,
+        _point_x: &BV<'ctx>,
+        _point_y: &BV<'ctx>,
+        _result_x: &BV<'ctx>,
+        _result_y: &BV<'ctx>,
         curve_order: &BV<'ctx>,
     ) -> z3::ast::Bool<'ctx> {
         // Constraint: scalar must be in valid range
@@ -150,11 +155,7 @@ impl Ed25519Field {
 
         // l = 2^252 + 27742317777372353535851937790883648493
         let l = (BigUint::one() << 252)
-            + BigUint::parse_bytes(
-                b"27742317777372353535851937790883648493",
-                10,
-            )
-            .unwrap();
+            + BigUint::parse_bytes(b"27742317777372353535851937790883648493", 10).unwrap();
 
         Self { p, l }
     }
@@ -204,6 +205,7 @@ impl Default for P256Field {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use num_traits::Zero;
     use z3::{Config, Context, Solver};
 
     #[test]

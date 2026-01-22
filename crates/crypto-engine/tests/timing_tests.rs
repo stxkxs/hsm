@@ -84,7 +84,11 @@ fn test_ct_compare_diff_position(runner: &mut CtRunner, rng: &mut BenchRng) {
 
     for _ in 0..ITERATIONS {
         let reference = vec![0xAA; SIZE];
-        let class = if rng.gen::<bool>() { Class::Left } else { Class::Right };
+        let class = if rng.gen::<bool>() {
+            Class::Left
+        } else {
+            Class::Right
+        };
 
         let test_data = match class {
             Class::Left => {
@@ -129,7 +133,11 @@ fn test_ct_select(runner: &mut CtRunner, rng: &mut BenchRng) {
         let option_a = vec![0xAA; SIZE];
         let option_b = vec![0xBB; SIZE];
 
-        let class = if rng.gen::<bool>() { Class::Left } else { Class::Right };
+        let class = if rng.gen::<bool>() {
+            Class::Left
+        } else {
+            Class::Right
+        };
         let condition = match class {
             Class::Left => true,
             Class::Right => false,
@@ -159,14 +167,18 @@ fn test_aes_gcm_tag_verification(runner: &mut CtRunner, rng: &mut BenchRng) {
     let plaintext = b"test_message_for_timing_analysis";
 
     // Encrypt once to get a valid ciphertext
-    let valid_ciphertext = AesGcmEngine::encrypt_aes256(&key, plaintext, None)
-        .expect("encryption should succeed");
+    let valid_ciphertext =
+        AesGcmEngine::encrypt_aes256(&key, plaintext, None).expect("encryption should succeed");
 
     let mut inputs: Vec<Vec<u8>> = Vec::new();
     let mut classes = Vec::new();
 
     for _ in 0..ITERATIONS {
-        let class = if rng.gen::<bool>() { Class::Left } else { Class::Right };
+        let class = if rng.gen::<bool>() {
+            Class::Left
+        } else {
+            Class::Right
+        };
 
         let test_ciphertext = match class {
             Class::Left => {
@@ -210,7 +222,11 @@ fn test_ct_verify_tag_hamming_distance(runner: &mut CtRunner, rng: &mut BenchRng
 
     for _ in 0..ITERATIONS {
         let expected_tag = vec![0xAA; TAG_SIZE];
-        let class = if rng.gen::<bool>() { Class::Left } else { Class::Right };
+        let class = if rng.gen::<bool>() {
+            Class::Left
+        } else {
+            Class::Right
+        };
 
         let received_tag = match class {
             Class::Left => {
@@ -254,7 +270,11 @@ fn test_ct_compare_different_lengths(runner: &mut CtRunner, rng: &mut BenchRng) 
         let short_data = vec![0xAA; 16];
         let long_data = vec![0xAA; 64];
 
-        let class = if rng.gen::<bool>() { Class::Left } else { Class::Right };
+        let class = if rng.gen::<bool>() {
+            Class::Left
+        } else {
+            Class::Right
+        };
 
         let test_pair = match class {
             Class::Left => {
@@ -292,7 +312,11 @@ fn test_ct_verify_signature(runner: &mut CtRunner, rng: &mut BenchRng) {
 
     for _ in 0..ITERATIONS {
         let expected_sig = vec![0x12; SIG_SIZE];
-        let class = if rng.gen::<bool>() { Class::Left } else { Class::Right };
+        let class = if rng.gen::<bool>() {
+            Class::Left
+        } else {
+            Class::Right
+        };
 
         let received_sig = match class {
             Class::Left => {

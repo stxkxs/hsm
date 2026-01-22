@@ -42,6 +42,10 @@ pub enum KeyType {
     EcdsaP256,
     EcdsaP384,
     EcdsaP521,
+    /// secp256k1 ECDSA (Bitcoin/Ethereum)
+    Secp256k1,
+    /// BLS12-381 (Ethereum 2.0 validators)
+    Bls12381,
     Ed25519,
     Ed448,
     Aes128,
@@ -58,6 +62,8 @@ impl KeyType {
                 | KeyType::EcdsaP256
                 | KeyType::EcdsaP384
                 | KeyType::EcdsaP521
+                | KeyType::Secp256k1
+                | KeyType::Bls12381
                 | KeyType::Ed25519
                 | KeyType::Ed448
         )
@@ -65,6 +71,24 @@ impl KeyType {
 
     pub fn is_symmetric(&self) -> bool {
         !self.is_asymmetric()
+    }
+
+    /// Returns the private key size in bytes for this key type
+    pub fn private_key_size(&self) -> usize {
+        match self {
+            KeyType::Ed25519 => 32,
+            KeyType::EcdsaP256 => 32,
+            KeyType::EcdsaP384 => 48,
+            KeyType::EcdsaP521 => 66,
+            KeyType::Secp256k1 => 32,
+            KeyType::Bls12381 => 32,
+            KeyType::Rsa2048 => 256, // Approximate, actual DER encoding varies
+            KeyType::Rsa3072 => 384,
+            KeyType::Rsa4096 => 512,
+            KeyType::Ed448 => 57,
+            KeyType::Aes128 => 16,
+            KeyType::Aes256 => 32,
+        }
     }
 }
 

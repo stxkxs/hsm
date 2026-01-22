@@ -1,10 +1,11 @@
 //! Core cryptographic engine for HSM
 //!
 //! Provides secure implementations of:
-//! - Asymmetric cryptography (RSA, ECDSA, Ed25519)
+//! - Asymmetric cryptography (RSA, ECDSA, Ed25519, secp256k1, BLS12-381)
 //! - Symmetric cryptography (AES-GCM, AES-CBC)
 //! - Hashing (SHA-2, SHA-3)
 //! - Key derivation (HKDF, PBKDF2, Argon2)
+//! - Post-quantum cryptography (ML-KEM, ML-DSA, hybrid modes)
 //!
 //! # Security Properties
 //!
@@ -69,12 +70,15 @@
 use zeroize::Zeroize;
 
 pub mod asymmetric;
+pub mod blind;
 pub mod constant_time;
 pub mod error;
 pub mod hash;
 pub mod kdf;
+pub mod pqc;
 pub mod random;
 pub mod symmetric;
+pub mod threshold;
 
 pub use error::{CryptoError, Result};
 
@@ -107,6 +111,12 @@ pub enum SignAlgorithm {
     EcdsaP384Sha384,
     /// ECDSA with P-521 curve and SHA-512
     EcdsaP521Sha512,
+    /// ECDSA with secp256k1 curve (Bitcoin/Ethereum)
+    EcdsaSecp256k1,
+    /// Schnorr signatures on secp256k1 (BIP-340, Bitcoin Taproot)
+    SchnorrSecp256k1,
+    /// BLS signatures on BLS12-381 (Ethereum 2.0)
+    Bls12381,
     /// Ed25519 (recommended for new deployments)
     Ed25519,
     /// Ed448 (not yet implemented)
@@ -435,6 +445,13 @@ impl CryptoEngine for DefaultCryptoEngine {
             SignAlgorithm::Ed25519 => asymmetric::ed25519::Ed25519Engine::sign(key, data),
             SignAlgorithm::EcdsaP256Sha256 => asymmetric::ecdsa::EcdsaEngine::sign_p256(key, data),
             SignAlgorithm::EcdsaP384Sha384 => asymmetric::ecdsa::EcdsaEngine::sign_p384(key, data),
+            SignAlgorithm::EcdsaSecp256k1 => {
+                asymmetric::secp256k1::Secp256k1Engine::sign_ecdsa(key, data)
+            }
+            SignAlgorithm::SchnorrSecp256k1 => {
+                asymmetric::secp256k1::Secp256k1Engine::sign_schnorr(key, data)
+            }
+            SignAlgorithm::Bls12381 => asymmetric::bls::BlsEngine::sign(key, data),
             SignAlgorithm::RsaPkcs1v15Sha256 => {
                 asymmetric::rsa::RsaEngine::sign_pkcs1v15_sha256(key, data)
             }
@@ -462,6 +479,15 @@ impl CryptoEngine for DefaultCryptoEngine {
             }
             SignAlgorithm::EcdsaP384Sha384 => {
                 asymmetric::ecdsa::EcdsaEngine::verify_p384(public_key, data, signature)
+            }
+            SignAlgorithm::EcdsaSecp256k1 => {
+                asymmetric::secp256k1::Secp256k1Engine::verify_ecdsa(public_key, data, signature)
+            }
+            SignAlgorithm::SchnorrSecp256k1 => {
+                asymmetric::secp256k1::Secp256k1Engine::verify_schnorr(public_key, data, signature)
+            }
+            SignAlgorithm::Bls12381 => {
+                asymmetric::bls::BlsEngine::verify(public_key, data, signature)
             }
             SignAlgorithm::RsaPkcs1v15Sha256 => {
                 asymmetric::rsa::RsaEngine::verify_pkcs1v15_sha256(public_key, data, signature)

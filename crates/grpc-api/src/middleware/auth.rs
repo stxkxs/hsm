@@ -69,14 +69,18 @@ impl AuthInterceptor {
         match &self.auth_service {
             Some(auth) => {
                 // Check namespace access
-                auth.namespaces().require_access(identity, namespace).map_err(|e| {
-                    ApiError::AuthorizationFailed(format!("Namespace access denied: {}", e))
-                })?;
+                auth.namespaces()
+                    .require_access(identity, namespace)
+                    .map_err(|e| {
+                        ApiError::AuthorizationFailed(format!("Namespace access denied: {}", e))
+                    })?;
 
                 // Check RBAC permission
-                auth.rbac().require_any(&identity.roles, permission).map_err(|e| {
-                    ApiError::AuthorizationFailed(format!("Permission denied: {}", e))
-                })?;
+                auth.rbac()
+                    .require_any(&identity.roles, permission)
+                    .map_err(|e| {
+                        ApiError::AuthorizationFailed(format!("Permission denied: {}", e))
+                    })?;
 
                 debug!(
                     "Authorized {} for {:?} in {}",
@@ -102,7 +106,9 @@ impl AuthInterceptor {
         match &self.auth_service {
             Some(auth) => {
                 auth.authorize_key_access(identity, key_id, namespace, permission)
-                    .map_err(|e| ApiError::AuthorizationFailed(format!("Key access denied: {}", e)))?;
+                    .map_err(|e| {
+                        ApiError::AuthorizationFailed(format!("Key access denied: {}", e))
+                    })?;
                 Ok(())
             }
             None => Ok(()),

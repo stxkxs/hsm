@@ -85,7 +85,7 @@ use zeroize::Zeroizing;
 #[cfg(feature = "aws-nitro")]
 use aws_config::BehaviorVersion;
 #[cfg(feature = "aws-nitro")]
-use aws_sdk_kms::{Client as KmsClient, primitives::Blob};
+use aws_sdk_kms::{primitives::Blob, Client as KmsClient};
 
 /// Configuration for AWS Nitro Enclaves backend
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -169,7 +169,9 @@ impl NitroEnclaveBackend {
             .key_id(&config.kms_key_arn)
             .send()
             .await
-            .map_err(|e| HardwareError::AwsKmsError(format!("Failed to describe KMS key: {}", e)))?;
+            .map_err(|e| {
+                HardwareError::AwsKmsError(format!("Failed to describe KMS key: {}", e))
+            })?;
 
         info!("AWS Nitro Enclaves backend initialized successfully");
 
@@ -199,7 +201,7 @@ impl NitroEnclaveBackend {
         //
         // For now, we'll create a placeholder that would be replaced with actual NSM calls.
 
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
 
         // Placeholder: In production, this would call NSM via /dev/nsm
         // The attestation document would include:
@@ -277,10 +279,14 @@ impl NitroEnclaveBackend {
 
     /// Envelope decryption: Decrypt DEK with KMS, then decrypt data with DEK
     #[cfg(feature = "aws-nitro")]
-    async fn envelope_decrypt(&self, encrypted_data: &[u8], encrypted_dek: &[u8]) -> HardwareResult<Vec<u8>> {
+    async fn envelope_decrypt(
+        &self,
+        encrypted_data: &[u8],
+        encrypted_dek: &[u8],
+    ) -> HardwareResult<Vec<u8>> {
         use aes_gcm::{
             aead::{Aead, KeyInit},
-            Aes256Gcm, Nonce, Key,
+            Aes256Gcm, Key, Nonce,
         };
 
         // Decrypt DEK with KMS (verifies PCR measurements)
@@ -309,7 +315,11 @@ impl NitroEnclaveBackend {
     }
 
     #[cfg(not(feature = "aws-nitro"))]
-    async fn envelope_decrypt(&self, _encrypted_data: &[u8], _encrypted_dek: &[u8]) -> HardwareResult<Vec<u8>> {
+    async fn envelope_decrypt(
+        &self,
+        _encrypted_data: &[u8],
+        _encrypted_dek: &[u8],
+    ) -> HardwareResult<Vec<u8>> {
         Err(HardwareError::BackendNotAvailable(
             "AWS Nitro backend not compiled".to_string(),
         ))
@@ -336,9 +346,9 @@ impl NitroEnclaveBackend {
             .await
             .map_err(|e| HardwareError::AwsKmsError(format!("KMS encrypt failed: {}", e)))?;
 
-        let ciphertext = result
-            .ciphertext_blob()
-            .ok_or_else(|| HardwareError::EncryptionError("KMS returned no ciphertext".to_string()))?;
+        let ciphertext = result.ciphertext_blob().ok_or_else(|| {
+            HardwareError::EncryptionError("KMS returned no ciphertext".to_string())
+        })?;
 
         Ok(ciphertext.as_ref().to_vec())
     }
@@ -370,9 +380,9 @@ impl NitroEnclaveBackend {
                 HardwareError::AwsKmsError(format!("KMS decrypt failed (PCR mismatch?): {}", e))
             })?;
 
-        let plaintext = result
-            .plaintext()
-            .ok_or_else(|| HardwareError::DecryptionError("KMS returned no plaintext".to_string()))?;
+        let plaintext = result.plaintext().ok_or_else(|| {
+            HardwareError::DecryptionError("KMS returned no plaintext".to_string())
+        })?;
 
         Ok(plaintext.as_ref().to_vec())
     }
@@ -458,7 +468,9 @@ impl HardwareBackend for NitroEnclaveBackend {
             ));
         }
 
-        let plaintext_bytes = self.envelope_decrypt(&sealed.ciphertext, &sealed.backend_data).await?;
+        let plaintext_bytes = self
+            .envelope_decrypt(&sealed.ciphertext, &sealed.backend_data)
+            .await?;
 
         Ok(PlaintextKey::new(plaintext_bytes))
     }
@@ -469,7 +481,7 @@ impl HardwareBackend for NitroEnclaveBackend {
         let document = self.get_nsm_attestation(nonce).await?;
 
         // In production, extract these from the actual attestation document
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(b"enclave-code");
         let code_hash = hasher.finalize().to_vec();
@@ -487,7 +499,7 @@ impl HardwareBackend for NitroEnclaveBackend {
         Ok(AttestationReport {
             backend_type: BackendType::AwsNitro,
             document: document.clone(),
-            signature: vec![0; 64], // Placeholder: real NSM signature
+            signature: vec![0; 64],  // Placeholder: real NSM signature
             public_key: vec![0; 32], // Placeholder: AWS Nitro public key
             measurements,
             timestamp: chrono::Utc::now().timestamp(),
@@ -512,7 +524,7 @@ impl HardwareBackend for NitroEnclaveBackend {
             if let Some(_cached_key) = cache.get(key_id) {
                 // In production: decrypt cached key and sign
                 // For now, return placeholder signature
-                use sha2::{Sha256, Digest};
+                use sha2::{Digest, Sha256};
                 let mut hasher = Sha256::new();
                 hasher.update(message);
                 return Ok(hasher.finalize().to_vec());
@@ -530,7 +542,7 @@ impl HardwareBackend for NitroEnclaveBackend {
         // 5. Return signature
 
         // Placeholder signature
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(message);
         Ok(hasher.finalize().to_vec())

@@ -19,9 +19,9 @@
 //! - Any application requiring fast, secure signatures
 
 use crate::{CryptoError, KeyMaterial, Result};
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 #[cfg(not(miri))]
 use ed25519_dalek::verify_batch;
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rayon::prelude::*;
 
 /// Ed25519 cryptographic engine.
@@ -392,9 +392,9 @@ impl Ed25519Engine {
                     actual: pk_bytes.len(),
                 });
             }
-            let pk_array: [u8; 32] = (*pk_bytes).try_into().map_err(|_| {
-                CryptoError::InvalidKey("Invalid public key size".into())
-            })?;
+            let pk_array: [u8; 32] = (*pk_bytes)
+                .try_into()
+                .map_err(|_| CryptoError::InvalidKey("Invalid public key size".into()))?;
             let vk = VerifyingKey::from_bytes(&pk_array)
                 .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
             verifying_keys.push(vk);
@@ -409,12 +409,13 @@ impl Ed25519Engine {
                     actual: sig_bytes.len(),
                 });
             }
-            let sig_array: [u8; 64] = (*sig_bytes).try_into().map_err(|_| {
-                CryptoError::InvalidSignatureSize {
-                    expected: 64,
-                    actual: sig_bytes.len(),
-                }
-            })?;
+            let sig_array: [u8; 64] =
+                (*sig_bytes)
+                    .try_into()
+                    .map_err(|_| CryptoError::InvalidSignatureSize {
+                        expected: 64,
+                        actual: sig_bytes.len(),
+                    })?;
             let sig = Signature::from_bytes(&sig_array);
             sigs.push(sig);
         }
@@ -505,7 +506,8 @@ mod tests {
             &[pk1.as_slice(), pk2.as_slice()],
             &[&msg1[..], &msg2[..]],
             &[&sig1[..], &sig2[..]],
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(all_valid);
     }
@@ -526,7 +528,8 @@ mod tests {
             &[pk1.as_slice(), pk2.as_slice()],
             &[&msg1[..], &msg2[..]],
             &[&sig1[..], &sig2_wrong[..]],
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(!all_valid); // Should fail because one signature is invalid
     }

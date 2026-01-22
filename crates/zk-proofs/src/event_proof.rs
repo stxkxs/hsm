@@ -26,15 +26,14 @@
 use crate::lasso::{LookupArgument, LookupTable};
 use ark_bn254::{Bn254, Fr};
 use ark_groth16::{
-    Groth16, PreparedVerifyingKey, Proof, ProvingKey, VerifyingKey,
-    prepare_verifying_key,
+    prepare_verifying_key, Groth16, PreparedVerifyingKey, Proof, ProvingKey, VerifyingKey,
 };
-use ark_snark::SNARK;
 use ark_relations::{
     lc,
     r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable},
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_snark::SNARK;
 use ark_std::rand::{CryptoRng, RngCore};
 use audit::{AuditEvent, EventType};
 use serde::{Deserialize, Serialize};
@@ -116,8 +115,8 @@ impl EventExistenceProof {
             .expect("Serialization should not fail");
 
         // Append public inputs
-        let public_json = serde_json::to_vec(&self.public_inputs)
-            .expect("JSON serialization should not fail");
+        let public_json =
+            serde_json::to_vec(&self.public_inputs).expect("JSON serialization should not fail");
         bytes.extend_from_slice(&(public_json.len() as u32).to_le_bytes());
         bytes.extend_from_slice(&public_json);
 
@@ -133,7 +132,8 @@ impl EventExistenceProof {
         }
 
         // Find the split point (last 4 bytes contain public input length)
-        let split_point = bytes.len()
+        let split_point = bytes
+            .len()
             .checked_sub(4)
             .ok_or_else(|| EventProofError::SerializationError("Invalid format".to_string()))?;
 
@@ -187,7 +187,11 @@ impl EventExistenceCircuit {
     pub fn new(event: AuditEvent, merkle_path: Vec<[u8; 32]>, merkle_root: [u8; 32]) -> Self {
         // Extract values before moving event
         let sequence = event.sequence;
-        let event_type_u8 = format!("{:?}", event.event_type).as_bytes().get(0).copied().unwrap_or(0);
+        let event_type_u8 = format!("{:?}", event.event_type)
+            .as_bytes()
+            .get(0)
+            .copied()
+            .unwrap_or(0);
         let timestamp = event.timestamp.timestamp();
 
         Self {
@@ -271,15 +275,14 @@ impl ConstraintSynthesizer<Fr> for EventExistenceCircuit {
         // Public inputs
         let sequence_var = cs.new_input_variable(|| Ok(Fr::from(self.sequence)))?;
         let event_type_var = cs.new_input_variable(|| Ok(Fr::from(self.event_type)))?;
-        let timestamp_var = cs.new_input_variable(|| {
-            Ok(Fr::from(self.timestamp.unsigned_abs()))
-        })?;
-        let merkle_root_var = cs.new_input_variable(|| {
-            Ok(Self::bytes_to_field(&self.merkle_root))
-        })?;
+        let timestamp_var =
+            cs.new_input_variable(|| Ok(Fr::from(self.timestamp.unsigned_abs())))?;
+        let merkle_root_var =
+            cs.new_input_variable(|| Ok(Self::bytes_to_field(&self.merkle_root)))?;
 
         // Private witnesses for event data
-        let event_sequence_witness = cs.new_witness_variable(|| Ok(Fr::from(self.event.sequence)))?;
+        let event_sequence_witness =
+            cs.new_witness_variable(|| Ok(Fr::from(self.event.sequence)))?;
         let event_type_witness = cs.new_witness_variable(|| Ok(Fr::from(self.event_type)))?;
         let event_ts = self.event.timestamp.timestamp().unsigned_abs();
         let event_timestamp_witness = cs.new_witness_variable(|| Ok(Fr::from(event_ts)))?;
@@ -294,7 +297,8 @@ impl ConstraintSynthesizer<Fr> for EventExistenceCircuit {
         // Compute Merkle root witness from event hash and path
         let event_hash = Self::compute_event_hash(&self.event);
         let computed_root = Self::compute_merkle_root_from_path(event_hash, &self.merkle_path);
-        let computed_root_witness = cs.new_witness_variable(|| Ok(Self::bytes_to_field(&computed_root)))?;
+        let computed_root_witness =
+            cs.new_witness_variable(|| Ok(Self::bytes_to_field(&computed_root)))?;
 
         // Constraint 1: Event sequence matches public input
         // sequence_var - event_sequence_witness = 0
@@ -408,10 +412,9 @@ impl EventProofSystem {
         request: &EventProofRequest,
         rng: &mut R,
     ) -> EventProofResult<EventExistenceProof> {
-        let pk = self
-            .proving_key
-            .as_ref()
-            .ok_or_else(|| EventProofError::ProofGenerationFailed("Setup not called".to_string()))?;
+        let pk = self.proving_key.as_ref().ok_or_else(|| {
+            EventProofError::ProofGenerationFailed("Setup not called".to_string())
+        })?;
 
         // Validate path length matches setup
         if request.merkle_path.len() != self.max_depth {
@@ -443,11 +446,11 @@ impl EventProofSystem {
 
         // Calculate size
         let mut bytes = Vec::new();
-        proof
-            .serialize_compressed(&mut bytes)
-            .map_err(|_: ark_serialize::SerializationError| {
+        proof.serialize_compressed(&mut bytes).map_err(
+            |_: ark_serialize::SerializationError| {
                 EventProofError::SerializationError("Serialization failed".to_string())
-            })?;
+            },
+        )?;
 
         Ok(EventExistenceProof {
             proof,
@@ -478,8 +481,12 @@ impl EventProofSystem {
         ];
 
         // Verify proof using SNARK trait
-        let valid = <Groth16<Bn254> as SNARK<Fr>>::verify_with_processed_vk(pvk, &public_inputs, &proof.proof)
-            .map_err(|_| EventProofError::VerificationFailed("Verification failed".to_string()))?;
+        let valid = <Groth16<Bn254> as SNARK<Fr>>::verify_with_processed_vk(
+            pvk,
+            &public_inputs,
+            &proof.proof,
+        )
+        .map_err(|_| EventProofError::VerificationFailed("Verification failed".to_string()))?;
 
         Ok(valid)
     }
@@ -590,8 +597,8 @@ mod tests {
         // Create event and request with consistent data (path length must match setup)
         let event = create_test_event(42);
         let event_hash = EventExistenceCircuit::compute_event_hash(&event);
-        let merkle_path = vec![[2u8; 32], [3u8; 32]];  // 2 elements to match setup(2, ...)
-        // Compute the correct Merkle root from event hash and path
+        let merkle_path = vec![[2u8; 32], [3u8; 32]]; // 2 elements to match setup(2, ...)
+                                                      // Compute the correct Merkle root from event hash and path
         let merkle_root = compute_merkle_root_from_path(event_hash, &merkle_path);
 
         let request = EventProofRequest {
@@ -629,7 +636,7 @@ mod tests {
         let request = EventProofRequest {
             event: event.clone(),
             merkle_root: event_hash,
-            merkle_path: vec![],  // Empty path matches setup(0)
+            merkle_path: vec![], // Empty path matches setup(0)
         };
 
         let proof = proof_system.prove(&request, &mut rng).unwrap();

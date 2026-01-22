@@ -30,14 +30,14 @@
 //! ```
 
 pub mod bounded_check;
-pub mod ed25519;
 pub mod ecdsa;
+pub mod ed25519;
 pub mod error;
 pub mod rsa;
 pub mod shamir;
 pub mod smt_encoder;
 
-pub use error::{VerificationError, Result};
+pub use error::{Result, VerificationError};
 
 use z3::*;
 

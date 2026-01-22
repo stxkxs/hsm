@@ -98,7 +98,11 @@ impl ProofSystem {
     ///
     /// This operation is expensive (may take several seconds) and should
     /// be called once during system initialization.
-    pub fn initialize(&mut self, max_merkle_leaves: usize, max_merkle_depth: usize) -> ZkProofResult<()> {
+    pub fn initialize(
+        &mut self,
+        max_merkle_leaves: usize,
+        max_merkle_depth: usize,
+    ) -> ZkProofResult<()> {
         // Setup Merkle proof system
         self.merkle_system
             .setup(max_merkle_leaves, &mut self.rng)
@@ -279,8 +283,13 @@ impl BatchProver {
     }
 
     /// Initialize with circuit parameters
-    pub fn initialize(&mut self, max_merkle_leaves: usize, max_merkle_depth: usize) -> ZkProofResult<()> {
-        self.proof_system.initialize(max_merkle_leaves, max_merkle_depth)
+    pub fn initialize(
+        &mut self,
+        max_merkle_leaves: usize,
+        max_merkle_depth: usize,
+    ) -> ZkProofResult<()> {
+        self.proof_system
+            .initialize(max_merkle_leaves, max_merkle_depth)
     }
 
     /// Generate proofs for multiple events in batch
@@ -446,7 +455,7 @@ mod tests {
         let request = EventProofRequest {
             event,
             merkle_root: event_hash,
-            merkle_path: vec![],  // Empty path matches initialize(_, 0)
+            merkle_path: vec![], // Empty path matches initialize(_, 0)
         };
 
         let (proof, metrics) = system.prove_event_existence(&request).unwrap();
@@ -484,7 +493,7 @@ mod tests {
                 EventProofRequest {
                     event,
                     merkle_root: event_hash,
-                    merkle_path: vec![],  // Empty path matches initialize(_, 0)
+                    merkle_path: vec![], // Empty path matches initialize(_, 0)
                 }
             })
             .collect();

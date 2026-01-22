@@ -33,7 +33,8 @@ fn test_rsa_key_corruption_fails_safely() {
         match RsaEngine::sign_pkcs1v15_sha256(&corrupted_key, message) {
             Ok(faulty_signature) => {
                 // If signing succeeds, verification MUST fail (no key leakage)
-                let verification = RsaEngine::verify_pkcs1v15_sha256(&public_key, message, &faulty_signature);
+                let verification =
+                    RsaEngine::verify_pkcs1v15_sha256(&public_key, message, &faulty_signature);
                 assert!(
                     verification.is_err() || !verification.unwrap(),
                     "Faulty signature must not verify - this would indicate key leakage!"
@@ -75,7 +76,8 @@ fn test_rsa_crt_fault_injection_bellcore_attack() {
             match RsaEngine::sign_pkcs1v15_sha256(&corrupted_key, message) {
                 Ok(faulty_signature) => {
                     // Critical: faulty signature must NOT verify
-                    let verifies = RsaEngine::verify_pkcs1v15_sha256(&public_key, message, &faulty_signature);
+                    let verifies =
+                        RsaEngine::verify_pkcs1v15_sha256(&public_key, message, &faulty_signature);
                     assert!(
                         verifies.is_err() || !verifies.unwrap(),
                         "Bellcore attack: faulty CRT signature verified! This leaks the private key!"
@@ -211,7 +213,8 @@ fn test_ed25519_signature_corruption() {
             // Corrupted signature must not verify
             assert!(
                 !Ed25519Engine::verify(&public_key, message, &corrupted_sig).unwrap_or(false),
-                "Corrupted Ed25519 signature at position {} verified!", corruption_pos
+                "Corrupted Ed25519 signature at position {} verified!",
+                corruption_pos
             );
         }
     }
@@ -268,7 +271,8 @@ fn test_rsa_pss_key_corruption() {
             Ok(faulty_sig) => {
                 // Faulty signature must not verify
                 assert!(
-                    !RsaEngine::verify_pss_sha256(&public_key, message, &faulty_sig).unwrap_or(false),
+                    !RsaEngine::verify_pss_sha256(&public_key, message, &faulty_sig)
+                        .unwrap_or(false),
                     "RSA-PSS faulty signature verified!"
                 );
             }

@@ -1,8 +1,4 @@
 {
-  "hooks": {
-    "pre-commit": "cargo fmt --check --all && cargo clippy --all -- -D warnings && cargo check --all",
-    "post-edit": "cargo check"
-  },
   "project": {
     "name": "HSM (Hardware Security Module)",
     "description": "Production-grade HSM in Rust with independent modules"

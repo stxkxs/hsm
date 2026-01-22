@@ -5,5 +5,48 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "HSM Server - Production-grade Hardware Security Module for Kubernetes"
+
+[[bin]]
+name = "hsm-server"
+path = "src/main.rs"
 
 [dependencies]
+# Core HSM modules
+hsm-crypto-engine = { path = "../crypto-engine" }
+hsm-key-manager = { path = "../key-manager" }
+hsm-auth = { path = "../auth" }
+hsm-rest-api = { path = "../rest-api" }
+audit = { path = "../audit" }
+hsm-storage = { path = "../storage" }
+hsm-config = { path = "../config" }
+
+# Async runtime
+tokio = { workspace = true, features = ["full", "signal"] }
+
+# HTTP server
+axum = { version = "0.8", features = ["json", "macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# Configuration
+config = "0.15"
+toml = "0.9"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+
+[dev-dependencies]
+tempfile = "3.24"
+tokio = { version = "1.49", features = ["rt-multi-thread", "macros"] }
+
+# Integration test dependencies
+hsm-secrets = { path = "../secrets" }

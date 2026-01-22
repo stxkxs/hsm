@@ -53,7 +53,10 @@ fn test_throughput_1000_events() {
     // Should achieve reasonable throughput (100+ ops/sec with mutex synchronization)
     perf_target!(
         ops_per_sec > 100.0,
-        format!("Throughput below target: {:.0} ops/sec (target: >100)", ops_per_sec)
+        format!(
+            "Throughput below target: {:.0} ops/sec (target: >100)",
+            ops_per_sec
+        )
     );
 
     // Verify integrity
@@ -103,7 +106,10 @@ fn test_throughput_10000_events() {
     // Should achieve reasonable throughput with mutex synchronization
     perf_target!(
         ops_per_sec > 10.0,
-        format!("Throughput below target: {:.0} ops/sec (target: >10)", ops_per_sec)
+        format!(
+            "Throughput below target: {:.0} ops/sec (target: >10)",
+            ops_per_sec
+        )
     );
 
     assert_eq!(logger.current_sequence(), count);
@@ -153,7 +159,10 @@ fn test_verification_performance() {
     // Verification should complete in reasonable time
     perf_target!(
         duration.as_millis() < 5000,
-        format!("Verification slower than target: {}ms (target: <5000ms)", duration.as_millis())
+        format!(
+            "Verification slower than target: {}ms (target: <5000ms)",
+            duration.as_millis()
+        )
     );
 }
 
@@ -204,7 +213,10 @@ fn test_merkle_proof_generation_performance() {
     // Should complete in reasonable time
     perf_target!(
         duration.as_millis() < 5000,
-        format!("Proof generation slower than target: {}ms (target: <5000ms)", duration.as_millis())
+        format!(
+            "Proof generation slower than target: {}ms (target: <5000ms)",
+            duration.as_millis()
+        )
     );
 }
 
@@ -263,7 +275,10 @@ fn test_batch_write_performance() {
 
     perf_target!(
         avg_ops_per_sec > 100.0,
-        format!("Average throughput below target: {:.0} ops/sec (target: >100)", avg_ops_per_sec)
+        format!(
+            "Average throughput below target: {:.0} ops/sec (target: >100)",
+            avg_ops_per_sec
+        )
     );
 }
 
@@ -329,7 +344,10 @@ fn test_reload_performance() {
     // Reload should complete in reasonable time
     perf_target!(
         duration.as_millis() < 10000,
-        format!("Reload slower than target: {}ms (target: <10000ms)", duration.as_millis())
+        format!(
+            "Reload slower than target: {}ms (target: <10000ms)",
+            duration.as_millis()
+        )
     );
 }
 
@@ -378,7 +396,10 @@ fn test_mixed_operations_throughput() {
 
     perf_target!(
         ops_per_sec > 100.0,
-        format!("Mixed operations below target: {:.0} ops/sec (target: >100)", ops_per_sec)
+        format!(
+            "Mixed operations below target: {:.0} ops/sec (target: >100)",
+            ops_per_sec
+        )
     );
 }
 
@@ -514,6 +535,9 @@ fn test_large_event_metadata() {
     // Should complete in reasonable time
     perf_target!(
         duration.as_millis() < 30000,
-        format!("Large metadata logging slower than target: {}ms (target: <30000ms)", duration.as_millis())
+        format!(
+            "Large metadata logging slower than target: {}ms (target: <30000ms)",
+            duration.as_millis()
+        )
     );
 }

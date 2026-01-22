@@ -1,0 +1,40 @@
+[package]
+name = "hsm-kmip"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# HSM integration (optional - enable when integrating with HSM modules)
+# These will be wired up by the HSM server when running
+# hsm-key-manager = { path = "../key-manager" }
+# hsm-crypto-engine = { path = "../crypto-engine" }
+# hsm-auth = { path = "../auth" }
+# audit = { path = "../audit" }
+
+# Async runtime
+tokio = { workspace = true, features = ["net", "io-util", "rt-multi-thread", "sync"] }
+async-trait = "0.1"
+
+# TLS
+tokio-rustls = { workspace = true }
+rustls = { workspace = true }
+rustls-pki-types = { workspace = true }
+
+# Serialization (TTLV is custom, but need helpers)
+bytes = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Utilities
+uuid = { version = "1.7", features = ["v4"] }
+bitflags = "2.4"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }

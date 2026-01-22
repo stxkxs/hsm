@@ -343,7 +343,9 @@ pub use mtls::{CertificateValidator, ClientIdentity, MtlsAuthenticator};
 pub use namespace::NamespaceManager;
 pub use rate_limit::{RateLimitConfig, RateLimiter};
 pub use rbac::{Permission, PermissionFlags, RbacPolicy, Role};
-pub use session::{HashedToken, Session, SessionCreationResult, SessionId, SessionManager, SessionToken};
+pub use session::{
+    HashedToken, Session, SessionCreationResult, SessionId, SessionManager, SessionToken,
+};
 
 use std::sync::Arc;
 
@@ -418,7 +420,10 @@ impl AuthService {
     ///
     /// Returns a SessionCreationResult containing the session and the plaintext token.
     /// The token should be returned to the client once and never stored server-side.
-    pub fn authenticate_and_create_session(&self, cert_der: &[u8]) -> Result<SessionCreationResult> {
+    pub fn authenticate_and_create_session(
+        &self,
+        cert_der: &[u8],
+    ) -> Result<SessionCreationResult> {
         let identity = self.authenticator.authenticate(cert_der)?;
         let result = self.sessions.create_session(identity);
         Ok(result)

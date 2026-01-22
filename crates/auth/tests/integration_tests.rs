@@ -56,7 +56,9 @@ fn test_session_lifecycle() {
     let result = sessions.create_session(identity.clone());
 
     // Validate session (without token)
-    let validated = sessions.validate_session(&result.session.id).expect("validate session should succeed");
+    let validated = sessions
+        .validate_session(&result.session.id)
+        .expect("validate session should succeed");
     assert_eq!(validated.identity.common_name, "client1");
 
     // Validate session with token
@@ -66,10 +68,14 @@ fn test_session_lifecycle() {
     assert_eq!(validated.identity.common_name, "client1");
 
     // Extend session
-    sessions.extend_session(&result.session.id, 1800).expect("extend session should succeed");
+    sessions
+        .extend_session(&result.session.id, 1800)
+        .expect("extend session should succeed");
 
     // Delete session
-    sessions.delete_session(&result.session.id).expect("delete session should succeed");
+    sessions
+        .delete_session(&result.session.id)
+        .expect("delete session should succeed");
     assert!(sessions.get_session(&result.session.id).is_err());
 }
 

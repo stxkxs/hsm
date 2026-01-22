@@ -10,6 +10,14 @@ repository.workspace = true
 # Crypto engine (our module)
 hsm-crypto-engine = { path = "../crypto-engine" }
 
+# Cryptographic primitives for key import
+ed25519-dalek = { version = "2.2", features = ["rand_core"] }
+p256 = { version = "0.13", features = ["ecdsa"] }
+p384 = { version = "0.13", features = ["ecdsa"] }
+k256 = { version = "0.13", features = ["ecdsa"] }
+blst = "0.3"
+rsa = "0.9"
+
 # Security
 zeroize = { version = "1.8", features = ["derive"] }
 secrecy = "0.10"

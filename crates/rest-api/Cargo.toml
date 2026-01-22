@@ -37,6 +37,7 @@ uuid = { version = "1.16", features = ["v4", "serde"] }
 hex = "0.4"
 base64 = "0.22"
 chrono = { workspace = true }
+getrandom = "0.2"
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }

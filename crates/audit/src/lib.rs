@@ -73,7 +73,9 @@ pub use storage_enhanced::{EnhancedAuditStorage, EnhancedStorageConfig, Enhanced
 pub use tamper_detection::{IntegrityReport, TamperDetector, Violation};
 
 // Re-export ZK integration types
-pub use zk_integration::{ZkAuditLogger, ZkAuditLoggerWrapper, ZkIntegrationError, ZkProofRequest, ZkProofResponse};
+pub use zk_integration::{
+    ZkAuditLogger, ZkAuditLoggerWrapper, ZkIntegrationError, ZkProofRequest, ZkProofResponse,
+};
 
 #[cfg(test)]
 mod tests {

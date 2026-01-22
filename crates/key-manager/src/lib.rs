@@ -204,7 +204,7 @@ pub use hardware::{AsyncKeyManager, HardwareKeyManager};
 
 #[cfg(feature = "hardware")]
 pub use config::{
-    create_hardware_key_manager, create_hardware_backend, HardwareBackendConfig,
+    create_hardware_backend, create_hardware_key_manager, HardwareBackendConfig,
     KeyManagerBackendType, KeyManagerConfig, NitroConfig, SevConfig, SgxConfig,
 };
 
@@ -283,7 +283,7 @@ impl Default for DefaultKeyManager {
 
 impl KeyManager for DefaultKeyManager {
     fn generate_key(&self, spec: KeySpec) -> Result<KeyId> {
-        use hsm_crypto_engine::asymmetric::{ecdsa, ed25519, rsa};
+        use hsm_crypto_engine::asymmetric::{bls, ecdsa, ed25519, rsa, secp256k1};
 
         // Generate key material using crypto engine
         let (private_material, public_material) = match spec.key_type {
@@ -299,6 +299,16 @@ impl KeyManager for DefaultKeyManager {
             }
             KeyType::EcdsaP384 => {
                 let (priv_key, pub_key) = ecdsa::EcdsaEngine::generate_p384_keypair()
+                    .map_err(|e| Error::KeyGenerationFailed(e.to_string()))?;
+                (Some(priv_key), Some(pub_key))
+            }
+            KeyType::Secp256k1 => {
+                let (priv_key, pub_key) = secp256k1::Secp256k1Engine::generate_keypair()
+                    .map_err(|e| Error::KeyGenerationFailed(e.to_string()))?;
+                (Some(priv_key), Some(pub_key))
+            }
+            KeyType::Bls12381 => {
+                let (priv_key, pub_key) = bls::BlsEngine::generate_keypair()
                     .map_err(|e| Error::KeyGenerationFailed(e.to_string()))?;
                 (Some(priv_key), Some(pub_key))
             }
@@ -440,11 +450,179 @@ impl KeyManager for DefaultKeyManager {
         })
     }
 
-    fn import_key(&self, _key_data: Vec<u8>, _spec: KeySpec) -> Result<KeyId> {
-        // TODO: Implement key import
-        Err(Error::NotImplemented(
-            "Key import not yet implemented".into(),
-        ))
+    fn import_key(&self, key_data: Vec<u8>, spec: KeySpec) -> Result<KeyId> {
+        use hsm_crypto_engine::KeyMaterial;
+
+        // Parse and validate key data based on key type
+        let (private_material, public_material) = match spec.key_type {
+            KeyType::Ed25519 => {
+                // Ed25519 private key is 32 bytes
+                if key_data.len() != 32 {
+                    return Err(Error::InvalidKeyData(format!(
+                        "Ed25519 private key must be 32 bytes, got {}",
+                        key_data.len()
+                    )));
+                }
+
+                // Derive public key from private key
+                use ed25519_dalek::{SigningKey, VerifyingKey};
+                let signing_key =
+                    SigningKey::from_bytes(key_data.as_slice().try_into().map_err(|_| {
+                        Error::InvalidKeyData("Invalid Ed25519 key bytes".to_string())
+                    })?);
+                let verifying_key: VerifyingKey = (&signing_key).into();
+
+                (
+                    Some(KeyMaterial::from_bytes(key_data)),
+                    Some(verifying_key.to_bytes().to_vec()),
+                )
+            }
+
+            KeyType::EcdsaP256 => {
+                // ECDSA P-256 private key is typically 32 bytes (scalar)
+                if key_data.len() != 32 {
+                    return Err(Error::InvalidKeyData(format!(
+                        "ECDSA P-256 private key must be 32 bytes, got {}",
+                        key_data.len()
+                    )));
+                }
+
+                // Derive public key from private key
+                use p256::ecdsa::{SigningKey as P256SigningKey, VerifyingKey as P256VerifyingKey};
+
+                let signing_key = P256SigningKey::from_slice(&key_data)
+                    .map_err(|e| Error::InvalidKeyData(format!("Invalid P-256 key: {}", e)))?;
+                let verifying_key: P256VerifyingKey = *signing_key.verifying_key();
+                let public_bytes = verifying_key.to_encoded_point(false).as_bytes().to_vec();
+
+                (Some(KeyMaterial::from_bytes(key_data)), Some(public_bytes))
+            }
+
+            KeyType::EcdsaP384 => {
+                // ECDSA P-384 private key is typically 48 bytes (scalar)
+                if key_data.len() != 48 {
+                    return Err(Error::InvalidKeyData(format!(
+                        "ECDSA P-384 private key must be 48 bytes, got {}",
+                        key_data.len()
+                    )));
+                }
+
+                // Derive public key from private key
+                use p384::ecdsa::{SigningKey as P384SigningKey, VerifyingKey as P384VerifyingKey};
+
+                let signing_key = P384SigningKey::from_slice(&key_data)
+                    .map_err(|e| Error::InvalidKeyData(format!("Invalid P-384 key: {}", e)))?;
+                let verifying_key: P384VerifyingKey = *signing_key.verifying_key();
+                let public_bytes = verifying_key.to_encoded_point(false).as_bytes().to_vec();
+
+                (Some(KeyMaterial::from_bytes(key_data)), Some(public_bytes))
+            }
+
+            KeyType::Secp256k1 => {
+                // secp256k1 private key is 32 bytes
+                if key_data.len() != 32 {
+                    return Err(Error::InvalidKeyData(format!(
+                        "secp256k1 private key must be 32 bytes, got {}",
+                        key_data.len()
+                    )));
+                }
+
+                // Derive public key from private key
+                use k256::ecdsa::{SigningKey, VerifyingKey};
+
+                let signing_key = SigningKey::from_slice(&key_data)
+                    .map_err(|e| Error::InvalidKeyData(format!("Invalid secp256k1 key: {}", e)))?;
+                let verifying_key: VerifyingKey = *signing_key.verifying_key();
+                let public_bytes = verifying_key.to_sec1_bytes().to_vec();
+
+                (Some(KeyMaterial::from_bytes(key_data)), Some(public_bytes))
+            }
+
+            KeyType::Bls12381 => {
+                // BLS private key is 32 bytes
+                if key_data.len() != 32 {
+                    return Err(Error::InvalidKeyData(format!(
+                        "BLS private key must be 32 bytes, got {}",
+                        key_data.len()
+                    )));
+                }
+
+                // Derive public key from private key
+                use blst::min_pk::SecretKey;
+
+                let secret_key = SecretKey::from_bytes(&key_data)
+                    .map_err(|e| Error::InvalidKeyData(format!("Invalid BLS key: {:?}", e)))?;
+                let public_key = secret_key.sk_to_pk();
+                let public_bytes = public_key.compress().to_vec();
+
+                (Some(KeyMaterial::from_bytes(key_data)), Some(public_bytes))
+            }
+
+            KeyType::Rsa2048 | KeyType::Rsa3072 | KeyType::Rsa4096 => {
+                // RSA private key is in PKCS#1 DER format
+                // We'll store the raw bytes and derive the public key
+                use rsa::{
+                    pkcs1::DecodeRsaPrivateKey, pkcs1::EncodeRsaPublicKey, traits::PublicKeyParts,
+                    RsaPrivateKey, RsaPublicKey,
+                };
+
+                let private_key = RsaPrivateKey::from_pkcs1_der(&key_data)
+                    .map_err(|e| Error::InvalidKeyData(format!("Invalid RSA key: {}", e)))?;
+
+                // Validate key size matches expected type
+                let key_bits = private_key.size() * 8;
+                let expected_bits = match spec.key_type {
+                    KeyType::Rsa2048 => 2048,
+                    KeyType::Rsa3072 => 3072,
+                    KeyType::Rsa4096 => 4096,
+                    _ => unreachable!(),
+                };
+
+                if key_bits != expected_bits {
+                    return Err(Error::InvalidKeyData(format!(
+                        "RSA key size mismatch: expected {} bits, got {}",
+                        expected_bits, key_bits
+                    )));
+                }
+
+                let public_key = RsaPublicKey::from(&private_key);
+                let public_bytes = public_key
+                    .to_pkcs1_der()
+                    .map_err(|e| {
+                        Error::InvalidKeyData(format!("Failed to encode public key: {}", e))
+                    })?
+                    .as_bytes()
+                    .to_vec();
+
+                (Some(KeyMaterial::from_bytes(key_data)), Some(public_bytes))
+            }
+
+            _ => {
+                return Err(Error::UnsupportedKeyType(spec.key_type));
+            }
+        };
+
+        // Create key object
+        let key = Key {
+            id: KeyId::new(),
+            key_type: spec.key_type,
+            private_material,
+            public_material,
+            state: KeyState::Active,
+            namespace: spec.namespace.clone(),
+            created_at: Utc::now(),
+            policy: spec.policy,
+            version: 1,
+            previous_version: None,
+            operation_count: 0,
+        };
+
+        let key_id = key.id;
+
+        // Store key
+        self.store.insert(&spec.namespace, key)?;
+
+        Ok(key_id)
     }
 
     fn list_keys_batch(

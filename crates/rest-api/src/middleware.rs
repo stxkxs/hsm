@@ -10,6 +10,7 @@ use axum::{
     response::Response,
 };
 use hsm_auth::{ClientIdentity, SessionManager, SessionToken};
+use hsm_key_manager::{DefaultKeyManager, KeyManager};
 use std::sync::Arc;
 
 /// Application state shared across handlers
@@ -17,6 +18,8 @@ use std::sync::Arc;
 pub struct AppState {
     /// Session manager for authentication
     pub sessions: Arc<SessionManager>,
+    /// Key manager for key operations
+    pub key_manager: Arc<dyn KeyManager>,
     /// Start time for uptime calculation
     pub start_time: std::time::Instant,
 }
@@ -26,6 +29,19 @@ impl AppState {
     pub fn new(sessions: Arc<SessionManager>) -> Self {
         Self {
             sessions,
+            key_manager: Arc::new(DefaultKeyManager::new()),
+            start_time: std::time::Instant::now(),
+        }
+    }
+
+    /// Create new application state with custom key manager
+    pub fn with_key_manager(
+        sessions: Arc<SessionManager>,
+        key_manager: Arc<dyn KeyManager>,
+    ) -> Self {
+        Self {
+            sessions,
+            key_manager,
             start_time: std::time::Instant::now(),
         }
     }
@@ -90,10 +106,7 @@ pub async fn auth_middleware(
 /// Request tracking middleware
 ///
 /// Adds request ID and tracks request duration.
-pub async fn request_tracking_middleware(
-    request: Request,
-    next: Next,
-) -> Response {
+pub async fn request_tracking_middleware(request: Request, next: Next) -> Response {
     let request_id = uuid::Uuid::new_v4().to_string();
     let method = request.method().clone();
     let path = request.uri().path().to_string();
@@ -108,7 +121,9 @@ pub async fn request_tracking_middleware(
     // Add request ID to response headers
     response.headers_mut().insert(
         "X-Request-ID",
-        request_id.parse().unwrap_or_else(|_| "unknown".parse().unwrap()),
+        request_id
+            .parse()
+            .unwrap_or_else(|_| "unknown".parse().unwrap()),
     );
 
     // Record metrics

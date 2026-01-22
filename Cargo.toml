@@ -16,6 +16,9 @@ members = [
     "crates/verification",
     "crates/zk-proofs",
     "crates/hardware-backend",
+    "crates/pkcs11-bridge",
+    "crates/secrets",
+    "crates/kmip-server",
 ]
 
 [workspace.package]

@@ -267,13 +267,25 @@ criterion_main!(nitro_benches, sev_benches);
 #[cfg(all(not(feature = "aws-nitro"), feature = "intel-sgx", feature = "amd-sev"))]
 criterion_main!(sgx_benches, sev_benches);
 
-#[cfg(all(feature = "aws-nitro", not(feature = "intel-sgx"), not(feature = "amd-sev")))]
+#[cfg(all(
+    feature = "aws-nitro",
+    not(feature = "intel-sgx"),
+    not(feature = "amd-sev")
+))]
 criterion_main!(nitro_benches);
 
-#[cfg(all(not(feature = "aws-nitro"), feature = "intel-sgx", not(feature = "amd-sev")))]
+#[cfg(all(
+    not(feature = "aws-nitro"),
+    feature = "intel-sgx",
+    not(feature = "amd-sev")
+))]
 criterion_main!(sgx_benches);
 
-#[cfg(all(not(feature = "aws-nitro"), not(feature = "intel-sgx"), feature = "amd-sev"))]
+#[cfg(all(
+    not(feature = "aws-nitro"),
+    not(feature = "intel-sgx"),
+    feature = "amd-sev"
+))]
 criterion_main!(sev_benches);
 
 // Fallback if no features enabled

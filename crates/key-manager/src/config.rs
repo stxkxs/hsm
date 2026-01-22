@@ -150,28 +150,37 @@ impl KeyManagerConfig {
                 Ok(())
             }
             KeyManagerBackendType::Hardware => {
-                let hw_config = self.hardware_config.as_ref()
-                    .ok_or_else(|| Error::InvalidKeyData("Hardware backend requires hardware_config".into()))?;
+                let hw_config = self.hardware_config.as_ref().ok_or_else(|| {
+                    Error::InvalidKeyData("Hardware backend requires hardware_config".into())
+                })?;
 
                 // Validate that the appropriate config is present for the backend type
                 match hw_config.backend_type {
                     BackendType::AwsNitro => {
                         if hw_config.nitro_config.is_none() {
-                            return Err(Error::InvalidKeyData("AWS Nitro backend requires nitro_config".into()));
+                            return Err(Error::InvalidKeyData(
+                                "AWS Nitro backend requires nitro_config".into(),
+                            ));
                         }
                     }
                     BackendType::IntelSgx => {
                         if hw_config.sgx_config.is_none() {
-                            return Err(Error::InvalidKeyData("Intel SGX backend requires sgx_config".into()));
+                            return Err(Error::InvalidKeyData(
+                                "Intel SGX backend requires sgx_config".into(),
+                            ));
                         }
                     }
                     BackendType::AmdSev => {
                         if hw_config.sev_config.is_none() {
-                            return Err(Error::InvalidKeyData("AMD SEV backend requires sev_config".into()));
+                            return Err(Error::InvalidKeyData(
+                                "AMD SEV backend requires sev_config".into(),
+                            ));
                         }
                     }
                     BackendType::Software => {
-                        return Err(Error::InvalidKeyData("Software backend should use Software manager type".into()));
+                        return Err(Error::InvalidKeyData(
+                            "Software backend should use Software manager type".into(),
+                        ));
                     }
                 }
 
@@ -188,7 +197,9 @@ pub async fn create_hardware_backend(
     match config.backend_type {
         #[cfg(feature = "aws-nitro")]
         BackendType::AwsNitro => {
-            let nitro_config = config.nitro_config.as_ref()
+            let nitro_config = config
+                .nitro_config
+                .as_ref()
                 .ok_or_else(|| Error::InvalidKeyData("Missing nitro_config".into()))?;
 
             let hw_config = hsm_hardware_backend::NitroConfig {
@@ -208,7 +219,9 @@ pub async fn create_hardware_backend(
 
         #[cfg(feature = "intel-sgx")]
         BackendType::IntelSgx => {
-            let sgx_config = config.sgx_config.as_ref()
+            let sgx_config = config
+                .sgx_config
+                .as_ref()
                 .ok_or_else(|| Error::InvalidKeyData("Missing sgx_config".into()))?;
 
             let hw_config = hsm_hardware_backend::SgxConfig {
@@ -227,7 +240,9 @@ pub async fn create_hardware_backend(
 
         #[cfg(feature = "amd-sev")]
         BackendType::AmdSev => {
-            let sev_config = config.sev_config.as_ref()
+            let sev_config = config
+                .sev_config
+                .as_ref()
                 .ok_or_else(|| Error::InvalidKeyData("Missing sev_config".into()))?;
 
             let hw_config = hsm_hardware_backend::SevConfig {
@@ -244,9 +259,10 @@ pub async fn create_hardware_backend(
         }
 
         #[allow(unreachable_patterns)]
-        _ => Err(Error::InvalidKeyData(
-            format!("Backend type {:?} not supported in this build", config.backend_type)
-        )),
+        _ => Err(Error::InvalidKeyData(format!(
+            "Backend type {:?} not supported in this build",
+            config.backend_type
+        ))),
     }
 }
 
@@ -258,7 +274,8 @@ pub async fn create_hardware_key_manager(
     config.validate()?;
 
     // Extract hardware config
-    let hw_config = config.hardware_config
+    let hw_config = config
+        .hardware_config
         .ok_or_else(|| Error::InvalidKeyData("Missing hardware_config".into()))?;
 
     // Create hardware backend
@@ -274,19 +291,18 @@ pub async fn create_hardware_key_manager(
 
     // Create hardware storage backend
     let hw_backend_clone = clone_hardware_backend(&hw_config).await?;
-    let storage = HardwareStorageBackend::new(
-        config.storage_path,
-        hw_backend_clone,
-    )
-    .await
-    .map_err(|e| Error::StorageError(e.to_string()))?;
+    let storage = HardwareStorageBackend::new(config.storage_path, hw_backend_clone)
+        .await
+        .map_err(|e| Error::StorageError(e.to_string()))?;
 
     // Create hardware key manager
     crate::hardware::HardwareKeyManager::new(storage, hw_backend).await
 }
 
 // Helper function to convert BackendType to HardwareBackendType
-fn convert_backend_type(backend_type: BackendType) -> Result<hsm_storage::storage_config::HardwareBackendType> {
+fn convert_backend_type(
+    backend_type: BackendType,
+) -> Result<hsm_storage::storage_config::HardwareBackendType> {
     match backend_type {
         #[cfg(feature = "aws-nitro")]
         BackendType::AwsNitro => Ok(hsm_storage::storage_config::HardwareBackendType::AwsNitro),
@@ -295,12 +311,13 @@ fn convert_backend_type(backend_type: BackendType) -> Result<hsm_storage::storag
         #[cfg(feature = "amd-sev")]
         BackendType::AmdSev => Ok(hsm_storage::storage_config::HardwareBackendType::AmdSev),
         BackendType::Software => Err(Error::InvalidKeyData(
-            "Software backend type not supported for hardware storage".into()
+            "Software backend type not supported for hardware storage".into(),
         )),
         #[allow(unreachable_patterns)]
-        _ => Err(Error::InvalidKeyData(
-            format!("Backend type {:?} not supported in this build", backend_type)
-        )),
+        _ => Err(Error::InvalidKeyData(format!(
+            "Backend type {:?} not supported in this build",
+            backend_type
+        ))),
     }
 }
 
@@ -311,13 +328,16 @@ fn convert_to_storage_hw_config(
     Ok(hsm_storage::HardwareBackendConfig {
         backend_type: convert_backend_type(config.backend_type)?,
         #[cfg(feature = "aws-nitro")]
-        nitro: config.nitro_config.as_ref().map(|c| hsm_storage::NitroConfig {
-            region: c.region.clone(),
-            kms_key_arn: c.kms_key_arn.clone(),
-            enclave_cid: c.enclave_cid,
-            verify_attestation: c.verify_attestation,
-            expected_pcrs: c.expected_pcrs.clone(),
-        }),
+        nitro: config
+            .nitro_config
+            .as_ref()
+            .map(|c| hsm_storage::NitroConfig {
+                region: c.region.clone(),
+                kms_key_arn: c.kms_key_arn.clone(),
+                enclave_cid: c.enclave_cid,
+                verify_attestation: c.verify_attestation,
+                expected_pcrs: c.expected_pcrs.clone(),
+            }),
         #[cfg(feature = "intel-sgx")]
         sgx: config.sgx_config.as_ref().map(|c| hsm_storage::SgxConfig {
             use_mrenclave_sealing: c.use_mrenclave_sealing,

@@ -233,8 +233,7 @@ pub async fn create_storage_backend(
             let mut kek = [0u8; 32];
             kek.copy_from_slice(&kek_vec);
 
-            let storage =
-                crate::EncryptedFileStorage::create_with_new_key(config.base_path, &kek)?;
+            let storage = crate::EncryptedFileStorage::create_with_new_key(config.base_path, &kek)?;
 
             Ok(Box::new(storage))
         }
@@ -245,83 +244,89 @@ pub async fn create_storage_backend(
             })?;
 
             // Create appropriate hardware backend
-            let hw_backend: Box<dyn hsm_hardware_backend::HardwareBackend> =
-                match hw_config.backend_type {
-                    #[cfg(feature = "aws-nitro")]
-                    HardwareBackendType::AwsNitro => {
-                        let nitro_config = hw_config.nitro.ok_or_else(|| {
-                            StorageError::OperationFailed("Nitro config not provided".to_string())
-                        })?;
+            let hw_backend: Box<dyn hsm_hardware_backend::HardwareBackend> = match hw_config
+                .backend_type
+            {
+                #[cfg(feature = "aws-nitro")]
+                HardwareBackendType::AwsNitro => {
+                    let nitro_config = hw_config.nitro.ok_or_else(|| {
+                        StorageError::OperationFailed("Nitro config not provided".to_string())
+                    })?;
 
-                        let backend_config = hsm_hardware_backend::NitroConfig {
-                            region: nitro_config.region,
-                            kms_key_arn: nitro_config.kms_key_arn,
-                            enclave_cid: nitro_config.enclave_cid,
-                            verify_attestation: nitro_config.verify_attestation,
-                            expected_pcrs: None,
-                        };
+                    let backend_config = hsm_hardware_backend::NitroConfig {
+                        region: nitro_config.region,
+                        kms_key_arn: nitro_config.kms_key_arn,
+                        enclave_cid: nitro_config.enclave_cid,
+                        verify_attestation: nitro_config.verify_attestation,
+                        expected_pcrs: None,
+                    };
 
-                        Box::new(
-                            hsm_hardware_backend::NitroEnclaveBackend::new(backend_config)
-                                .await
-                                .map_err(|e| StorageError::OperationFailed(e.to_string()))?,
-                        )
-                    }
+                    Box::new(
+                        hsm_hardware_backend::NitroEnclaveBackend::new(backend_config)
+                            .await
+                            .map_err(|e| StorageError::OperationFailed(e.to_string()))?,
+                    )
+                }
 
-                    #[cfg(feature = "intel-sgx")]
-                    HardwareBackendType::IntelSgx => {
-                        let sgx_config = hw_config.sgx.ok_or_else(|| {
-                            StorageError::OperationFailed("SGX config not provided".to_string())
-                        })?;
+                #[cfg(feature = "intel-sgx")]
+                HardwareBackendType::IntelSgx => {
+                    let sgx_config = hw_config.sgx.ok_or_else(|| {
+                        StorageError::OperationFailed("SGX config not provided".to_string())
+                    })?;
 
-                        let backend_config = hsm_hardware_backend::SgxConfig {
-                            enclave_path: sgx_config.enclave_path,
-                            expected_mrenclave: sgx_config.expected_mrenclave.map(|s| s.into_bytes()),
-                            expected_mrsigner: sgx_config.expected_mrsigner.map(|s| s.into_bytes()),
-                            enable_remote_attestation: sgx_config.enable_remote_attestation,
-                            ias_api_key: sgx_config.ias_api_key,
-                            use_mrenclave_sealing: false,
-                        };
+                    let backend_config = hsm_hardware_backend::SgxConfig {
+                        enclave_path: sgx_config.enclave_path,
+                        expected_mrenclave: sgx_config.expected_mrenclave.map(|s| s.into_bytes()),
+                        expected_mrsigner: sgx_config.expected_mrsigner.map(|s| s.into_bytes()),
+                        enable_remote_attestation: sgx_config.enable_remote_attestation,
+                        ias_api_key: sgx_config.ias_api_key,
+                        use_mrenclave_sealing: false,
+                    };
 
-                        Box::new(
-                            hsm_hardware_backend::SgxBackend::new(backend_config)
-                                .await
-                                .map_err(|e| StorageError::OperationFailed(e.to_string()))?,
-                        )
-                    }
+                    Box::new(
+                        hsm_hardware_backend::SgxBackend::new(backend_config)
+                            .await
+                            .map_err(|e| StorageError::OperationFailed(e.to_string()))?,
+                    )
+                }
 
-                    #[cfg(feature = "amd-sev")]
-                    HardwareBackendType::AmdSev => {
-                        let sev_config = hw_config.sev.ok_or_else(|| {
-                            StorageError::OperationFailed("SEV config not provided".to_string())
-                        })?;
+                #[cfg(feature = "amd-sev")]
+                HardwareBackendType::AmdSev => {
+                    let sev_config = hw_config.sev.ok_or_else(|| {
+                        StorageError::OperationFailed("SEV config not provided".to_string())
+                    })?;
 
-                        let backend_config = hsm_hardware_backend::SevConfig {
-                            device_path: sev_config.device_path,
-                            expected_measurement: sev_config.expected_measurement.map(|s| s.into_bytes()),
-                            enable_remote_attestation: false,
-                            use_snp: sev_config.use_snp,
-                        };
+                    let backend_config = hsm_hardware_backend::SevConfig {
+                        device_path: sev_config.device_path,
+                        expected_measurement: sev_config
+                            .expected_measurement
+                            .map(|s| s.into_bytes()),
+                        enable_remote_attestation: false,
+                        use_snp: sev_config.use_snp,
+                    };
 
-                        Box::new(
-                            hsm_hardware_backend::SevBackend::new(backend_config)
-                                .await
-                                .map_err(|e| StorageError::OperationFailed(e.to_string()))?,
-                        )
-                    }
+                    Box::new(
+                        hsm_hardware_backend::SevBackend::new(backend_config)
+                            .await
+                            .map_err(|e| StorageError::OperationFailed(e.to_string()))?,
+                    )
+                }
 
-                    // Fallback for when no features are enabled
-                    #[cfg(not(any(feature = "aws-nitro", feature = "intel-sgx", feature = "amd-sev")))]
-                    _ => {
-                        return Err(StorageError::OperationFailed(
-                            "No hardware backend features enabled".to_string(),
-                        ));
-                    }
-                };
+                // Fallback for when no features are enabled
+                #[cfg(not(any(
+                    feature = "aws-nitro",
+                    feature = "intel-sgx",
+                    feature = "amd-sev"
+                )))]
+                _ => {
+                    return Err(StorageError::OperationFailed(
+                        "No hardware backend features enabled".to_string(),
+                    ));
+                }
+            };
 
             // Create hardware storage backend
-            let storage =
-                crate::HardwareStorageBackend::new(config.base_path, hw_backend).await?;
+            let storage = crate::HardwareStorageBackend::new(config.base_path, hw_backend).await?;
 
             Ok(Box::new(storage))
         }

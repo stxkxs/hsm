@@ -85,16 +85,8 @@ impl IntoResponse for ApiError {
                 "NOT_FOUND",
                 "Resource not found".to_string(),
             ),
-            ApiError::BadRequest(msg) => (
-                StatusCode::BAD_REQUEST,
-                "BAD_REQUEST",
-                msg.clone(),
-            ),
-            ApiError::Conflict(msg) => (
-                StatusCode::CONFLICT,
-                "CONFLICT",
-                msg.clone(),
-            ),
+            ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "BAD_REQUEST", msg.clone()),
+            ApiError::Conflict(msg) => (StatusCode::CONFLICT, "CONFLICT", msg.clone()),
             ApiError::RateLimitExceeded => (
                 StatusCode::TOO_MANY_REQUESTS,
                 "RATE_LIMIT_EXCEEDED",

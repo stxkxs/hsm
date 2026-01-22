@@ -428,7 +428,7 @@ impl HardwareBackend for SevBackend {
         Ok(AttestationReport {
             backend_type: BackendType::AmdSev,
             document: report_data,
-            signature: vec![0; 64], // Placeholder: real AMD PSP signature
+            signature: vec![0; 64],  // Placeholder: real AMD PSP signature
             public_key: vec![0; 32], // Placeholder: AMD attestation key
             measurements,
             timestamp: chrono::Utc::now().timestamp(),
@@ -493,13 +493,17 @@ mod tests {
     #[tokio::test]
     async fn test_sev_backend_creation() {
         let config = SevConfig::default();
-        let _backend = SevBackend::new(config).await.expect("Failed to create SEV backend");
+        let _backend = SevBackend::new(config)
+            .await
+            .expect("Failed to create SEV backend");
     }
 
     #[tokio::test]
     async fn test_sev_seal_unseal() {
         let config = SevConfig::default();
-        let backend = SevBackend::new(config).await.expect("Failed to create SEV backend");
+        let backend = SevBackend::new(config)
+            .await
+            .expect("Failed to create SEV backend");
 
         let plaintext = PlaintextKey::new(vec![1, 2, 3, 4, 5]);
         let sealed = backend.seal_key(&plaintext).await.expect("Seal failed");

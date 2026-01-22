@@ -28,7 +28,7 @@ use ark_poly::{
     univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Evaluations,
     Radix2EvaluationDomain,
 };
-use ark_poly_commit::{PolynomialCommitment, LabeledPolynomial, LabeledCommitment};
+use ark_poly_commit::{LabeledCommitment, LabeledPolynomial, PolynomialCommitment};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{
     rand::{CryptoRng, RngCore},
@@ -191,15 +191,13 @@ impl<F: PrimeField> LookupArgument<F> {
             .collect::<Result<Vec<_>, _>>()?;
 
         // Step 2: Convert indices to field elements
-        let indices_f: Vec<F> = indices
-            .iter()
-            .map(|&idx| F::from(idx as u64))
-            .collect();
+        let indices_f: Vec<F> = indices.iter().map(|&idx| F::from(idx as u64)).collect();
 
         // Step 3: Create polynomials for queries and results
         let query_size = indices.len().next_power_of_two();
-        let query_domain = Radix2EvaluationDomain::<F>::new(query_size)
-            .ok_or_else(|| LassoError::ProofGenerationFailed("Domain creation failed".to_string()))?;
+        let query_domain = Radix2EvaluationDomain::<F>::new(query_size).ok_or_else(|| {
+            LassoError::ProofGenerationFailed("Domain creation failed".to_string())
+        })?;
 
         let mut padded_indices = indices_f.clone();
         padded_indices.resize(query_size, F::zero());
