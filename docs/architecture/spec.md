@@ -107,54 +107,42 @@ Build a production-grade, software-based HSM in Rust that runs as a secure servi
 ### System Components
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         HSM Service                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌──────────────────┐                ┌──────────────────────┐  │
-│  │   gRPC Server    │◄───────────────┤  mTLS Authenticator  │  │
-│  │   (Port 8443)    │                └──────────────────────┘  │
-│  └────────┬─────────┘                                           │
-│           │                                                      │
-│           ▼                                                      │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │          Request Router & Authorization                  │  │
-│  │          (RBAC, Namespace Isolation)                     │  │
-│  └────────┬─────────────────────────────────────────────────┘  │
-│           │                                                      │
-│           ▼                                                      │
-│  ┌──────────────────┐      ┌──────────────────────────────┐   │
-│  │  Crypto Engine   │◄────►│  Key Management Module       │   │
-│  │  - RSA           │      │  - Key Generation            │   │
-│  │  - ECDSA         │      │  - Key Rotation              │   │
-│  │  - Ed25519/448   │      │  - Key Lifecycle             │   │
-│  │  - AES           │      │  - Key Metadata              │   │
-│  └──────────────────┘      └──────┬───────────────────────┘   │
-│                                     │                            │
-│                                     ▼                            │
-│                          ┌──────────────────────┐               │
-│                          │  Storage Backend     │               │
-│                          │  - Encrypted FS      │               │
-│                          │  - Atomic Writes     │               │
-│                          │  - Journaling        │               │
-│                          └──────────────────────┘               │
-│                                                                   │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              Audit & Logging System                      │  │
-│  │  - Tamper-evident logs   - Merkle tree                   │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                   │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              Metrics & Monitoring                        │  │
-│  │  - Prometheus exporter (Port 9090)                       │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                   │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              Configuration Management                    │  │
-│  │  - YAML/TOML config   - Runtime policies                 │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                   │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                           HSM Service                                │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                      API Layer                               │    │
+│  │   gRPC Server (50051)  │  REST API  │  KMIP  │  PKCS#11     │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                              │                                        │
+│  ┌───────────────────────────┼─────────────────────────────────┐    │
+│  │                  Security Layer                              │    │
+│  │   mTLS/OIDC Auth  │  RBAC  │  WASM Policy Engine            │    │
+│  └───────────────────────────┼─────────────────────────────────┘    │
+│                              │                                        │
+│  ┌───────────────────────────┼─────────────────────────────────┐    │
+│  │                  Core Services                               │    │
+│  │  ┌─────────────┐  ┌─────────────────┐  ┌────────────────┐   │    │
+│  │  │Crypto Engine│  │  Key Manager    │  │ Audit Logger   │   │    │
+│  │  │- RSA/ECDSA  │  │  - Generation   │  │ - Hash chain   │   │    │
+│  │  │- Ed25519    │  │  - Rotation     │  │ - Merkle tree  │   │    │
+│  │  │- AES-GCM    │  │  - HD Derivation│  │ - Webhooks     │   │    │
+│  │  └─────────────┘  └─────────────────┘  └────────────────┘   │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                  Blockchain & Web3                           │    │
+│  │   BIP-32/39/44  │  EIP-191/712  │  Multi-chain Signing      │    │
+│  │   Validator Anti-Slashing (Ethereum, Babylon)                │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                  Storage & Infrastructure                    │    │
+│  │   Encrypted Storage  │  Backup/SSS  │  Metrics  │  Config   │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow
@@ -590,9 +578,181 @@ namespaces:
 
 ---
 
+### Module 10: Blockchain & Web3
+**Purpose**: HD key derivation, multi-chain signing, and blockchain-specific transaction support
+
+**Responsibilities**:
+- BIP-32/39/44 hierarchical deterministic key derivation
+- Mnemonic phrase generation and recovery (12/24 words)
+- Ethereum signing (EIP-191 personal messages, EIP-712 typed data)
+- Bitcoin address generation and transaction signing
+- Solana Ed25519-based signing
+- StarkNet Stark curve ECDSA and SNIP-12 typed data
+
+**Dependencies**:
+- `bip32`, `bip39` for HD key derivation
+- `alloy-primitives`, `alloy-rlp` for Ethereum types
+- `k256` for secp256k1 operations
+- `bitcoin` crate for Bitcoin support
+- `ed25519-dalek` for Solana
+- `starknet-crypto` for StarkNet
+
+**Key Types**:
+```rust
+pub struct HdWallet {
+    mnemonic: Mnemonic,
+    seed: [u8; 64],
+}
+
+pub struct Eip712TypedData {
+    types: HashMap<String, Vec<TypedDataField>>,
+    primary_type: String,
+    domain: EIP712Domain,
+    message: Value,
+}
+```
+
+**Testing**:
+- BIP-32/39/44 test vectors from specifications
+- EIP-712 test vectors from Ethereum Foundation
+- Cross-chain address derivation tests
+
+---
+
+### Module 11: Transaction Policy Engine
+**Purpose**: WASM-based custom transaction authorization policies
+
+**Responsibilities**:
+- Load and validate WASM policy modules
+- Execute policies in sandboxed environment
+- Enforce resource limits (fuel/gas, memory, time)
+- Cache compiled policies for performance
+- Provide host functions for policy context access
+
+**Dependencies**:
+- `wasmtime` for WASM runtime
+- `lru` for module caching
+- `dashmap` for concurrent policy storage
+
+**Policy Interface**:
+```rust
+// WASM policies export this function
+fn evaluate(context_ptr: i32, context_len: i32) -> i32
+// Returns: 0 = deny, 1 = allow, 2 = require_approval
+
+pub struct PolicyContext {
+    pub transaction: TransactionContext,  // to, from, value, data
+    pub signer: SignerContext,             // key_id, namespace, roles
+    pub environment: EnvironmentContext,  // timestamp, chain_id
+}
+```
+
+**Resource Limits**:
+- Fuel-based instruction limiting (gas metering)
+- Memory limits per policy execution
+- Execution time limits
+- Host call limits
+
+**Testing**:
+- Policy evaluation with WAT test modules
+- Resource limit enforcement tests
+- Policy caching performance tests
+
+---
+
+### Module 12: Validator Anti-Slashing
+**Purpose**: Protect validator keys from slashable offenses
+
+**Responsibilities**:
+- Ethereum validator slashing protection
+  - Double vote prevention (same target epoch, different root)
+  - Surrounding vote detection
+  - Surrounded vote detection
+  - Double block proposal prevention
+- Babylon EOTS (Extractable One-Time Signatures)
+  - Height-based double-sign prevention
+  - Private key protection (double-sign reveals key)
+- EIP-3076 slashing protection interchange format
+- Persistent slashing database with atomic operations
+
+**Dependencies**:
+- `sled` for persistent storage
+- `serde` for serialization
+
+**Key Types**:
+```rust
+pub struct SlashingDb {
+    db: sled::Db,
+    validators: Tree,    // pubkey -> ValidatorRecord
+    attestations: Tree,  // pubkey:epoch -> AttestationRecord
+    blocks: Tree,        // pubkey:slot -> BlockRecord
+}
+
+pub struct AttestationRecord {
+    source_epoch: u64,
+    target_epoch: u64,
+    signing_root: [u8; 32],
+}
+```
+
+**Security Properties**:
+- Protection cannot be disabled (no bypass API)
+- Atomic check-and-record prevents TOCTOU attacks
+- Crash-safe via write-ahead logging
+- Survives restarts with persistent storage
+
+**Testing**:
+- Double vote detection tests
+- Surrounding vote detection tests
+- EIP-3076 interchange import/export tests
+- Crash recovery tests
+
+---
+
+### Module 13: Webhooks
+**Purpose**: Event-driven notifications for external integrations
+
+**Responsibilities**:
+- Webhook registration and management
+- Async event dispatch with retry logic
+- HMAC-SHA256 signature for payload verification
+- Event filtering by type and namespace
+- Delivery tracking and metrics
+
+**Dependencies**:
+- `reqwest` for HTTP delivery
+- `tokio` for async dispatch
+
+**Event Types**:
+- `key.created`, `key.deleted`, `key.rotated`, `key.used`
+- `session.created`, `session.expired`, `session.revoked`
+- `policy.violated`, `policy.updated`
+- `backup.started`, `backup.completed`
+
+**Webhook Payload**:
+```json
+{
+  "id": "evt_abc123",
+  "type": "key.created",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "namespace": "production",
+  "data": {
+    "key_id": "signing-key-1",
+    "algorithm": "Ed25519"
+  }
+}
+```
+
+**Testing**:
+- Webhook delivery tests with mock server
+- Retry logic tests
+- Signature verification tests
+
+---
+
 ## Parallel Development Plan
 
-The HSM can be built using **9 parallel development tracks**, each corresponding to a module. Teams/agents can work independently with well-defined interfaces.
+The HSM is built using **13 core modules** that can be developed independently with well-defined interfaces. Additional utility crates (rest-api, verification, zk-proofs, hardware-backend, pkcs11-bridge, secrets, kmip-server) provide specialized functionality.
 
 ### Phase 1: Foundation (Weeks 1-2)
 

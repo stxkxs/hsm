@@ -365,6 +365,7 @@ mod tests {
             version: 1,
             previous_version: None,
             operation_count: 0,
+            hd_info: None,
         }
     }
 }

@@ -8,21 +8,50 @@ This document captures the development approach, workflows, and extensibility pa
 
 **HSM** is a production-grade, software-based Hardware Security Module implemented in Rust for Kubernetes environments. It provides cryptographic operations, key management, authentication, audit logging, and backup/recovery capabilities.
 
-### Architecture: 9-Module Design
+### Architecture: Modular Design
 
-The project follows a **modular architecture** with 9 independent crates:
+The project follows a **modular architecture** with 21 independent crates organized into functional groups:
 
-| Module | Crate           | Purpose                                                  |
-|--------|-----------------|----------------------------------------------------------|
-| 1      | `crypto-engine` | Core cryptographic primitives (RSA, ECDSA, Ed25519, AES) |
-| 2      | `key-manager`   | Key lifecycle management and storage coordination        |
-| 3      | `auth`          | mTLS authentication and RBAC authorization               |
-| 4      | `grpc-api`      | gRPC API server with Protocol Buffers                    |
-| 5      | `audit`         | Tamper-evident audit logging with hash chains            |
-| 6      | `metrics`       | Prometheus metrics and monitoring                        |
-| 7      | `storage`       | Encrypted persistent storage backend                     |
-| 8      | `backup`        | Backup/recovery with Shamir's Secret Sharing             |
-| 9      | `config`        | Configuration management and validation                  |
+**Core HSM:**
+| Crate           | Purpose                                                  |
+|-----------------|----------------------------------------------------------|
+| `crypto-engine` | Core cryptographic primitives (RSA, ECDSA, Ed25519, AES) |
+| `key-manager`   | Key lifecycle management and storage coordination        |
+| `auth`          | mTLS, RBAC, OIDC authentication and authorization        |
+| `audit`         | Tamper-evident audit logging with hash chains            |
+| `metrics`       | Prometheus metrics and monitoring                        |
+| `storage`       | Encrypted persistent storage backend                     |
+| `backup`        | Backup/recovery with Shamir's Secret Sharing             |
+| `config`        | Configuration management and validation                  |
+
+**APIs & Protocols:**
+| Crate           | Purpose                                                  |
+|-----------------|----------------------------------------------------------|
+| `grpc-api`      | gRPC API server with Protocol Buffers                    |
+| `rest-api`      | REST API server                                          |
+| `kmip-server`   | KMIP protocol support                                    |
+| `pkcs11-bridge` | PKCS#11 interface for hardware HSM compatibility         |
+
+**Blockchain & Web3:**
+| Crate           | Purpose                                                  |
+|-----------------|----------------------------------------------------------|
+| `blockchain`    | HD keys (BIP-32/39/44), EIP-191/712, Bitcoin, Solana, StarkNet |
+| `validator`     | Anti-slashing for Ethereum and Babylon validators        |
+
+**Policy & Events:**
+| Crate           | Purpose                                                  |
+|-----------------|----------------------------------------------------------|
+| `wasm-policy`   | WASM-based custom transaction policy engine              |
+| `webhooks`      | Event delivery system with retry logic                   |
+
+**Advanced:**
+| Crate           | Purpose                                                  |
+|-----------------|----------------------------------------------------------|
+| `verification`  | Signature verification utilities                         |
+| `zk-proofs`     | Zero-knowledge proof generation and verification         |
+| `hardware-backend` | Hardware HSM integration                              |
+| `secrets`       | Secret management utilities                              |
+| `hsm-server`    | Main binary combining all modules                        |
 
 **Design Principle**: Each module is independent with well-defined interfaces, enabling parallel development and isolated testing.
 
@@ -451,15 +480,27 @@ hsm/
 ├── Cargo.toml                         # Workspace configuration
 │
 ├── crates/                            # All module implementations
-│   ├── crypto-engine/                 # Module 1
-│   ├── key-manager/                   # Module 2
-│   ├── auth/                          # Module 3
-│   ├── grpc-api/                      # Module 4
-│   ├── audit/                         # Module 5
-│   ├── metrics/                       # Module 6
-│   ├── storage/                       # Module 7
-│   ├── backup/                        # Module 8
-│   └── config/                        # Module 9
+│   ├── crypto-engine/                 # Core cryptographic primitives
+│   ├── key-manager/                   # Key lifecycle management
+│   ├── auth/                          # Authentication, RBAC, OIDC
+│   ├── grpc-api/                      # gRPC server
+│   ├── rest-api/                      # REST server
+│   ├── audit/                         # Tamper-evident logging
+│   ├── metrics/                       # Prometheus metrics
+│   ├── storage/                       # Encrypted persistence
+│   ├── backup/                        # Backup & recovery
+│   ├── config/                        # Configuration management
+│   ├── hsm-server/                    # Main binary
+│   ├── blockchain/                    # HD keys, EIP-191/712, multi-chain
+│   ├── validator/                     # Anti-slashing protection
+│   ├── wasm-policy/                   # WASM policy engine
+│   ├── webhooks/                      # Event delivery
+│   ├── verification/                  # Signature verification
+│   ├── zk-proofs/                     # Zero-knowledge proofs
+│   ├── hardware-backend/              # Hardware HSM support
+│   ├── pkcs11-bridge/                 # PKCS#11 interface
+│   ├── secrets/                       # Secret management
+│   └── kmip-server/                   # KMIP protocol
 │
 ├── docs/                              # Documentation
 │   ├── architecture/
@@ -532,17 +573,30 @@ cargo fuzz run <target> -- -runs=1000000
 
 ## Success Metrics by Module
 
+**Core HSM:**
 | Module | Performance Target | Security Target |
 |--------|-------------------|-----------------|
 | Crypto Engine | >1000 Ed25519 ops/sec, >500 ECDSA ops/sec | Constant-time ops, memory zeroization |
 | Key Manager | <1ms key lookup p99, >1000 concurrent ops/sec | Namespace isolation, secure deletion |
-| Auth | <5ms cert validation p99, <100μs permission checks | mTLS hardening, rate limiting |
+| Auth | <5ms cert validation p99, <100μs permission checks | mTLS hardening, rate limiting, OIDC validation |
 | gRPC API | >10k connections, >5000 req/sec | Input validation, error sanitization |
 | Audit | <5ms audit write p99, >10k events/sec | Tamper evidence, log signing |
 | Metrics | <10μs metric overhead, <1% CPU | N/A |
 | Storage | <100μs cached reads, >90% cache hit | Envelope encryption, integrity checks |
 | Backup | <5min full backup (100k keys), <1min incremental | SSS validation, backup encryption |
 | Config | <1μs config reads, hot reload | Secret management, validation |
+
+**Blockchain & Web3:**
+| Module | Performance Target | Security Target |
+|--------|-------------------|-----------------|
+| Blockchain | <1ms HD derivation, <5ms EIP-712 signing | Key zeroization, deterministic signatures |
+| Validator | <1ms slashing check, <10ms DB write | Atomic check-and-record, crash-safe persistence |
+
+**Policy & Events:**
+| Module | Performance Target | Security Target |
+|--------|-------------------|-----------------|
+| WASM Policy | <10ms policy evaluation, >90% cache hit | Fuel limits, memory sandboxing, timeout enforcement |
+| Webhooks | >99.5% delivery, P99 <5s | HMAC signatures, TLS delivery |
 
 ---
 

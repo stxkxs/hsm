@@ -180,6 +180,7 @@ use hsm_crypto_engine::{CryptoEngine, DefaultCryptoEngine};
 use std::sync::Arc;
 
 pub mod error;
+pub mod hd;
 pub mod key;
 pub mod lifecycle;
 pub mod metadata;
@@ -195,7 +196,8 @@ pub mod hardware;
 pub mod config;
 
 pub use error::{Error, Result};
-pub use key::{Key, KeyId, KeySpec, KeyState, KeyType, KeyUsagePolicy};
+pub use hd::{HdKeyManager, MasterKeyResult, MnemonicStrength};
+pub use key::{HdKeyInfo, Key, KeyId, KeySpec, KeyState, KeyType, KeyUsagePolicy};
 pub use metadata::{KeyFilter, KeyMetadata};
 use store::KeyStore;
 
@@ -343,6 +345,7 @@ impl KeyManager for DefaultKeyManager {
             version: 1,
             previous_version: None,
             operation_count: 0,
+            hd_info: None, // Non-HD keys don't have HD info
         };
 
         let key_id = key.id;
@@ -615,6 +618,7 @@ impl KeyManager for DefaultKeyManager {
             version: 1,
             previous_version: None,
             operation_count: 0,
+            hd_info: None, // Imported keys don't have HD info (unless explicitly imported as HD)
         };
 
         let key_id = key.id;

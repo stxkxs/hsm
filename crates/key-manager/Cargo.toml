@@ -10,6 +10,9 @@ repository.workspace = true
 # Crypto engine (our module)
 hsm-crypto-engine = { path = "../crypto-engine" }
 
+# Blockchain HD wallet support
+hsm-blockchain = { path = "../blockchain" }
+
 # Cryptographic primitives for key import
 ed25519-dalek = { version = "2.2", features = ["rand_core"] }
 p256 = { version = "0.13", features = ["ecdsa"] }

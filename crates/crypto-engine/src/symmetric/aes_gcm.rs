@@ -1,4 +1,3 @@
-
 //! AES-GCM authenticated encryption.
 //!
 //! Provides AES encryption in Galois/Counter Mode (GCM), which combines

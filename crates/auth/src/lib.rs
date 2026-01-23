@@ -331,6 +331,8 @@ pub mod audit;
 pub mod error;
 pub mod mtls;
 pub mod namespace;
+pub mod oidc;
+pub mod policy;
 pub mod rate_limit;
 pub mod rbac;
 pub mod session;

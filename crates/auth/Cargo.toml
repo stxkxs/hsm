@@ -45,6 +45,12 @@ sha2 = "0.10"
 hex = "0.4"
 subtle = "2.6"  # Constant-time operations for cryptographic comparisons
 zeroize = { version = "1.8", features = ["derive"] }  # Secure memory zeroization
+base64 = "0.22"  # Base64 encoding for JWT
+hmac.workspace = true  # HMAC for webhook signatures
+
+# OIDC support
+reqwest.workspace = true
+uuid = { version = "1.13", features = ["v4", "serde"] }  # UUIDs for policy IDs
 
 # Circuit Breaker
 failsafe = "1.3"

@@ -1,0 +1,57 @@
+[package]
+name = "hsm-blockchain"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Blockchain-specific cryptographic operations for HSM"
+
+[dependencies]
+# HD key derivation
+bip32 = "0.5"
+bip39 = { version = "2.1", features = ["rand"] }
+
+# Ethereum support
+alloy-primitives = { version = "0.8", features = ["rlp"] }
+alloy-rlp = "0.3"
+tiny-keccak = { version = "2.0", features = ["keccak"] }
+
+# Bitcoin support
+bitcoin = { version = "0.32", features = ["std", "secp-recovery"] }
+
+# StarkNet support
+starknet-crypto = "0.8"
+
+# Cryptographic primitives
+k256 = { version = "0.13", features = ["ecdsa", "schnorr"] }
+sha2.workspace = true
+sha3 = "0.10"
+hmac = "0.12"
+pbkdf2 = { version = "0.12", features = ["hmac"] }
+ed25519-dalek.workspace = true
+
+# Base58 encoding (for Solana)
+bs58.workspace = true
+
+# Security
+secrecy.workspace = true
+zeroize.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+hex = "0.4"
+
+# Error handling
+thiserror.workspace = true
+
+# Utilities
+rand = "0.8"
+getrandom = "0.2"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "blockchain_bench"
+harness = false

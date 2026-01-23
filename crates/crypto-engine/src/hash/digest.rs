@@ -1,4 +1,3 @@
-
 //! Cryptographic hash functions.
 //!
 //! This module provides implementations of cryptographically secure hash

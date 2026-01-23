@@ -94,10 +94,55 @@ grpcurl -plaintext -d '{
 **Hashing:**
 - SHA-256, SHA-384, SHA-512, SHA3-256, SHA3-512, BLAKE3
 
+### Blockchain & Web3
+
+**HD Key Derivation:**
+- **BIP-32**: Hierarchical deterministic key derivation
+- **BIP-39**: Mnemonic phrase generation (12/24 words)
+- **BIP-44**: Multi-account hierarchy for multiple chains
+
+**Ethereum Signing:**
+- **EIP-191**: Personal message signing (`eth_sign`)
+- **EIP-712**: Typed structured data signing (permits, swaps, etc.)
+- **Transaction Signing**: RLP-encoded transaction support
+
+**Multi-Chain Support:**
+- **Ethereum**: Full signing and address derivation
+- **Bitcoin**: Address generation and transaction signing
+- **Solana**: Ed25519-based signing
+- **StarkNet**: Stark curve ECDSA, SNIP-12 typed data
+
+**Validator Protection:**
+- **Ethereum Validators**: Anti-slashing for attestations and proposals
+  - Double vote prevention
+  - Surrounding/surrounded vote detection
+  - EIP-3076 interchange format for client migration
+- **Babylon EOTS**: Extractable one-time signatures for Bitcoin staking
+  - Height-based double-sign prevention
+  - Private key protection (double-sign reveals key)
+
+### Transaction Policies
+
+**WASM Policy Engine:**
+- Write custom policies in Rust, AssemblyScript, or any WASM language
+- Fuel-based execution limits (gas metering)
+- Memory and time limits for sandboxed execution
+
+**Policy Decisions:**
+- `Allow`: Transaction approved
+- `Deny`: Transaction rejected
+- `RequireApproval`: Needs additional authorization
+
+**Policy Context:**
+- Transaction details (to, from, value, data)
+- Signer information (key ID, namespace, roles)
+- Environment (timestamp, chain ID, simulation mode)
+
 ### Security Model
 
 #### Authentication
 - **mTLS (Mutual TLS)**: All clients must present valid X.509 certificates signed by the HSM's CA
+- **OIDC/OAuth2**: Integration with identity providers (Okta, Auth0, Azure AD, Google)
 - **Session Management**: Time-limited sessions with automatic expiration
 - **Rate Limiting**: Configurable per-client and per-namespace rate limits
 
@@ -157,34 +202,72 @@ hsm_audit_integrity_violations_total
 
 ## Architecture
 
-The HSM is built as a modular monolith with 9 independent crates:
+The HSM is built as a modular monolith with 21 independent crates organized into functional groups:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     gRPC API (Port 50051)                │
-│              ┌─────────────┬─────────────┐               │
-│              │  Auth/RBAC  │   Metrics   │               │
-│              └─────────────┴─────────────┘               │
-├─────────────────────────────────────────────────────────┤
-│  Key Manager  │  Crypto Engine  │  Audit Logger         │
-├─────────────────────────────────────────────────────────┤
-│  Storage      │  Backup/Recovery │  Config Manager      │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        API Layer                                 │
+│         gRPC API (50051)  │  REST API  │  KMIP Server           │
+├─────────────────────────────────────────────────────────────────┤
+│                     Security & Auth                              │
+│     Auth/RBAC/OIDC  │  WASM Policy Engine  │  Webhooks          │
+├─────────────────────────────────────────────────────────────────┤
+│                    Core Services                                 │
+│  Key Manager │ Crypto Engine │ Audit │ Metrics │ Secrets        │
+├─────────────────────────────────────────────────────────────────┤
+│                   Blockchain & Web3                              │
+│   HD Keys (BIP-32/39/44) │ EIP-191/712 │ Validator/Anti-Slash   │
+│   Bitcoin │ Solana │ StarkNet                                    │
+├─────────────────────────────────────────────────────────────────┤
+│                  Storage & Recovery                              │
+│     Storage  │  Backup/Shamir  │  Config  │  Hardware Backend   │
+├─────────────────────────────────────────────────────────────────┤
+│                 Advanced Cryptography                            │
+│         ZK Proofs  │  Verification  │  PKCS#11 Bridge           │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Module Responsibilities
 
+**Core HSM:**
 | Module | Purpose | Key Types |
 |--------|---------|-----------|
 | **crypto-engine** | Cryptographic primitives | `Ed25519Signer`, `RsaSigner`, `AesGcm` |
 | **key-manager** | Key lifecycle & policies | `KeyStore`, `RotationPolicy` |
-| **auth** | Authentication & authorization | `MtlsAuthenticator`, `RbacPolicy` |
-| **grpc-api** | gRPC server & handlers | `HsmServiceImpl` |
+| **auth** | Authentication, RBAC, OIDC | `MtlsAuthenticator`, `RbacPolicy`, `OidcProvider` |
 | **audit** | Tamper-evident logging | `AuditLogger`, `TamperDetector` |
 | **metrics** | Prometheus metrics | `MetricsCollector` |
 | **storage** | Encrypted persistence | `EncryptedFileStorage` |
 | **backup** | Backup & recovery | `BackupManager`, `ShamirSecretSharing` |
 | **config** | Configuration management | `HsmConfig` |
+
+**Blockchain & Web3:**
+| Module | Purpose | Key Types |
+|--------|---------|-----------|
+| **blockchain** | HD keys, chain signing | `HdWallet`, `Eip191Signer`, `Eip712TypedData`, `StarknetKey` |
+| **validator** | Anti-slashing protection | `SlashingDb`, `EthereumValidator`, `BabylonEots` |
+
+**Policy & Events:**
+| Module | Purpose | Key Types |
+|--------|---------|-----------|
+| **wasm-policy** | Custom WASM policies | `PolicyEngine`, `PolicyContext`, `PolicyDecision` |
+| **webhooks** | Event delivery | `WebhookDispatcher`, `WebhookRegistry` |
+
+**APIs & Protocols:**
+| Module | Purpose | Key Types |
+|--------|---------|-----------|
+| **grpc-api** | gRPC server | `HsmServiceImpl` |
+| **rest-api** | REST server | `RestService` |
+| **kmip-server** | KMIP protocol | `KmipServer` |
+| **pkcs11-bridge** | PKCS#11 interface | `Pkcs11Provider` |
+
+**Advanced:**
+| Module | Purpose | Key Types |
+|--------|---------|-----------|
+| **verification** | Signature verification | `SignatureVerifier` |
+| **zk-proofs** | Zero-knowledge proofs | `ZkProver`, `ZkVerifier` |
+| **hardware-backend** | Hardware HSM support | `HardwareProvider` |
+| **secrets** | Secret management | `SecretStore` |
 
 ## Configuration
 
@@ -479,21 +562,32 @@ hsm/
 ├── crates/
 │   ├── crypto-engine/      # Cryptographic primitives
 │   ├── key-manager/        # Key lifecycle management
-│   ├── auth/               # Authentication & authorization
-│   ├── grpc-api/          # gRPC server implementation
-│   ├── audit/             # Audit logging & tamper detection
-│   ├── metrics/           # Prometheus metrics
-│   ├── storage/           # Encrypted storage backend
-│   ├── backup/            # Backup & recovery
-│   ├── config/            # Configuration management
-│   └── hsm-server/        # Main binary
+│   ├── auth/               # Authentication, RBAC, OIDC
+│   ├── grpc-api/           # gRPC server implementation
+│   ├── rest-api/           # REST server implementation
+│   ├── audit/              # Audit logging & tamper detection
+│   ├── metrics/            # Prometheus metrics
+│   ├── storage/            # Encrypted storage backend
+│   ├── backup/             # Backup & recovery
+│   ├── config/             # Configuration management
+│   ├── hsm-server/         # Main binary
+│   ├── blockchain/         # HD keys, EIP-191/712, multi-chain
+│   ├── validator/          # Anti-slashing for ETH/Babylon
+│   ├── wasm-policy/        # WASM policy engine
+│   ├── webhooks/           # Event delivery system
+│   ├── verification/       # Signature verification
+│   ├── zk-proofs/          # Zero-knowledge proofs
+│   ├── hardware-backend/   # Hardware HSM support
+│   ├── pkcs11-bridge/      # PKCS#11 interface
+│   ├── secrets/            # Secret management
+│   └── kmip-server/        # KMIP protocol support
 ├── docs/
-│   ├── architecture/      # Design documents
-│   └── phases/           # Implementation plans
-├── .claude/              # Claude Code configuration
-│   ├── skills/           # Custom development skills
-│   └── settings.json     # Hooks and preferences
-└── config/               # Example configurations
+│   ├── architecture/       # Design documents
+│   └── phases/             # Implementation plans
+├── .claude/                # Claude Code configuration
+│   ├── skills/             # Custom development skills
+│   └── settings.json       # Hooks and preferences
+└── config/                 # Example configurations
 ```
 
 ### Running Tests

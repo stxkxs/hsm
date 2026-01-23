@@ -1,0 +1,48 @@
+[package]
+name = "hsm-webhooks"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Webhook delivery system for HSM events"
+
+[dependencies]
+# Async runtime
+tokio.workspace = true
+
+# HTTP client
+reqwest.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Cryptography for HMAC signatures
+hmac.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+# Time
+chrono.workspace = true
+
+# UUID
+uuid.workspace = true
+
+# Concurrency
+dashmap = "6.0"
+
+# Error handling
+thiserror.workspace = true
+
+# Tracing
+tracing.workspace = true
+
+# Retry logic
+backoff = { version = "0.4", features = ["tokio"] }
+
+# Random number generation
+rand = "0.8"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+wiremock = "0.6"

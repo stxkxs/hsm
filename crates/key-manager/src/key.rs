@@ -50,6 +50,10 @@ pub enum KeyType {
     Ed448,
     Aes128,
     Aes256,
+    /// HD Master key (BIP-32/39) - the root key from which all others derive
+    HdMaster,
+    /// HD Derived key (BIP-32/44) - derived from a master key using a derivation path
+    HdDerived,
 }
 
 impl KeyType {
@@ -66,11 +70,18 @@ impl KeyType {
                 | KeyType::Bls12381
                 | KeyType::Ed25519
                 | KeyType::Ed448
+                | KeyType::HdMaster
+                | KeyType::HdDerived
         )
     }
 
     pub fn is_symmetric(&self) -> bool {
         !self.is_asymmetric()
+    }
+
+    /// Check if this is an HD (hierarchical deterministic) key type
+    pub fn is_hd(&self) -> bool {
+        matches!(self, KeyType::HdMaster | KeyType::HdDerived)
     }
 
     /// Returns the private key size in bytes for this key type
@@ -88,6 +99,8 @@ impl KeyType {
             KeyType::Ed448 => 57,
             KeyType::Aes128 => 16,
             KeyType::Aes256 => 32,
+            KeyType::HdMaster => 64, // Extended key: 32 bytes key + 32 bytes chain code
+            KeyType::HdDerived => 64, // Extended key: 32 bytes key + 32 bytes chain code
         }
     }
 }
@@ -137,6 +150,45 @@ impl Default for KeyUsagePolicy {
     }
 }
 
+/// HD (Hierarchical Deterministic) key information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HdKeyInfo {
+    /// Derivation path (e.g., "m/44'/60'/0'/0/0")
+    pub derivation_path: Option<String>,
+    /// Master key ID (for derived keys)
+    pub master_key_id: Option<KeyId>,
+    /// Chain code (32 bytes, for key derivation)
+    pub chain_code: Option<Vec<u8>>,
+    /// Coin type (BIP-44 coin type number)
+    pub coin_type: Option<u32>,
+    /// Account index
+    pub account_index: Option<u32>,
+    /// Whether this key can derive children
+    pub can_derive_children: bool,
+    /// Depth in the derivation tree (0 for master)
+    pub depth: u32,
+    /// Child index at this level
+    pub child_index: Option<u32>,
+    /// Fingerprint of parent key (4 bytes)
+    pub parent_fingerprint: Option<[u8; 4]>,
+}
+
+impl Default for HdKeyInfo {
+    fn default() -> Self {
+        Self {
+            derivation_path: None,
+            master_key_id: None,
+            chain_code: None,
+            coin_type: None,
+            account_index: None,
+            can_derive_children: false,
+            depth: 0,
+            child_index: None,
+            parent_fingerprint: None,
+        }
+    }
+}
+
 /// Complete key structure
 #[derive(Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
@@ -152,6 +204,8 @@ pub struct Key {
     pub version: u32,
     pub previous_version: Option<KeyId>, // For rotation tracking
     pub operation_count: u64,
+    /// HD key information (only for HdMaster/HdDerived key types)
+    pub hd_info: Option<HdKeyInfo>,
 }
 
 impl Key {

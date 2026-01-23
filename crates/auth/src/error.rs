@@ -56,6 +56,12 @@ pub enum AuthError {
     #[error("Rate limit exceeded: {0}")]
     RateLimitExceeded(String),
 
+    #[error("Rate limited")]
+    RateLimited,
+
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
     #[error("Circuit breaker open")]
     CircuitBreakerOpen,
 

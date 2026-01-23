@@ -1,0 +1,43 @@
+[package]
+name = "hsm-wasm-policy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "WebAssembly policy engine for HSM transaction authorization"
+
+[dependencies]
+# WASM runtime
+wasmtime = "27"
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Cryptographic types
+sha2.workspace = true
+hex = "0.4"
+
+# Error handling
+thiserror.workspace = true
+
+# Async
+tokio = { workspace = true, features = ["sync", "time"] }
+
+# Logging
+tracing.workspace = true
+
+# Concurrency
+parking_lot.workspace = true
+dashmap.workspace = true
+
+# LRU cache for compiled modules
+lru = "0.16"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile.workspace = true
+wat = "1.219"
