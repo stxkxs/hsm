@@ -483,7 +483,7 @@ pub struct Session {
     pub client_ip: Option<String>,
     pub user_agent: Option<String>,
 
-    /// Session scope restrictions (CubeSigner compatibility)
+    /// Session scope restrictions
     pub scope: Option<SessionScope>,
 
     /// Parent session ID (for delegated sessions)
@@ -950,7 +950,7 @@ impl SessionManager {
         result
     }
 
-    /// Create a scoped session with restricted permissions (CubeSigner compatibility)
+    /// Create a scoped session with restricted permissions
     ///
     /// Scoped sessions are restricted to specific operations, keys, or have
     /// operation limits. This is essential for:

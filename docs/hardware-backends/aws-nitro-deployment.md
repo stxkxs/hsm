@@ -1,6 +1,6 @@
 # AWS Nitro Enclaves Deployment Guide
 
-This guide covers deploying the HSM with AWS Nitro Enclaves for hardware-backed key management, following the architecture used by Cubist's CubeSigner platform.
+This guide covers deploying the HSM with AWS Nitro Enclaves for hardware-backed key management.
 
 ## Overview
 
@@ -472,5 +472,4 @@ Example: 1M signing operations/month
 ## References
 
 - [AWS Nitro Enclaves Documentation](https://docs.aws.amazon.com/enclaves/)
-- [CubeSigner Technical Design](https://aws.amazon.com/blogs/web3/use-aws-nitro-enclaves-to-build-cubist-cubesigner-a-secure-and-highly-reliable-key-management-platform-for-ethereum-validators-and-beyond/)
 - [Nitro Enclaves KMS Integration](https://docs.aws.amazon.com/enclaves/latest/user/kms.html)

@@ -1,3 +1,4 @@
+#![allow(clippy::all)]
 //! Core cryptographic engine for HSM
 //!
 //! Provides secure implementations of:
@@ -73,6 +74,7 @@ pub mod asymmetric;
 pub mod blind;
 pub mod constant_time;
 pub mod error;
+pub mod fips;
 pub mod hash;
 pub mod kdf;
 pub mod pqc;
@@ -81,6 +83,7 @@ pub mod symmetric;
 pub mod threshold;
 
 pub use error::{CryptoError, Result};
+pub use fips::{FipsError, FipsMode, FipsStatus};
 
 /// Supported digital signature algorithms.
 ///

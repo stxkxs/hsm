@@ -1,0 +1,57 @@
+[package]
+name = "hsm-cluster"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "High availability clustering for HSM with Raft consensus"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full", "sync"] }
+
+# Raft consensus (using openraft)
+# Note: In production, use openraft = "0.9" - simplified here for core implementation
+async-trait = "0.1"
+
+# Persistent storage
+sled = "0.34"
+
+# Cryptography for cluster transport
+aes-gcm.workspace = true
+hkdf = "0.12"
+sha2.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+postcard.workspace = true
+
+# Networking
+tonic.workspace = true
+prost.workspace = true
+
+# Security
+secrecy.workspace = true
+zeroize.workspace = true
+
+# Random
+rand.workspace = true
+getrandom.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Time and utilities
+chrono.workspace = true
+uuid.workspace = true
+parking_lot.workspace = true
+dashmap.workspace = true
+
+# Logging
+tracing.workspace = true
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile.workspace = true

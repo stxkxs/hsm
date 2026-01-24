@@ -1,7 +1,6 @@
 //! AWS Nitro Enclaves Backend
 //!
-//! This module implements hardware-backed key management using AWS Nitro Enclaves,
-//! following the architecture described in Cubist's CubeSigner technical design.
+//! This module implements hardware-backed key management using AWS Nitro Enclaves.
 //!
 //! # Architecture
 //!
@@ -44,7 +43,7 @@
 //!
 //! # Envelope Encryption
 //!
-//! Following CubeSigner's design, keys are protected using envelope encryption:
+//! Keys are protected using envelope encryption:
 //!
 //! 1. **Data Encryption Key (DEK)**: Generated randomly for each key
 //! 2. **Key Encryption Key (KEK)**: Managed by AWS KMS
@@ -114,7 +113,7 @@ pub struct NitroConfig {
 ///
 /// # Performance
 ///
-/// Based on CubeSigner production metrics:
+/// Expected performance:
 /// - `seal_key`: ~8ms (1 KMS call)
 /// - `unseal_key`: ~7ms (1 KMS call)
 /// - `remote_sign`: ~4ms (no KMS, signing in enclave memory)

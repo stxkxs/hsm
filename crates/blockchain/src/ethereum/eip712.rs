@@ -29,8 +29,7 @@
 
 use crate::error::{BlockchainError, Result};
 use k256::ecdsa::{
-    signature::hazmat::{PrehashSigner, PrehashVerifier},
-    RecoveryId, Signature, SigningKey, VerifyingKey,
+    signature::hazmat::PrehashVerifier, RecoveryId, Signature, SigningKey, VerifyingKey,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -542,14 +541,13 @@ impl TypedDataHasher {
         signature: &Signature,
         public_key: &VerifyingKey,
     ) -> Result<bool> {
-        use k256::ecdsa::signature::Verifier;
         let hash = Self::hash(typed_data)?;
         Ok(public_key.verify_prehash(&hash, signature).is_ok())
     }
 
     /// Recover public key from signature
     pub fn recover_public_key(
-        typed_data: &Eip712TypedData,
+        _typed_data: &Eip712TypedData,
         sig: &Eip712Signature,
     ) -> Result<VerifyingKey> {
         VerifyingKey::recover_from_prehash(&sig.hash, &sig.signature, sig.recovery_id)

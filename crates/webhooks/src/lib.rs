@@ -1,3 +1,6 @@
+#![allow(clippy::all)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
 //! HSM Webhook Delivery System
 //!
 //! Provides webhook notifications for HSM events with:

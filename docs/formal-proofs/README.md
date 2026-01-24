@@ -306,7 +306,4 @@ We consider adversaries with the following capabilities:
 
 ## Contact
 
-For questions about the UC proofs, see:
-- Research foundation: Riad Wahby (CMU/Cubist)
-- Formal methods: Andres Nötzli, Aleksandar Milicevic (Cubist)
-- HSM implementation: See `docs/CLAUDE.md`
+For questions about the UC proofs, see the HSM documentation in `docs/CLAUDE.md`.

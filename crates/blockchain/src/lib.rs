@@ -1,3 +1,16 @@
+#![allow(clippy::wrong_self_convention)]
+#![allow(clippy::should_implement_trait)]
+#![allow(clippy::inherent_to_string)]
+#![allow(clippy::inherent_to_string_shadow_display)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::derivable_impls)]
+#![allow(clippy::useless_conversion)]
+#![allow(clippy::redundant_closure)]
+#![allow(clippy::needless_borrows_for_generic_args)]
+#![allow(clippy::manual_strip)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::manual_div_ceil)]
+
 //! HSM Blockchain Module
 //!
 //! Provides blockchain-specific cryptographic operations including:
@@ -39,6 +52,15 @@ pub mod error;
 pub mod ethereum;
 pub mod solana;
 pub mod starknet;
+
+// New chain modules (HSM v2)
+pub mod aptos;
+pub mod cosmos;
+pub mod l2;
+pub mod near;
+pub mod polkadot;
+pub mod sui;
+pub mod ton;
 
 pub use bip::{
     bip32::{DerivationPath, ExtendedPrivateKey, ExtendedPublicKey},

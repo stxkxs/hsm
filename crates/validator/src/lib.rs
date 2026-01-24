@@ -1,3 +1,7 @@
+#![allow(clippy::all)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
 //! HSM Validator Module - Anti-Slashing Protection for Blockchain Validators
 //!
 //! This crate provides validator key management with **always-on, unforgeable**

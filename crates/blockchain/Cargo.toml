@@ -30,8 +30,14 @@ hmac = "0.12"
 pbkdf2 = { version = "0.12", features = ["hmac"] }
 ed25519-dalek.workspace = true
 
-# Base58 encoding (for Solana)
+# Base58 encoding (for Solana, Cosmos)
 bs58.workspace = true
+
+# Bech32 encoding (for Cosmos)
+bech32 = "0.11"
+
+# Base64 encoding
+base64 = "0.22"
 
 # Security
 secrecy.workspace = true

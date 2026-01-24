@@ -28,8 +28,7 @@ use k256::{
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::str::FromStr;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::ZeroizeOnDrop;
 
 /// Derivation path index component
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

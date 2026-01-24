@@ -1,0 +1,57 @@
+[package]
+name = "hsm-bridge-monitor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Cross-chain bridge security monitoring for HSM"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true, features = ["sync", "rt", "time", "macros"] }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# Concurrency
+dashmap = "6.1"
+parking_lot.workspace = true
+
+# Cryptography
+sha2 = "0.10"
+hex = "0.4"
+
+# HTTP client for chain RPCs
+reqwest.workspace = true
+
+# Timestamps
+chrono.workspace = true
+
+# Logging
+tracing = "0.1"
+
+# Metrics
+metrics = "0.24"
+
+# BigDecimal for token amounts
+bigdecimal = { version = "0.4", features = ["serde"] }
+
+# UUID for event IDs
+uuid = { version = "1.13", features = ["v4", "serde"] }
+
+# Rate limiting
+governor = "0.10"
+
+# Channel for event streaming
+async-channel = "2.4"
+
+# Async trait
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

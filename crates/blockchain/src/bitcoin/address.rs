@@ -11,11 +11,10 @@ use bitcoin::{
     address::NetworkChecked,
     key::CompressedPublicKey,
     secp256k1::{PublicKey, Secp256k1, SecretKey},
-    Address, Network, PrivateKey,
+    Address, Network,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::str::FromStr;
 
 /// Bitcoin network type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -70,7 +69,7 @@ pub struct BitcoinAddress {
 impl BitcoinAddress {
     /// Create P2PKH address from public key
     pub fn p2pkh(public_key: &[u8], network: BitcoinNetwork) -> Result<Self> {
-        let secp = Secp256k1::new();
+        let _secp = Secp256k1::new();
         let pubkey = PublicKey::from_slice(public_key)
             .map_err(|e| BlockchainError::InvalidPublicKey(e.to_string()))?;
 

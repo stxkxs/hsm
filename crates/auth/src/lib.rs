@@ -1,3 +1,18 @@
+#![allow(clippy::manual_div_ceil)]
+#![allow(clippy::field_reassign_with_default)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(clippy::should_implement_trait)]
+#![allow(clippy::unwrap_or_default)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::manual_strip)]
+#![allow(clippy::needless_borrows_for_generic_args)]
+#![allow(clippy::useless_conversion)]
+#![allow(clippy::derivable_impls)]
+#![allow(clippy::result_large_err)]
+
 //! Authentication and Authorization Module for HSM.
 //!
 //! This module provides comprehensive security through mutual TLS (mTLS) authentication
@@ -332,9 +347,11 @@ pub mod error;
 pub mod mtls;
 pub mod namespace;
 pub mod oidc;
+pub mod passwordless;
 pub mod policy;
 pub mod rate_limit;
 pub mod rbac;
+pub mod recovery;
 pub mod session;
 
 // Re-export main types

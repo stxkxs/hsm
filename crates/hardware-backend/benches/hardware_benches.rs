@@ -5,7 +5,7 @@
 //!
 //! # Success Metrics
 //!
-//! Based on CubeSigner production metrics and research targets:
+//! Performance targets for production deployment:
 //!
 //! ## AWS Nitro Enclaves
 //! - seal_key: < 10ms

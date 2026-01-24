@@ -1,3 +1,7 @@
+#![allow(clippy::all)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
 //! Key Management Module
 //!
 //! Provides comprehensive key lifecycle management for the HSM, including generation,

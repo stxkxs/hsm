@@ -23,6 +23,8 @@ members = [
     "crates/webhooks",
     "crates/validator",
     "crates/wasm-policy",
+    "crates/cluster",
+    "crates/bridge-monitor",
 ]
 
 [workspace.package]
@@ -115,8 +117,17 @@ uuid = { version = "1.19", features = ["v4", "serde"] }
 parking_lot = "0.12"
 bytes = "1.11"
 dashmap = "6.1"
-lru = "0.12"
+lru = "0.16"
 tempfile = "3.19"
+async-trait = "0.1"
+
+# High Availability / Clustering
+openraft = "0.10"
+sled = "0.34"
+hkdf = "0.12"
+
+# Bridge Monitoring
+url = "2.5"
 
 [profile.release]
 lto = true

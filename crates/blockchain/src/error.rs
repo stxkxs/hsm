@@ -83,6 +83,14 @@ pub enum BlockchainError {
     /// Internal error
     #[error("Internal error: {0}")]
     Internal(String),
+
+    /// Serialization error
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+
+    /// Unsupported algorithm
+    #[error("Unsupported algorithm: {0}")]
+    UnsupportedAlgorithm(String),
 }
 
 impl From<bip32::Error> for BlockchainError {

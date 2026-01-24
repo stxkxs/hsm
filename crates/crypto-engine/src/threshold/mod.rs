@@ -6,14 +6,18 @@
 //!
 //! # Supported Schemes
 //!
-//! - **FROST Ed25519**: Schnorr threshold signatures on Curve25519
+//! - **FROST Ed25519**: Schnorr threshold signatures on Curve25519 (FIPS approved)
+//! - **Threshold ECDSA P-256**: NIST P-256 curve threshold ECDSA (FIPS approved)
+//! - **Threshold ECDSA secp256k1**: Bitcoin/Ethereum compatible (non-FIPS)
+//! - **Threshold BLS12-381**: Ethereum 2.0 validator signatures (under evaluation)
 //!
 //! # Security Properties
 //!
 //! - No single party ever holds the complete signing key
 //! - Compromising fewer than t parties reveals nothing about the key
 //! - Supports distributed key generation (no trusted dealer needed)
-//! - Threshold signatures are indistinguishable from regular Ed25519 signatures
+//! - Threshold signatures are indistinguishable from regular signatures
+//! - Key refresh allows proactive security without changing public key
 //!
 //! # Usage
 //!
@@ -116,18 +120,67 @@
 //! - **Message Verification**: Participants should verify the message content
 //!   before signing to prevent signing unintended data.
 
+// Core modules
 pub mod coordinator;
 pub mod dkg;
 pub mod frost;
 pub mod participant;
 pub mod types;
 
+// Extended MPC support modules
+pub mod bls;
+pub mod config;
+pub mod ecdsa;
+pub mod refresh;
+pub mod scheme;
+pub mod session;
+
 // Re-export main types for convenience
-pub use coordinator::{SessionId, SigningCoordinator, SigningSessionConfig, SigningState};
+pub use coordinator::{SigningCoordinator, SigningState};
 pub use dkg::{DistributedKeyGeneration, DkgRound1Package, DkgRound2Package};
 pub use frost::FrostEngine;
 pub use participant::SigningParticipant;
+
+// Core types
 pub use types::{
-    GroupPublicKey, KeyShare, ParticipantId, SignatureShare, SigningCommitment, SigningNonce,
-    ThresholdConfig, ThresholdError, ThresholdSignature,
+    EcdsaCurve, GroupPublicKey, KeyShare, KeyShareType, ParticipantId, SessionId, SignatureShare,
+    SigningCommitment, SigningNonce, ThresholdConfig, ThresholdError, ThresholdScheme,
+    ThresholdSignature,
 };
+
+// Extended configuration types
+pub use config::{DkgConfig, KeyRefreshConfig, ResharingConfig, SigningSessionConfig};
+
+// Scheme traits
+pub use scheme::{
+    DistributedKeyGen, FullThresholdScheme, KeyGeneration, KeyRefresh, Resharing, Signing,
+    ThresholdSchemeOps, Verification,
+};
+
+// Session management
+pub use session::{
+    ParticipantSessionState, SessionManager, SessionProgress, SessionState, ThresholdSession,
+};
+
+// BLS threshold signatures
+pub use bls::{
+    BlsGroupPublicKey, BlsKeyShare, BlsSignatureShare, BlsThresholdSignature, ThresholdBlsEngine,
+    BLS_DST,
+};
+
+// ECDSA threshold signatures
+pub use ecdsa::{
+    EcdsaGroupPublicKey, EcdsaKeyShare, EcdsaPreSignature, EcdsaSignatureShare,
+    EcdsaSigningCommitment, EcdsaSigningNonce, EcdsaThresholdSignature, P256ThresholdOps,
+    Secp256k1ThresholdOps, ThresholdEcdsaEngine,
+};
+
+// Key refresh and resharing
+pub use refresh::{
+    KeyRefreshProtocol, RefreshRound1Package, RefreshRound2Package, RefreshState,
+    Resharing as ResharingProtocol, ResharingPackage,
+};
+
+// Integration tests (test-only module)
+#[cfg(test)]
+mod integration_tests;

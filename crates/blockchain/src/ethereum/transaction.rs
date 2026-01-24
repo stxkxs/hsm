@@ -4,7 +4,7 @@
 
 use crate::error::{BlockchainError, Result};
 use alloy_primitives::{Address, Bytes, B256, U256};
-use alloy_rlp::{Decodable, Encodable};
+use alloy_rlp::Encodable;
 use sha3::{Digest, Keccak256};
 
 /// Ethereum transaction types
@@ -206,7 +206,7 @@ impl Eip1559Transaction {
         self.data.clone().encode(&mut items);
 
         // Encode access list
-        let mut access_list_encoded = Vec::new();
+        let access_list_encoded = Vec::new();
         for (addr, keys) in &self.access_list {
             let mut entry = Vec::new();
             addr.encode(&mut entry);

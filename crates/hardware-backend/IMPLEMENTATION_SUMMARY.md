@@ -301,13 +301,7 @@ pub struct BackendConfig {
 
 Implementation based on:
 
-1. **Cubist CubeSigner** (AWS Blog, January 2025)
-   - Envelope encryption with KMS
-   - PCR-based key binding
-   - Millisecond-latency signing
-   - Production-validated architecture
-
-2. **AWS Nitro Enclaves Documentation**
+1. **AWS Nitro Enclaves Documentation**
    - Attestation document format
    - KMS integration patterns
    - VSock communication
@@ -488,4 +482,4 @@ The hardware backend implementation successfully delivers production-grade TEE s
 - Benchmarks: 12 suites
 - Deployment Guides: 3 platforms
 
-The implementation follows best practices from Cubist's CubeSigner and provides a solid foundation for hardware-backed key management in the HSM project.
+The implementation provides a solid foundation for hardware-backed key management in the HSM project.

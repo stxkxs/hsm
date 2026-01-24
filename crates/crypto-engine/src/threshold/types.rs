@@ -3,10 +3,251 @@
 //! This module defines the core types used throughout the threshold
 //! cryptography implementation, including participant identifiers,
 //! configuration, key shares, and signing-related structures.
+//!
+//! # Supported Schemes
+//!
+//! - **FROST Ed25519**: Schnorr threshold signatures on Curve25519
+//! - **Threshold ECDSA P-256**: FIPS-approved threshold ECDSA
+//! - **Threshold ECDSA secp256k1**: Bitcoin/Ethereum compatible (non-FIPS)
+//! - **Threshold BLS12-381**: Ethereum 2.0 validator signatures
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+/// Supported threshold cryptography schemes.
+///
+/// Each scheme has different performance characteristics, security properties,
+/// and FIPS compliance status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ThresholdScheme {
+    /// FROST Ed25519 - Schnorr threshold signatures
+    /// - FIPS approved (Ed25519 is in FIPS 186-5)
+    /// - 2-round signing protocol
+    /// - ~30,000 signs/sec
+    FrostEd25519,
+
+    /// Threshold ECDSA on NIST P-256 curve
+    /// - FIPS approved (NIST curve)
+    /// - 3-round signing protocol (with pre-signing optimization)
+    /// - ~4,000 signs/sec
+    ThresholdEcdsaP256,
+
+    /// Threshold ECDSA on secp256k1 curve
+    /// - NOT FIPS approved (non-NIST curve)
+    /// - Bitcoin/Ethereum compatible
+    /// - 3-round signing protocol
+    ThresholdEcdsaSecp256k1,
+
+    /// Threshold BLS on BLS12-381 curve
+    /// - Under NIST evaluation (not yet approved)
+    /// - Single-round signing (BLS native aggregation)
+    /// - Ethereum 2.0 validator compatible
+    /// - ~10,000 signs/sec
+    ThresholdBls12381,
+}
+
+impl ThresholdScheme {
+    /// Check if this scheme is FIPS 140-3 approved.
+    pub fn is_fips_approved(&self) -> bool {
+        matches!(
+            self,
+            ThresholdScheme::FrostEd25519 | ThresholdScheme::ThresholdEcdsaP256
+        )
+    }
+
+    /// Get the signature size in bytes.
+    pub fn signature_size(&self) -> usize {
+        match self {
+            ThresholdScheme::FrostEd25519 => 64,
+            ThresholdScheme::ThresholdEcdsaP256 => 64, // DER encoded can be up to 72
+            ThresholdScheme::ThresholdEcdsaSecp256k1 => 64, // DER encoded can be up to 72
+            ThresholdScheme::ThresholdBls12381 => 96,  // Compressed G2
+        }
+    }
+
+    /// Get the public key size in bytes.
+    pub fn public_key_size(&self) -> usize {
+        match self {
+            ThresholdScheme::FrostEd25519 => 32,
+            ThresholdScheme::ThresholdEcdsaP256 => 33, // Compressed
+            ThresholdScheme::ThresholdEcdsaSecp256k1 => 33, // Compressed
+            ThresholdScheme::ThresholdBls12381 => 48,  // Compressed G1
+        }
+    }
+
+    /// Get the number of signing rounds required.
+    pub fn signing_rounds(&self) -> u8 {
+        match self {
+            ThresholdScheme::FrostEd25519 => 2,
+            ThresholdScheme::ThresholdEcdsaP256 => 3,
+            ThresholdScheme::ThresholdEcdsaSecp256k1 => 3,
+            ThresholdScheme::ThresholdBls12381 => 1, // BLS is single-round!
+        }
+    }
+}
+
+impl fmt::Display for ThresholdScheme {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ThresholdScheme::FrostEd25519 => write!(f, "FROST-Ed25519"),
+            ThresholdScheme::ThresholdEcdsaP256 => write!(f, "Threshold-ECDSA-P256"),
+            ThresholdScheme::ThresholdEcdsaSecp256k1 => write!(f, "Threshold-ECDSA-secp256k1"),
+            ThresholdScheme::ThresholdBls12381 => write!(f, "Threshold-BLS12-381"),
+        }
+    }
+}
+
+/// ECDSA curve selection for threshold ECDSA operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum EcdsaCurve {
+    /// NIST P-256 curve (secp256r1) - FIPS approved
+    P256,
+    /// secp256k1 curve - Bitcoin/Ethereum (not FIPS approved)
+    Secp256k1,
+}
+
+impl EcdsaCurve {
+    /// Check if this curve is FIPS approved.
+    pub fn is_fips_approved(&self) -> bool {
+        matches!(self, EcdsaCurve::P256)
+    }
+
+    /// Get the scalar field size in bytes.
+    pub fn scalar_size(&self) -> usize {
+        32 // Both curves have 256-bit scalars
+    }
+
+    /// Get the compressed point size in bytes.
+    pub fn point_size(&self) -> usize {
+        33 // Both curves: 1 byte prefix + 32 bytes x-coordinate
+    }
+}
+
+impl fmt::Display for EcdsaCurve {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EcdsaCurve::P256 => write!(f, "P-256"),
+            EcdsaCurve::Secp256k1 => write!(f, "secp256k1"),
+        }
+    }
+}
+
+/// Unique identifier for a signing session.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SessionId(pub String);
+
+impl SessionId {
+    /// Create a new random session ID.
+    pub fn new() -> Self {
+        use rand::Rng;
+        let id: [u8; 16] = rand::thread_rng().gen();
+        // Convert to hex manually to avoid extra dependency
+        let hex_chars: Vec<String> = id.iter().map(|b| format!("{:02x}", b)).collect();
+        Self(hex_chars.join(""))
+    }
+
+    /// Create a session ID from a string.
+    pub fn from_string(s: impl Into<String>) -> Self {
+        Self(s.into())
+    }
+
+    /// Get the session ID as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for SessionId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Display for SessionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for SessionId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for SessionId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+/// Key share type that can hold shares for different threshold schemes.
+#[derive(Clone)]
+pub enum KeyShareType {
+    /// FROST Ed25519 key share
+    FrostEd25519(Vec<u8>),
+    /// Threshold ECDSA P-256 key share
+    EcdsaP256(Vec<u8>),
+    /// Threshold ECDSA secp256k1 key share
+    EcdsaSecp256k1(Vec<u8>),
+    /// Threshold BLS12-381 key share
+    Bls12381(Vec<u8>),
+}
+
+impl KeyShareType {
+    /// Get the scheme for this key share type.
+    pub fn scheme(&self) -> ThresholdScheme {
+        match self {
+            KeyShareType::FrostEd25519(_) => ThresholdScheme::FrostEd25519,
+            KeyShareType::EcdsaP256(_) => ThresholdScheme::ThresholdEcdsaP256,
+            KeyShareType::EcdsaSecp256k1(_) => ThresholdScheme::ThresholdEcdsaSecp256k1,
+            KeyShareType::Bls12381(_) => ThresholdScheme::ThresholdBls12381,
+        }
+    }
+
+    /// Get the raw bytes of the key share.
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            KeyShareType::FrostEd25519(b) => b,
+            KeyShareType::EcdsaP256(b) => b,
+            KeyShareType::EcdsaSecp256k1(b) => b,
+            KeyShareType::Bls12381(b) => b,
+        }
+    }
+}
+
+impl Zeroize for KeyShareType {
+    fn zeroize(&mut self) {
+        match self {
+            KeyShareType::FrostEd25519(b) => b.zeroize(),
+            KeyShareType::EcdsaP256(b) => b.zeroize(),
+            KeyShareType::EcdsaSecp256k1(b) => b.zeroize(),
+            KeyShareType::Bls12381(b) => b.zeroize(),
+        }
+    }
+}
+
+impl Drop for KeyShareType {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl fmt::Debug for KeyShareType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            KeyShareType::FrostEd25519(_) => {
+                write!(f, "KeyShareType::FrostEd25519(<redacted>)")
+            }
+            KeyShareType::EcdsaP256(_) => write!(f, "KeyShareType::EcdsaP256(<redacted>)"),
+            KeyShareType::EcdsaSecp256k1(_) => {
+                write!(f, "KeyShareType::EcdsaSecp256k1(<redacted>)")
+            }
+            KeyShareType::Bls12381(_) => write!(f, "KeyShareType::Bls12381(<redacted>)"),
+        }
+    }
+}
 
 /// Identifier for a participant in the threshold scheme.
 ///
@@ -337,6 +578,113 @@ pub enum ThresholdError {
     /// Session state error.
     #[error("Session error: {0}")]
     SessionError(String),
+
+    // ===== New error types for extended MPC support =====
+    /// Unsupported threshold scheme.
+    #[error("Unsupported threshold scheme: {0}")]
+    UnsupportedScheme(ThresholdScheme),
+
+    /// DKG round timeout.
+    #[error("DKG round {round} timed out after {timeout_ms}ms")]
+    DkgRoundTimeout {
+        /// The round that timed out.
+        round: u8,
+        /// Timeout in milliseconds.
+        timeout_ms: u64,
+    },
+
+    /// Key refresh operation failed.
+    #[error("Key refresh failed: {0}")]
+    KeyRefreshFailed(String),
+
+    /// Invalid commitment during key refresh.
+    #[error("Invalid refresh commitment from participant {0}")]
+    KeyRefreshInvalidCommitment(ParticipantId),
+
+    /// Missing commitments during key refresh.
+    #[error("Missing refresh commitments")]
+    KeyRefreshMissingCommitments,
+
+    /// Invalid share during key refresh.
+    #[error("Invalid refresh share from participant {0}")]
+    KeyRefreshInvalidShare(ParticipantId),
+
+    /// Resharing operation failed.
+    #[error("Resharing failed: {0}")]
+    ResharingFailed(String),
+
+    /// Invalid resharing configuration.
+    #[error("Invalid resharing config: {0}")]
+    ResharingInvalidConfig(String),
+
+    /// Insufficient shares for resharing.
+    #[error("Insufficient shares for resharing: need {required}, got {provided}")]
+    ResharingInsufficientShares {
+        /// Number of shares required.
+        required: usize,
+        /// Number of shares provided.
+        provided: usize,
+    },
+
+    /// Invalid share during resharing.
+    #[error("Invalid resharing share from participant {0}")]
+    ResharingInvalidShare(ParticipantId),
+
+    /// Operation not approved in FIPS mode.
+    #[error("Operation not FIPS approved: {0}")]
+    FipsNotApproved(String),
+
+    /// Session expired.
+    #[error("Session {0} has expired")]
+    SessionExpired(SessionId),
+
+    /// Session not found.
+    #[error("Session {0} not found")]
+    SessionNotFound(SessionId),
+
+    /// Invalid commitment.
+    #[error("Invalid commitment from participant {0}")]
+    InvalidCommitment(ParticipantId),
+
+    /// Missing commitment from participant.
+    #[error("Missing commitment from participant {0}")]
+    MissingCommitment(ParticipantId),
+
+    /// Invalid key share.
+    #[error("Invalid key share")]
+    InvalidKeyShare,
+
+    /// Invalid public key.
+    #[error("Invalid public key")]
+    InvalidPublicKey,
+
+    /// Invalid signature.
+    #[error("Invalid signature")]
+    InvalidSignature,
+
+    /// Invalid DKG state for operation.
+    #[error("Invalid DKG state for this operation")]
+    DkgInvalidState,
+
+    /// Missing DKG commitments.
+    #[error("Missing DKG commitments from participant {0}")]
+    DkgMissingCommitments(ParticipantId),
+
+    /// Invalid share during DKG.
+    #[error("Invalid DKG share from participant {0}")]
+    DkgInvalidShare(ParticipantId),
+
+    /// Cryptographic operation failed.
+    #[error("Cryptographic operation failed: {0}")]
+    CryptoError(String),
+
+    /// Pre-signature generation failed.
+    #[error("Pre-signature generation failed: {0}")]
+    PreSignatureFailed(String),
+
+    /// Aggregation failed.
+    #[error("Signature aggregation failed: {0}")]
+    AggregationFailed(String),
 }
 
 #[cfg(test)]

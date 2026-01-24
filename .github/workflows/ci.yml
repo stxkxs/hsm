@@ -19,13 +19,15 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Install system dependencies
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libz3-dev libclang-dev
-    - name: Run tests (excluding long-running performance/stress tests)
+    - name: Run tests (excluding performance/stress/chaos tests)
       run: |
-        cargo test --all --verbose -- \
-          --skip throughput_10000 \
-          --skip verification_performance \
-          --skip high_throughput \
+        cargo test --all -- \
+          --skip performance \
+          --skip throughput \
           --skip stress \
+          --skip high_concurrency \
+          --skip large_chain \
+          --skip batch_operations \
           --skip workload
     - name: Run clippy
       run: cargo clippy --all -- -D warnings

@@ -19,8 +19,7 @@
 
 use crate::error::{BlockchainError, Result};
 use k256::ecdsa::{
-    signature::hazmat::{PrehashSigner, PrehashVerifier},
-    RecoveryId, Signature, SigningKey, VerifyingKey,
+    signature::hazmat::PrehashVerifier, RecoveryId, Signature, SigningKey, VerifyingKey,
 };
 use sha3::{Digest, Keccak256};
 
@@ -153,7 +152,6 @@ impl PersonalMessage {
 
     /// Verify a signature
     pub fn verify(&self, signature: &Signature, public_key: &VerifyingKey) -> bool {
-        use k256::ecdsa::signature::Verifier;
         let hash = self.hash();
         public_key.verify_prehash(&hash, signature).is_ok()
     }

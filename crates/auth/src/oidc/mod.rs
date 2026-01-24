@@ -39,10 +39,15 @@ pub mod claims;
 pub mod discovery;
 pub mod jwt;
 pub mod provider;
+pub mod social;
 pub mod token_cache;
 
 pub use claims::{ClaimsMapper, OidcClaims};
 pub use discovery::OidcDiscovery;
 pub use jwt::{JwtValidationError, JwtValidator};
 pub use provider::{OidcProvider, OidcProviderConfig};
+pub use social::{
+    AuthorizationRequest, GitHubEmail, OAuthState, OAuthTokenResponse, SocialLoginConfig,
+    SocialLoginManager, SocialProvider, SocialUserInfo,
+};
 pub use token_cache::JwksCache;
