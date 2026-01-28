@@ -273,6 +273,59 @@ pub struct AuditLogResponse {
 }
 
 // ============================================================================
+// Authentication Types
+// ============================================================================
+
+/// Development login request (for testing only)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DevLoginRequest {
+    /// Username (for role assignment)
+    pub username: String,
+
+    /// Password (for dev mode, use "dev")
+    pub password: String,
+}
+
+/// Login response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginResponse {
+    /// Session token (format: session_id:token)
+    pub token: String,
+
+    /// User identity
+    pub user: UserInfo,
+
+    /// Token expiration (RFC 3339)
+    pub expires_at: String,
+}
+
+/// User information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserInfo {
+    /// Username/common name
+    pub username: String,
+
+    /// Roles
+    pub roles: Vec<String>,
+
+    /// Namespace
+    pub namespace: String,
+}
+
+/// Current user response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeResponse {
+    /// User identity
+    pub user: UserInfo,
+
+    /// Session ID
+    pub session_id: String,
+
+    /// Session created at
+    pub created_at: String,
+}
+
+// ============================================================================
 // Health Check Types
 // ============================================================================
 

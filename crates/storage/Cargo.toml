@@ -37,6 +37,7 @@ async-trait = "0.1"
 # Caching
 lru = "0.16"
 dashmap = "6.1"
+parking_lot.workspace = true
 
 # Compression
 zstd = "0.13"

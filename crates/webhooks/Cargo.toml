@@ -29,7 +29,7 @@ chrono.workspace = true
 uuid.workspace = true
 
 # Concurrency
-dashmap = "6.0"
+dashmap.workspace = true
 
 # Error handling
 thiserror.workspace = true

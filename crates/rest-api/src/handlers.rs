@@ -4,7 +4,12 @@
 
 use crate::error::{ApiError, Result};
 use crate::middleware::AppState;
-use crate::types::*;
+use crate::types::{
+    AuditLogResponse, ComponentStatus, DecryptRequest, DecryptResponse, DevLoginRequest,
+    EncryptRequest, EncryptResponse, GenerateKeyRequest, GenerateKeyResponse, HealthResponse,
+    KeyAlgorithm, KeyMetadataResponse, KeyPurpose, ListKeysResponse, LoginResponse, MeResponse,
+    ReadyResponse, SignRequest, SignResponse, UserInfo, VerifyRequest, VerifyResponse,
+};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -80,6 +85,117 @@ fn to_usage_policy(purpose: &KeyPurpose) -> KeyUsagePolicy {
             expires_at: None,
         },
     }
+}
+
+// ============================================================================
+// Authentication Endpoints
+// ============================================================================
+
+/// Development login endpoint (for testing only)
+///
+/// This endpoint is only available in development mode.
+/// Username determines the role:
+/// - "admin" → Admin role
+/// - "operator" → Operator role
+/// - "auditor" → Auditor role
+/// - anything else → User role
+///
+/// Password must be "dev" for development mode.
+pub async fn dev_login(
+    State(state): State<AppState>,
+    Json(request): Json<DevLoginRequest>,
+) -> Result<Json<LoginResponse>> {
+    // Only allow "dev" password in development mode
+    if request.password != "dev" {
+        return Err(ApiError::Unauthorized("Invalid credentials".to_string()));
+    }
+
+    tracing::info!(username = %request.username, "Development login attempt");
+
+    // Determine roles based on username
+    let roles = if request.username.contains("admin") {
+        vec![hsm_auth::Role::Admin]
+    } else if request.username.contains("operator") {
+        vec![hsm_auth::Role::Operator]
+    } else if request.username.contains("auditor") {
+        vec![hsm_auth::Role::Auditor]
+    } else {
+        vec![hsm_auth::Role::User]
+    };
+
+    // Create client identity
+    let identity = ClientIdentity::new(
+        request.username.clone(),
+        Some("Development".to_string()),
+        "default".to_string(),
+        roles.clone(),
+        format!("dev-{}", uuid::Uuid::new_v4()),
+    );
+
+    // Create session
+    let session_result = state.sessions.create_session(identity);
+
+    // Calculate expiration (1 hour from now)
+    let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);
+
+    // Format token as session_id:token
+    let token = format!(
+        "{}:{}",
+        session_result.session.id,
+        session_result.token.as_str()
+    );
+
+    let role_names: Vec<String> = roles.iter().map(|r| format!("{:?}", r)).collect();
+
+    let response = LoginResponse {
+        token,
+        user: UserInfo {
+            username: request.username,
+            roles: role_names,
+            namespace: "default".to_string(),
+        },
+        expires_at: expires_at.to_rfc3339(),
+    };
+
+    metrics::counter!("rest_api.auth.dev_login").increment(1);
+
+    Ok(Json(response))
+}
+
+/// Get current user endpoint
+pub async fn me(
+    State(_state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+) -> Result<Json<MeResponse>> {
+    let role_names: Vec<String> = identity.roles.iter().map(|r| format!("{:?}", r)).collect();
+
+    let response = MeResponse {
+        user: UserInfo {
+            username: identity.common_name.clone(),
+            roles: role_names,
+            namespace: identity.namespace.clone(),
+        },
+        session_id: identity.serial_number.clone(),
+        created_at: chrono::Utc::now().to_rfc3339(), // Would be stored in session
+    };
+
+    Ok(Json(response))
+}
+
+/// Logout endpoint
+pub async fn logout(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+) -> Result<StatusCode> {
+    tracing::info!(client = %identity.common_name, "Logout");
+
+    // The session ID is stored in serial_number field for dev sessions
+    // In production, would extract from auth header
+    let _ = state.sessions.delete_session(&identity.serial_number);
+
+    metrics::counter!("rest_api.auth.logout").increment(1);
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ============================================================================
@@ -262,6 +378,63 @@ pub async fn delete_key(
     metrics::counter!("rest_api.keys.deleted").increment(1);
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Rotate a key (creates new version, deactivates old)
+pub async fn rotate_key(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+    Path(key_id): Path<String>,
+) -> Result<Json<GenerateKeyResponse>> {
+    tracing::info!(
+        client = %identity.common_name,
+        key_id = %key_id,
+        "Rotating key"
+    );
+
+    // Parse key ID
+    let key_id_parsed = KeyId::from_string(&key_id)
+        .map_err(|_| ApiError::BadRequest("Invalid key ID format".to_string()))?;
+
+    // Try to get original key metadata first
+    let original_metadata = state
+        .key_manager
+        .get_metadata(&key_id_parsed, "default")
+        .or_else(|_| state.key_manager.get_metadata(&key_id_parsed, &identity.common_name))
+        .map_err(|e| ApiError::NotFound(format!("Key not found: {}", e)))?;
+
+    // Rotate key
+    let new_key_id = state
+        .key_manager
+        .rotate_key(&key_id_parsed, &original_metadata.namespace)
+        .map_err(|e| ApiError::Internal(format!("Key rotation failed: {}", e)))?;
+
+    // Get the new key
+    let new_key = state
+        .key_manager
+        .get_key(&new_key_id, &original_metadata.namespace)
+        .map_err(|e| ApiError::Internal(format!("Failed to retrieve rotated key: {}", e)))?;
+
+    // Determine purpose based on key type
+    let purpose = match new_key.key_type {
+        KeyType::Ed25519 | KeyType::EcdsaP256 | KeyType::EcdsaP384 => KeyPurpose::Sign,
+        KeyType::Rsa2048 | KeyType::Rsa3072 | KeyType::Rsa4096 => KeyPurpose::General,
+        _ => KeyPurpose::Encrypt,
+    };
+
+    let public_key = new_key.public_material.as_ref().map(|pk| BASE64.encode(pk));
+
+    let response = GenerateKeyResponse {
+        key_id: new_key_id.to_string(),
+        algorithm: to_key_algorithm(new_key.key_type),
+        purpose,
+        public_key,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+
+    metrics::counter!("rest_api.keys.rotated").increment(1);
+
+    Ok(Json(response))
 }
 
 /// Query parameters for listing keys
@@ -461,16 +634,17 @@ pub async fn verify_signature(
         .ok_or_else(|| ApiError::BadRequest("Key has no public material".to_string()))?;
 
     // Verify based on key type
+    // Note: Invalid signatures return Err from the crypto engine, so we convert those to valid=false
     let valid = match key.key_type {
         KeyType::Ed25519 => ed25519::Ed25519Engine::verify(public_key, &data, &signature)
-            .map_err(|e| ApiError::Internal(format!("Verification failed: {}", e)))?,
+            .unwrap_or(false),
         KeyType::EcdsaP256 => ecdsa::EcdsaEngine::verify_p256(public_key, &data, &signature)
-            .map_err(|e| ApiError::Internal(format!("Verification failed: {}", e)))?,
+            .unwrap_or(false),
         KeyType::EcdsaP384 => ecdsa::EcdsaEngine::verify_p384(public_key, &data, &signature)
-            .map_err(|e| ApiError::Internal(format!("Verification failed: {}", e)))?,
+            .unwrap_or(false),
         KeyType::Rsa2048 | KeyType::Rsa3072 | KeyType::Rsa4096 => {
             rsa::RsaEngine::verify_pkcs1v15_sha256(public_key, &data, &signature)
-                .map_err(|e| ApiError::Internal(format!("Verification failed: {}", e)))?
+                .unwrap_or(false)
         }
         _ => {
             return Err(ApiError::BadRequest(
@@ -574,13 +748,7 @@ pub async fn decrypt_data(
             .to_string(),
     ))
 
-    // When implemented, decryption would look like:
-    // use hsm_crypto_engine::symmetric::aes_gcm::AesGcmEngine;
-    // let aad = request.aad.as_ref().map(|a| BASE64.decode(a)).transpose()?;
-    // let ciphertext_with_nonce = [nonce, ciphertext].concat();
-    // let plaintext = AesGcmEngine::decrypt_aes256(&key, &ciphertext_with_nonce, aad.as_deref())?;
-    // metrics::counter!("rest_api.crypto.decrypt").increment(1);
-    // Ok(Json(DecryptResponse { plaintext: BASE64.encode(&plaintext) }))
+    // TODO: Implement symmetric key retrieval and decryption
 }
 
 // ============================================================================

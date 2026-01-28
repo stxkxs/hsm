@@ -1,41 +1,182 @@
 #![allow(non_camel_case_types)]
 
-//! PKCS#11 Bridge for HSM
+//! # PKCS#11 Bridge for HSM
 //!
 //! This library provides a PKCS#11 v2.40 compliant interface to the HSM,
-//! allowing legacy applications (OpenSSL, browsers, Java KeyStore, etc.)
+//! allowing legacy applications (OpenSSL, browsers, Java KeyStore, SSH, etc.)
 //! to use HSM cryptographic services.
 //!
-//! # Architecture
+//! ## Features
 //!
-//! The library acts as a bridge between the PKCS#11 C API and the HSM gRPC API:
+//! - **PKCS#11 v2.40 Compliant**: Standard cryptographic token interface
+//! - **Multi-Namespace Support**: Each HSM namespace exposed as a slot/token
+//! - **Thread Safety**: Full concurrent access support
+//! - **Standard Mechanisms**: RSA, ECDSA, EdDSA, AES, SHA-2
+//! - **Session Management**: R/O and R/W sessions with authentication
+//!
+//! ## Architecture
 //!
 //! ```text
-//! Application (OpenSSL, etc.)
-//!         |
-//!         | PKCS#11 C API
-//!         v
-//!   +-----------------+
-//!   | pkcs11-bridge   |
-//!   | (this library)  |
-//!   +-----------------+
-//!         |
-//!         | gRPC (mTLS)
-//!         v
-//!   +-----------------+
-//!   |      HSM        |
-//!   +-----------------+
+//! ┌─────────────────────────────────────────────────────────────────────┐
+//! │                     PKCS#11 Bridge Architecture                      │
+//! ├─────────────────────────────────────────────────────────────────────┤
+//! │                                                                       │
+//! │  ┌──────────────────────────────────────────────┐                   │
+//! │  │            Applications                       │                   │
+//! │  │  OpenSSL │ Java │ Firefox │ SSH │ GPG │ ...  │                   │
+//! │  └──────────────────────────────────────────────┘                   │
+//! │                         │                                            │
+//! │                         │ PKCS#11 C API                              │
+//! │                         │ (C_Initialize, C_Sign, etc.)               │
+//! │                         ▼                                            │
+//! │  ┌──────────────────────────────────────────────┐                   │
+//! │  │         pkcs11-bridge (this library)          │                   │
+//! │  │                                                │                   │
+//! │  │  ┌─────────────┐  ┌─────────────┐            │                   │
+//! │  │  │   Slots     │  │  Sessions   │            │                   │
+//! │  │  │ (namespaces)│  │  (per-user) │            │                   │
+//! │  │  └─────────────┘  └─────────────┘            │                   │
+//! │  │                                                │                   │
+//! │  └──────────────────────────────────────────────┘                   │
+//! │                         │                                            │
+//! │                         │ gRPC (mTLS)                                │
+//! │                         ▼                                            │
+//! │  ┌──────────────────────────────────────────────┐                   │
+//! │  │                HSM Server                     │                   │
+//! │  └──────────────────────────────────────────────┘                   │
+//! │                                                                       │
+//! └─────────────────────────────────────────────────────────────────────┘
 //! ```
 //!
-//! # Slots and Tokens
+//! ## Supported Mechanisms
 //!
-//! Each HSM namespace is exposed as a PKCS#11 slot/token pair.
-//! The namespace to slot mapping is configured via environment variables.
+//! | Mechanism | Key Gen | Sign | Verify | Encrypt | Decrypt |
+//! |-----------|---------|------|--------|---------|---------|
+//! | RSA-PKCS | ✓ | ✓ | ✓ | ✓ | ✓ |
+//! | RSA-SHA256 | - | ✓ | ✓ | - | - |
+//! | RSA-SHA384 | - | ✓ | ✓ | - | - |
+//! | RSA-SHA512 | - | ✓ | ✓ | - | - |
+//! | ECDSA | ✓ | ✓ | ✓ | - | - |
+//! | ECDSA-SHA256 | - | ✓ | ✓ | - | - |
+//! | EdDSA (Ed25519) | ✓ | ✓ | ✓ | - | - |
+//! | AES-CBC | ✓ | - | - | ✓ | ✓ |
+//! | AES-GCM | ✓ | - | - | ✓ | ✓ |
+//! | SHA-256/384/512 | - | - | - | - | - | (digest only)
 //!
-//! # Thread Safety
+//! ## Quick Start
 //!
-//! This library is fully thread-safe. Multiple threads can call PKCS#11
-//! functions concurrently, and sessions are protected by appropriate locking.
+//! ### Loading the Library
+//!
+//! ```c
+//! // C example - typical PKCS#11 usage pattern
+//! CK_FUNCTION_LIST_PTR pFunctionList;
+//! CK_RV rv;
+//!
+//! // Load the library and get function list
+//! rv = C_GetFunctionList(&pFunctionList);
+//! if (rv != CKR_OK) { /* handle error */ }
+//!
+//! // Initialize the library
+//! rv = pFunctionList->C_Initialize(NULL);
+//! if (rv != CKR_OK) { /* handle error */ }
+//!
+//! // Now you can use other PKCS#11 functions...
+//! ```
+//!
+//! ### OpenSSL Integration
+//!
+//! ```bash
+//! # Configure OpenSSL to use the HSM PKCS#11 library
+//! export PKCS11_MODULE_PATH=/usr/lib/libhsm_pkcs11.so
+//!
+//! # Use with OpenSSL engine (requires libp11)
+//! openssl engine -t pkcs11 -pre MODULE_PATH:$PKCS11_MODULE_PATH
+//!
+//! # Sign a file using HSM key
+//! openssl dgst -engine pkcs11 -keyform engine \
+//!     -sign "pkcs11:token=production;object=signing-key" \
+//!     -sha256 -out signature.bin document.txt
+//!
+//! # Generate RSA key pair in HSM
+//! pkcs11-tool --module $PKCS11_MODULE_PATH \
+//!     --login --pin 1234 \
+//!     --keypairgen --key-type rsa:2048 \
+//!     --label "my-rsa-key"
+//! ```
+//!
+//! ### Java KeyStore Integration
+//!
+//! ```java
+//! // Java example using SunPKCS11 provider
+//! String config = "--name=HSM\nlibrary=/usr/lib/libhsm_pkcs11.so";
+//! Provider provider = Security.getProvider("SunPKCS11");
+//! provider = provider.configure(config);
+//! Security.addProvider(provider);
+//!
+//! // Access HSM keystore
+//! KeyStore ks = KeyStore.getInstance("PKCS11", provider);
+//! ks.load(null, "1234".toCharArray()); // PIN
+//!
+//! // Get signing key
+//! PrivateKey key = (PrivateKey) ks.getKey("signing-key", null);
+//!
+//! // Sign data
+//! Signature sig = Signature.getInstance("SHA256withECDSA", provider);
+//! sig.initSign(key);
+//! sig.update(data);
+//! byte[] signature = sig.sign();
+//! ```
+//!
+//! ### Session Lifecycle
+//!
+//! ```text
+//! 1. C_Initialize()           - Initialize library (once per process)
+//! 2. C_GetSlotList()          - Enumerate available slots/namespaces
+//! 3. C_OpenSession()          - Open a session on a slot
+//! 4. C_Login()                - Authenticate to access private objects
+//! 5. C_Sign/C_Encrypt/etc.    - Perform cryptographic operations
+//! 6. C_Logout()               - End authenticated session
+//! 7. C_CloseSession()         - Close the session
+//! 8. C_Finalize()             - Cleanup (once per process)
+//! ```
+//!
+//! ## Environment Configuration
+//!
+//! Configure the bridge using environment variables:
+//!
+//! | Variable | Description | Default |
+//! |----------|-------------|---------|
+//! | `HSM_GRPC_ADDRESS` | HSM gRPC server address | `localhost:50051` |
+//! | `HSM_NAMESPACES` | Comma-separated namespace list | `default` |
+//! | `HSM_TLS_CERT` | Path to client certificate | - |
+//! | `HSM_TLS_KEY` | Path to client private key | - |
+//! | `HSM_TLS_CA` | Path to CA certificate | - |
+//!
+//! ## Slots and Tokens
+//!
+//! Each HSM namespace is exposed as a PKCS#11 slot/token pair:
+//!
+//! | Slot ID | Namespace | Token Label |
+//! |---------|-----------|-------------|
+//! | 0 | default | default |
+//! | 1 | production | production |
+//! | 2 | staging | staging |
+//! | ... | ... | ... |
+//!
+//! ## Thread Safety
+//!
+//! This library is fully thread-safe:
+//!
+//! - Multiple threads can call PKCS#11 functions concurrently
+//! - Sessions are protected by appropriate locking
+//! - Global state uses lock-free data structures where possible
+//!
+//! ## Security Considerations
+//!
+//! - **PIN Protection**: PINs are never logged or stored in memory longer than needed
+//! - **Session Isolation**: Sessions are isolated between threads/processes
+//! - **mTLS Transport**: All communication with HSM uses mutual TLS
+//! - **Key Non-Extractability**: Private keys cannot be exported via PKCS#11
 
 pub mod crypto;
 pub mod ffi;

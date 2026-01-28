@@ -71,7 +71,7 @@
 //! let cached = CachedStorage::new(backend, 5_000);
 //!
 //! // Create namespace
-//! cached.backend().lock().unwrap().create_namespace("prod")?;
+//! cached.backend().lock().create_namespace("prod")?;
 //!
 //! let key_id = KeyId::new("hot-key");
 //!
@@ -102,7 +102,7 @@
 //! # let kek = [0u8; 32];
 //! # let backend = EncryptedFileStorage::create_with_new_key(base_path, &kek)?;
 //! # let cached = CachedStorage::new(backend, 10_000);
-//! # cached.backend().lock().unwrap().create_namespace("prod")?;
+//! # cached.backend().lock().create_namespace("prod")?;
 //! // Perform operations...
 //! for i in 0..100 {
 //!     let key_id = KeyId::new(format!("key-{}", i));
@@ -135,7 +135,7 @@
 //! # let kek = [0u8; 32];
 //! # let backend = EncryptedFileStorage::create_with_new_key(base_path, &kek)?;
 //! # let cached = CachedStorage::new(backend, 10_000);
-//! # cached.backend().lock().unwrap().create_namespace("prod")?;
+//! # cached.backend().lock().create_namespace("prod")?;
 //! let key_id = KeyId::new("important-key");
 //!
 //! // Write goes to BOTH cache and disk
@@ -155,9 +155,10 @@ use crate::backend::{StorageBackend, StorageResult};
 use crate::KeyId;
 use dashmap::DashMap;
 use lru::LruCache;
+use parking_lot::Mutex;
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// Metadata for cached keys
 #[derive(Debug, Clone)]
@@ -245,7 +246,7 @@ impl<B: StorageBackend> CachedStorage<B> {
 
     /// Clear the cache
     pub fn clear_cache(&self) {
-        self.key_cache.lock().unwrap().clear();
+        self.key_cache.lock().clear();
         self.metadata_cache.clear();
         self.hits.store(0, Ordering::Relaxed);
         self.misses.store(0, Ordering::Relaxed);
@@ -257,16 +258,17 @@ impl<B: StorageBackend> CachedStorage<B> {
 
         // Check cache first
         {
-            let mut cache = self.key_cache.lock().unwrap();
+            let mut cache = self.key_cache.lock();
             if let Some(cached_data) = cache.get(&cache_key) {
                 self.hits.fetch_add(1, Ordering::Relaxed);
+                // Clone is intentional: caller receives independent copy for secure zeroization
                 return Ok((**cached_data).clone());
             }
         }
 
         // Cache miss - read from backend
         self.misses.fetch_add(1, Ordering::Relaxed);
-        let backend = self.backend.lock().unwrap();
+        let backend = self.backend.lock();
         let data = backend.load_key(key_id, namespace)?;
         drop(backend);
 
@@ -280,10 +282,7 @@ impl<B: StorageBackend> CachedStorage<B> {
                 .as_secs(),
         };
 
-        self.key_cache
-            .lock()
-            .unwrap()
-            .put(cache_key.clone(), data_arc);
+        self.key_cache.lock().put(cache_key.clone(), data_arc);
         self.metadata_cache.insert(cache_key, metadata);
 
         Ok(data)
@@ -297,7 +296,7 @@ impl<B: StorageBackend> CachedStorage<B> {
         namespace: &str,
     ) -> StorageResult<()> {
         // Write through to backend
-        let mut backend = self.backend.lock().unwrap();
+        let mut backend = self.backend.lock();
         backend.store_key(key_id, data, namespace)?;
         drop(backend);
 
@@ -312,10 +311,7 @@ impl<B: StorageBackend> CachedStorage<B> {
                 .as_secs(),
         };
 
-        self.key_cache
-            .lock()
-            .unwrap()
-            .put(cache_key.clone(), data_arc);
+        self.key_cache.lock().put(cache_key.clone(), data_arc);
         self.metadata_cache.insert(cache_key, metadata);
 
         Ok(())
@@ -324,13 +320,13 @@ impl<B: StorageBackend> CachedStorage<B> {
     /// Delete a key (invalidate cache)
     pub fn delete_key_cached(&self, key_id: &KeyId, namespace: &str) -> StorageResult<()> {
         // Delete from backend
-        let mut backend = self.backend.lock().unwrap();
+        let mut backend = self.backend.lock();
         backend.delete_key(key_id, namespace)?;
         drop(backend);
 
         // Invalidate cache
         let cache_key = Self::make_cache_key(namespace, key_id);
-        self.key_cache.lock().unwrap().pop(&cache_key);
+        self.key_cache.lock().pop(&cache_key);
         self.metadata_cache.remove(&cache_key);
 
         Ok(())
@@ -395,12 +391,7 @@ mod tests {
         let (_temp, cached) = create_test_cached_storage();
 
         // Create namespace
-        cached
-            .backend()
-            .lock()
-            .unwrap()
-            .create_namespace("test")
-            .unwrap();
+        cached.backend().lock().create_namespace("test").unwrap();
 
         let key_id = KeyId::new("test-key");
         let data = b"test data";
@@ -427,23 +418,13 @@ mod tests {
         let (_temp, cached) = create_test_cached_storage();
 
         // Create namespace
-        cached
-            .backend()
-            .lock()
-            .unwrap()
-            .create_namespace("test")
-            .unwrap();
+        cached.backend().lock().create_namespace("test").unwrap();
 
         let key_id = KeyId::new("test-key");
         let data = b"test data";
 
         // Write directly to backend (bypass cache)
-        cached
-            .backend()
-            .lock()
-            .unwrap()
-            .store_key(&key_id, data, "test")
-            .unwrap();
+        cached.backend().lock().store_key(&key_id, data, "test").unwrap();
 
         // Read (cache miss)
         let loaded = cached.load_key_cached(&key_id, "test").unwrap();
@@ -460,12 +441,7 @@ mod tests {
         let (_temp, cached) = create_test_cached_storage();
 
         // Create namespace
-        cached
-            .backend()
-            .lock()
-            .unwrap()
-            .create_namespace("test")
-            .unwrap();
+        cached.backend().lock().create_namespace("test").unwrap();
 
         let key_id = KeyId::new("test-key");
         let data = b"test data";
@@ -481,7 +457,7 @@ mod tests {
 
         // Verify key is gone
         let backend = cached.backend();
-        let result = backend.lock().unwrap().load_key(&key_id, "test");
+        let result = backend.lock().load_key(&key_id, "test");
         assert!(result.is_err());
     }
 
@@ -494,12 +470,7 @@ mod tests {
 
         // Create cache with capacity of 2
         let cached = CachedStorage::new(backend, 2);
-        cached
-            .backend()
-            .lock()
-            .unwrap()
-            .create_namespace("test")
-            .unwrap();
+        cached.backend().lock().create_namespace("test").unwrap();
 
         // Write 3 keys
         cached
@@ -525,12 +496,7 @@ mod tests {
     fn test_clear_cache() {
         let (_temp, cached) = create_test_cached_storage();
 
-        cached
-            .backend()
-            .lock()
-            .unwrap()
-            .create_namespace("test")
-            .unwrap();
+        cached.backend().lock().create_namespace("test").unwrap();
 
         // Add some data
         cached

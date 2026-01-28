@@ -117,10 +117,18 @@ impl EcdsaEngine {
     ///
     /// Returns error if key/signature is invalid or verification fails.
     pub fn verify_p256(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<bool> {
+        // Validate signature size before parsing to avoid panics
+        if signature.len() != 64 {
+            return Err(CryptoError::InvalidSignatureSize {
+                expected: 64,
+                actual: signature.len(),
+            });
+        }
+
         let verifying_key = VerifyingKey::from_sec1_bytes(public_key)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
-        let sig = Signature::from_bytes(signature.into())
+        let sig = Signature::from_slice(signature)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
         verifying_key
@@ -194,10 +202,18 @@ impl EcdsaEngine {
     ///
     /// Returns error if key/signature is invalid or verification fails.
     pub fn verify_p384(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<bool> {
+        // Validate signature size before parsing to avoid panics
+        if signature.len() != 96 {
+            return Err(CryptoError::InvalidSignatureSize {
+                expected: 96,
+                actual: signature.len(),
+            });
+        }
+
         let verifying_key = P384VerifyingKey::from_sec1_bytes(public_key)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
-        let sig = P384Signature::from_bytes(signature.into())
+        let sig = P384Signature::from_slice(signature)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
         verifying_key

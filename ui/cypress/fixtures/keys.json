@@ -1,0 +1,43 @@
+{
+  "ed25519": {
+    "algorithm": "ED25519",
+    "purpose": "SIGN",
+    "namespace": "default",
+    "description": "Ed25519 signing key - fast, secure digital signatures"
+  },
+  "ecdsaP256": {
+    "algorithm": "ECDSA_P256",
+    "purpose": "SIGN",
+    "namespace": "default",
+    "description": "ECDSA P-256 signing key - NIST standard"
+  },
+  "ecdsaP384": {
+    "algorithm": "ECDSA_P384",
+    "purpose": "SIGN",
+    "namespace": "default",
+    "description": "ECDSA P-384 signing key - higher security"
+  },
+  "rsa2048": {
+    "algorithm": "RSA2048",
+    "purpose": "SIGN",
+    "namespace": "default",
+    "description": "RSA 2048-bit key - legacy compatibility"
+  },
+  "rsa3072": {
+    "algorithm": "RSA3072",
+    "purpose": "SIGN",
+    "namespace": "default",
+    "description": "RSA 3072-bit key - medium security"
+  },
+  "rsa4096": {
+    "algorithm": "RSA4096",
+    "purpose": "SIGN",
+    "namespace": "default",
+    "description": "RSA 4096-bit key - high security"
+  },
+  "testData": {
+    "plaintext": "Hello, HSM!",
+    "base64Data": "SGVsbG8sIEhTTSE=",
+    "largeData": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+  }
+}

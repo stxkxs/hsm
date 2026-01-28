@@ -9,20 +9,15 @@ keywords = ["hsm", "validator", "ethereum", "staking", "anti-slashing"]
 categories = ["cryptography", "authentication"]
 
 [dependencies]
-# HSM internal crates (optional - only if needed for integration)
-# hsm-crypto-engine = { path = "../crypto-engine" }
-# hsm-key-manager = { path = "../key-manager" }
-# hsm-storage = { path = "../storage" }
-
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Async runtime
-tokio = { version = "1.0", features = ["full"] }
+tokio.workspace = true
 
 # Error handling
-thiserror = "1.0"
+thiserror.workspace = true
 
 # Logging
 tracing = "0.1"
@@ -41,10 +36,10 @@ sled = "0.34"
 
 # Concurrent access
 parking_lot = "0.12"
-dashmap = "5.5"
+dashmap.workspace = true
 
 # Misc
-uuid = { version = "1.0", features = ["v4", "serde"] }
+uuid.workspace = true
 bytes = "1.5"
 getrandom = "0.2"
 
@@ -52,7 +47,7 @@ getrandom = "0.2"
 tokio-test = "0.4"
 tempfile = "3.10"
 proptest = "1.4"
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion.workspace = true
 
 [[bench]]
 name = "anti_slashing"

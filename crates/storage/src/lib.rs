@@ -124,7 +124,7 @@
 //! let cached_storage = CachedStorage::new(backend, 10_000);
 //!
 //! // Create namespace
-//! cached_storage.backend().lock().unwrap().create_namespace("production")?;
+//! cached_storage.backend().lock().create_namespace("production")?;
 //!
 //! // Write-through cache: writes go to both cache and disk
 //! let key_id = KeyId::new("hot-key");

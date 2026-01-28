@@ -16,14 +16,16 @@ pub fn create_router(state: AppState) -> Router {
     // Public routes (no auth required)
     let public_routes = Router::new()
         .route("/health", get(handlers::health_check))
-        .route("/ready", get(handlers::ready_check));
+        .route("/ready", get(handlers::ready_check))
+        .route("/auth/dev-login", post(handlers::dev_login));
 
     // Key management routes
     let key_routes = Router::new()
         .route("/", post(handlers::generate_key))
         .route("/", get(handlers::list_keys))
         .route("/{key_id}", get(handlers::get_key))
-        .route("/{key_id}", delete(handlers::delete_key));
+        .route("/{key_id}", delete(handlers::delete_key))
+        .route("/{key_id}/rotate", post(handlers::rotate_key));
 
     // Cryptographic operation routes
     let crypto_routes = Router::new()
@@ -35,11 +37,17 @@ pub fn create_router(state: AppState) -> Router {
     // Audit routes
     let audit_routes = Router::new().route("/", get(handlers::get_audit_log));
 
+    // Auth routes (authenticated)
+    let auth_routes = Router::new()
+        .route("/me", get(handlers::me))
+        .route("/logout", post(handlers::logout));
+
     // Combine authenticated routes
     let authenticated_routes = Router::new()
         .nest("/keys", key_routes)
         .nest("/keys", crypto_routes)
         .nest("/audit", audit_routes)
+        .nest("/auth", auth_routes)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

@@ -121,6 +121,9 @@ lru = "0.16"
 tempfile = "3.19"
 async-trait = "0.1"
 
+# Testing & Benchmarking
+criterion = { version = "0.8", features = ["html_reports"] }
+
 # High Availability / Clustering
 openraft = "0.10"
 sled = "0.34"
@@ -137,6 +140,12 @@ strip = true
 
 [profile.bench]
 inherits = "release"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
 
 # Security patches for transitive dependencies
 [patch.crates-io]

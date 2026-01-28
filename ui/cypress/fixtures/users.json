@@ -1,0 +1,35 @@
+{
+  "admin": {
+    "username": "admin",
+    "password": "dev",
+    "roles": ["admin", "operator", "user", "auditor"],
+    "namespace": "default",
+    "description": "Full administrative access"
+  },
+  "operator": {
+    "username": "operator",
+    "password": "dev",
+    "roles": ["operator", "user"],
+    "namespace": "default",
+    "description": "Key management and operations"
+  },
+  "user": {
+    "username": "user",
+    "password": "dev",
+    "roles": ["user"],
+    "namespace": "default",
+    "description": "Basic cryptographic operations only"
+  },
+  "auditor": {
+    "username": "auditor",
+    "password": "dev",
+    "roles": ["auditor"],
+    "namespace": "default",
+    "description": "Read-only audit log access"
+  },
+  "invalid": {
+    "username": "nonexistent",
+    "password": "wrongpassword",
+    "description": "Invalid credentials for testing error handling"
+  }
+}

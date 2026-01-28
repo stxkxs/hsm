@@ -8,7 +8,7 @@ description = "High availability clustering for HSM with Raft consensus"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1", features = ["full", "sync"] }
+tokio = { workspace = true, features = ["full", "sync"] }
 
 # Raft consensus (using openraft)
 # Note: In production, use openraft = "0.9" - simplified here for core implementation
