@@ -205,14 +205,15 @@ Cypress.Commands.add('selectPurpose', (purpose: string) => {
  * Wait for loading spinners to disappear
  */
 Cypress.Commands.add('waitForLoading', () => {
-  cy.get('[data-testid="loading"], [role="status"]', { timeout: 1000 })
-    .should('not.exist')
-    .then(() => {})
-    .catch(() => {
-      // No loading indicator found, that's fine
-    })
-  // Also wait for any skeleton loaders
-  cy.get('.animate-pulse', { timeout: 1000 }).should('not.exist')
+  cy.get('body').then(($body) => {
+    if ($body.find('[data-testid="loading"], [role="status"]').length) {
+      cy.get('[data-testid="loading"], [role="status"]', { timeout: 5000 })
+        .should('not.exist')
+    }
+    if ($body.find('.animate-pulse').length) {
+      cy.get('.animate-pulse', { timeout: 5000 }).should('not.exist')
+    }
+  })
 })
 
 /**

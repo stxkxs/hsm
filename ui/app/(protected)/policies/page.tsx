@@ -145,9 +145,12 @@ export default function PoliciesPage() {
                 <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
               </div>
             ) : policies.length === 0 ? (
-              <div className="py-8 text-center text-muted-foreground">
-                <p>No policies configured</p>
-                <p className="text-sm">Upload a WASM policy to enforce transaction rules</p>
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
+                  <Upload className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm font-medium text-foreground">No policies configured</p>
+                <p className="text-xs text-muted-foreground mt-1">Upload a WASM policy to enforce transaction rules</p>
               </div>
             ) : (
               <Table>

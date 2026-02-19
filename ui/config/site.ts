@@ -11,6 +11,8 @@ export const algorithms = [
   { value: "RSA2048", label: "RSA 2048", type: "signing" },
   { value: "RSA3072", label: "RSA 3072", type: "signing" },
   { value: "RSA4096", label: "RSA 4096", type: "signing" },
+  { value: "AES128", label: "AES-128", type: "encryption" },
+  { value: "AES256", label: "AES-256", type: "encryption" },
 ];
 
 export const signingAlgorithms = algorithms.filter((a) => a.type === "signing");

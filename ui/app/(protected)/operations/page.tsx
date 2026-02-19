@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PenTool, CheckCircle, Lock, Unlock } from "lucide-react";
+import { PenTool, CheckCircle, Lock, Unlock, ArrowRight } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { PageContainer } from "@/components/layout/page-container";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,21 +41,20 @@ export default function OperationsPage() {
         description="Perform signing, verification, encryption, and decryption"
       />
       <PageContainer>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2 animate-fade-in-up">
           {operations.map((op) => (
             <Link key={op.href} href={op.href}>
-              <Card className="h-full hover:border-primary/50 transition-colors cursor-pointer">
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                      <op.icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-lg">{op.title}</CardTitle>
-                      <CardDescription>{op.description}</CardDescription>
-                    </div>
+              <Card className="h-full card-hover-glow transition-all duration-200 hover:translate-y-[-1px] cursor-pointer group">
+                <CardContent className="flex items-center gap-4 py-5 px-5">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <op.icon className="h-5 w-5 text-primary" />
                   </div>
-                </CardHeader>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{op.title}</p>
+                    <p className="text-xs text-muted-foreground">{op.description}</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                </CardContent>
               </Card>
             </Link>
           ))}

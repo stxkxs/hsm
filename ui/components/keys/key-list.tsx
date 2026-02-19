@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MoreHorizontal, Copy, Trash2, RotateCcw, Eye } from "lucide-react";
+import { MoreHorizontal, Copy, Trash2, RotateCcw, Eye, KeyRound } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -45,10 +45,13 @@ export function KeyList({ keys, onDelete, onRotate }: KeyListProps) {
 
   if (keys.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <p className="text-muted-foreground">No keys found</p>
-        <p className="text-sm text-muted-foreground">
-          Create a new key to get started
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
+          <KeyRound className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <p className="text-sm font-medium text-foreground">No keys found</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Create a new cryptographic key to get started
         </p>
       </div>
     );

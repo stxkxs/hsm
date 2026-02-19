@@ -84,7 +84,7 @@ export default function AuditPage() {
     <>
       <Header
         title="Audit Log"
-        description="Tamper-evident security audit trail"
+        description="Tamper-evident security audit trail with hash chain verification"
         action={
           <div className="flex items-center gap-2">
             <Button

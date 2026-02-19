@@ -123,9 +123,12 @@ export default function WalletsPage() {
                 <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
               </div>
             ) : wallets.length === 0 ? (
-              <div className="py-8 text-center text-muted-foreground">
-                <p>No wallets found</p>
-                <p className="text-sm">Create a wallet from a BIP-39 mnemonic</p>
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
+                  <Plus className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm font-medium text-foreground">No wallets found</p>
+                <p className="text-xs text-muted-foreground mt-1">Create a wallet from a BIP-39 mnemonic</p>
               </div>
             ) : (
               <Table>

@@ -2,7 +2,7 @@
 
 :root {
   --radius: 0.625rem;
-  /* Light mode - rarely used for HSM (security tool = dark by default) */
+  /* Light mode */
   --background: oklch(0.985 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -34,34 +34,35 @@
 }
 
 .dark {
-  --background: oklch(0.12 0.01 260);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.16 0.01 260);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.16 0.01 260);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.65 0.17 155);
-  --primary-foreground: oklch(0.12 0 0);
-  --secondary: oklch(0.22 0.01 260);
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.22 0.01 260);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.22 0.01 260);
-  --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.65 0.2 25);
+  --background: oklch(0.1 0.005 270);
+  --foreground: oklch(0.93 0.005 270);
+  --card: oklch(0.14 0.005 270);
+  --card-foreground: oklch(0.93 0.005 270);
+  --popover: oklch(0.14 0.005 270);
+  --popover-foreground: oklch(0.93 0.005 270);
+  --primary: oklch(0.62 0.17 155);
+  --primary-foreground: oklch(0.1 0 0);
+  --secondary: oklch(0.19 0.005 270);
+  --secondary-foreground: oklch(0.93 0.005 270);
+  --muted: oklch(0.19 0.005 270);
+  --muted-foreground: oklch(0.6 0.005 270);
+  --accent: oklch(0.19 0.005 270);
+  --accent-foreground: oklch(0.93 0.005 270);
+  --destructive: oklch(0.62 0.2 25);
   --destructive-foreground: oklch(0.95 0 0);
-  --success: oklch(0.65 0.17 155);
-  --success-foreground: oklch(0.12 0 0);
+  --success: oklch(0.62 0.17 155);
+  --success-foreground: oklch(0.1 0 0);
   --warning: oklch(0.75 0.17 65);
-  --warning-foreground: oklch(0.12 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.65 0.17 155);
-  --chart-1: oklch(0.65 0.17 155);
+  --warning-foreground: oklch(0.1 0 0);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.62 0.17 155);
+  --chart-1: oklch(0.62 0.17 155);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.55 0.2 250);
   --chart-4: oklch(0.75 0.17 65);
-  --chart-5: oklch(0.65 0.2 25);
+  --chart-5: oklch(0.62 0.2 25);
+  --sidebar: oklch(0.08 0.005 270);
 }
 
 @theme inline {
@@ -85,6 +86,7 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar, var(--card));
 }
 
 html {
@@ -96,32 +98,32 @@ body {
 }
 
 ::selection {
-  background: oklch(0.65 0.17 155 / 30%);
+  background: oklch(0.62 0.17 155 / 30%);
   color: inherit;
 }
 
 ::-moz-selection {
-  background: oklch(0.65 0.17 155 / 30%);
+  background: oklch(0.62 0.17 155 / 30%);
   color: inherit;
 }
 
-/* Custom scrollbar for dark mode */
+/* Custom scrollbar */
 .dark ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: oklch(0.16 0.01 260);
+  background: transparent;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: oklch(0.35 0.01 260);
-  border-radius: 4px;
+  background: oklch(1 0 0 / 10%);
+  border-radius: 3px;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.45 0.01 260);
+  background: oklch(1 0 0 / 18%);
 }
 
 /* Monospace code styling */
@@ -129,21 +131,21 @@ body {
   font-feature-settings: "liga" 0;
 }
 
-/* Key/signature display - ensure proper wrapping */
+/* Key/signature display */
 .break-all-mono {
   word-break: break-all;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 /* Status indicator animations */
 @keyframes status-pulse {
   0%, 100% {
     opacity: 1;
-    transform: scale(1);
+    box-shadow: 0 0 0 0 oklch(0.62 0.17 155 / 40%);
   }
   50% {
-    opacity: 0.6;
-    transform: scale(0.95);
+    opacity: 0.8;
+    box-shadow: 0 0 0 4px oklch(0.62 0.17 155 / 0%);
   }
 }
 
@@ -182,20 +184,6 @@ body {
   animation: toast-out 0.2s ease-in forwards;
 }
 
-/* Sidebar styling */
-.sidebar-link {
-  transition: all 0.15s ease;
-}
-
-.sidebar-link:hover {
-  background: var(--accent);
-}
-
-.sidebar-link.active {
-  background: var(--primary);
-  color: var(--primary-foreground);
-}
-
 /* Table row hover */
 .table-row-hover {
   transition: background-color 0.15s ease;
@@ -206,5 +194,46 @@ body {
 }
 
 .dark .table-row-hover:hover {
-  background: oklch(1 0 0 / 5%);
+  background: oklch(1 0 0 / 3%);
+}
+
+/* Subtle card border glow on hover */
+.card-hover-glow {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dark .card-hover-glow:hover {
+  border-color: oklch(0.62 0.17 155 / 25%);
+  box-shadow: 0 0 0 1px oklch(0.62 0.17 155 / 8%);
+}
+
+/* Stat card gradient overlays */
+.stat-card-gradient {
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card-gradient::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  pointer-events: none;
+  background: linear-gradient(135deg, currentColor 0%, transparent 60%);
+}
+
+/* Fade in animation for page content */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.3s ease-out;
 }
