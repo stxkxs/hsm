@@ -134,11 +134,26 @@ impl fmt::Debug for Seed {
 ///
 /// A mnemonic phrase that can be converted to a seed for HD wallet derivation.
 /// The phrase is stored securely and zeroized on drop.
+///
+/// # Security
+///
+/// Clone is intentionally derived to support wallet workflows that need to
+/// duplicate a mnemonic (e.g., backup flows). The `SecretString` field handles
+/// its own zeroization. The `Drop` impl zeros the `word_count` field to avoid
+/// leaking metadata about the mnemonic length.
 #[derive(Clone)]
 pub struct Mnemonic {
     phrase: SecretString,
     word_count: usize,
     language: Language,
+}
+
+impl Drop for Mnemonic {
+    fn drop(&mut self) {
+        // SecretString handles its own zeroization.
+        // Zero word_count to prevent leaking mnemonic length metadata.
+        self.word_count.zeroize();
+    }
 }
 
 impl Mnemonic {

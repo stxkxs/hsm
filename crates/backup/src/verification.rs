@@ -303,7 +303,7 @@ mod tests {
         let verifier = BackupVerifier::new();
 
         let backup = exporter
-            .export_keys(b"test_data", b"password", Some("test".to_string()))
+            .export_keys(b"test_data", b"test-password-1234", Some("test".to_string()))
             .unwrap();
 
         let result = verifier.verify_backup(&backup);
@@ -333,7 +333,7 @@ mod tests {
         let verifier = BackupVerifier::new();
 
         let backup = exporter
-            .export_keys(b"test_data", b"correct", None)
+            .export_keys(b"test_data", b"correct-password1", None)
             .unwrap();
 
         let result = verifier.verify_with_password(&backup, b"wrong");
@@ -345,7 +345,7 @@ mod tests {
         let exporter = KeyExporter::new();
         let verifier = BackupVerifier::new();
 
-        let password = b"test_password";
+        let password = b"test-password-1234";
         let data = b"test_key_data";
         let backup = exporter.export_keys(data, password, None).unwrap();
 

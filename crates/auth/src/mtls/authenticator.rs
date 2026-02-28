@@ -6,6 +6,7 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::ServerConfig;
 use rustls_pki_types::pem::PemObject;
 use std::sync::Arc;
+use x509_parser::prelude::*;
 
 /// Mutual TLS (mTLS) authenticator for client certificate validation.
 ///
@@ -217,10 +218,13 @@ impl MtlsAuthenticator {
         let namespace = CertificateValidator::extract_organizational_unit(&parsed_cert.der)
             .unwrap_or_else(|| "default".to_string());
 
-        // Extract roles from certificate extensions or organizational unit
-        // In a real system, roles would be encoded in certificate extensions
-        // For now, we'll derive them from the common name or organization
-        let roles = Self::extract_roles(&common_name, &organization);
+        // Parse the X.509 certificate for extension-based role extraction
+        let (_, x509_cert) = X509Certificate::from_der(&parsed_cert.der).map_err(|e| {
+            AuthError::CertificateParsingError(format!("DER parsing failed: {}", e))
+        })?;
+
+        // Extract roles from certificate extensions (preferred) or CN-based fallback
+        let roles = Self::extract_roles(&x509_cert, &common_name, &organization);
 
         let identity =
             ClientIdentity::new(common_name, organization, namespace, roles, serial_number);
@@ -265,11 +269,44 @@ impl MtlsAuthenticator {
         Ok(config)
     }
 
-    /// Extract roles from certificate attributes
-    /// In production, this should read from certificate extensions
-    fn extract_roles(common_name: &str, organization: &Option<String>) -> Vec<Role> {
-        // Simple role extraction based on naming conventions
-        // In production, roles should be in certificate extensions
+    /// Extract roles from X.509 certificate extensions or fall back to CN-based extraction.
+    ///
+    /// Checks for a custom roles extension (OID 1.3.6.1.4.1.99999.1) first.
+    /// The extension value should be a UTF-8 string of comma-separated role names.
+    /// Falls back to CN-based role derivation with a warning if no extension is found.
+    fn extract_roles(cert: &X509Certificate, common_name: &str, organization: &Option<String>) -> Vec<Role> {
+        // Custom OID for roles extension: 1.3.6.1.4.1.99999.1
+        let roles_oid = x509_parser::oid_registry::Oid::from(&[1, 3, 6, 1, 4, 1, 99999, 1])
+            .expect("valid OID for roles extension");
+
+        // Try to find the roles extension
+        for ext in cert.extensions() {
+            if ext.oid == roles_oid {
+                if let Ok(roles_str) = std::str::from_utf8(ext.value) {
+                    let roles: Vec<Role> = roles_str
+                        .split(',')
+                        .filter_map(|r| match r.trim().to_lowercase().as_str() {
+                            "admin" => Some(Role::Admin),
+                            "operator" => Some(Role::Operator),
+                            "auditor" => Some(Role::Auditor),
+                            "user" => Some(Role::User),
+                            _ => None,
+                        })
+                        .collect();
+
+                    if !roles.is_empty() {
+                        return roles;
+                    }
+                }
+            }
+        }
+
+        // Fallback: CN-based role derivation (legacy, log warning)
+        tracing::warn!(
+            "No roles extension found in certificate for CN='{}', falling back to CN-based role derivation",
+            common_name
+        );
+
         let mut roles = Vec::new();
 
         if common_name.contains("admin") {
@@ -302,17 +339,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_extract_roles() {
-        let roles = MtlsAuthenticator::extract_roles("admin-user", &None);
+    fn test_extract_roles_cn_fallback() {
+        // Generate a minimal self-signed cert for testing (no custom extension)
+        let cert_der = rcgen::generate_simple_self_signed(vec!["admin-user".to_string()])
+            .unwrap()
+            .cert
+            .der()
+            .to_vec();
+        let (_, x509_cert) = X509Certificate::from_der(&cert_der).unwrap();
+
+        // Should fall back to CN-based extraction
+        let roles = MtlsAuthenticator::extract_roles(&x509_cert, "admin-user", &None);
         assert!(roles.contains(&Role::Admin));
 
-        let roles = MtlsAuthenticator::extract_roles("operator-service", &None);
+        let roles = MtlsAuthenticator::extract_roles(&x509_cert, "operator-service", &None);
         assert!(roles.contains(&Role::Operator));
 
-        let roles = MtlsAuthenticator::extract_roles("regular-user", &None);
+        let roles = MtlsAuthenticator::extract_roles(&x509_cert, "regular-user", &None);
         assert!(roles.contains(&Role::User));
 
-        let roles = MtlsAuthenticator::extract_roles("auditor-bot", &None);
+        let roles = MtlsAuthenticator::extract_roles(&x509_cert, "auditor-bot", &None);
         assert!(roles.contains(&Role::Auditor));
     }
 }

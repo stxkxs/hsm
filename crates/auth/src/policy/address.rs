@@ -1,7 +1,6 @@
 //! Address-based policies (allowlist/blocklist)
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::fmt;
 
 /// Address restriction mode

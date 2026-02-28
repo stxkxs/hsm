@@ -110,6 +110,10 @@ pub enum SlashingError {
         /// The minimum allowed slot
         min_slot: u64,
     },
+
+    /// Database persistence error.
+    #[error("Database error: {0}")]
+    DatabaseError(String),
 }
 
 /// General validator errors.

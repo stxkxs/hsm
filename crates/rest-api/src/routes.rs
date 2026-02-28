@@ -16,8 +16,10 @@ pub fn create_router(state: AppState) -> Router {
     // Public routes (no auth required)
     let public_routes = Router::new()
         .route("/health", get(handlers::health_check))
-        .route("/ready", get(handlers::ready_check))
-        .route("/auth/dev-login", post(handlers::dev_login));
+        .route("/ready", get(handlers::ready_check));
+
+    #[cfg(debug_assertions)]
+    let public_routes = public_routes.route("/auth/dev-login", post(handlers::dev_login));
 
     // Key management routes
     let key_routes = Router::new()

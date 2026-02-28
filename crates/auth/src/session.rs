@@ -688,9 +688,9 @@ impl Session {
 
     /// Generate a cryptographically secure session ID
     fn generate_session_id() -> SessionId {
-        let mut rng = rand::thread_rng();
         let mut session_id_bytes = [0u8; 32];
-        rng.fill(&mut session_id_bytes);
+        getrandom::getrandom(&mut session_id_bytes)
+            .expect("Failed to generate secure random bytes for session ID");
 
         // Hash for additional security
         let mut hasher = Sha256::new();
@@ -1299,7 +1299,13 @@ impl SessionManager {
     }
 
     /// Validate and get a session
+    #[deprecated(since = "0.2.0", note = "Use validate_session_with_token for security")]
+    #[allow(deprecated)]
     pub fn validate_session(&self, session_id: &str) -> Result<Session> {
+        tracing::warn!(
+            session_id = session_id,
+            "validate_session called without token verification - use validate_session_with_token instead"
+        );
         let mut session_ref = self
             .sessions
             .get_mut(session_id)
@@ -1650,6 +1656,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_session_manager_validate() {
         let manager = SessionManager::new(3600);
         let identity = create_test_identity("client1");

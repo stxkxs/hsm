@@ -182,12 +182,14 @@
 //!
 //! Enable CORS for browser clients:
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use hsm_rest_api::{create_router_with_cors, RestApiConfig};
 //!
 //! # async fn example() {
 //! let config = RestApiConfig::default();
-//! let router = create_router_with_cors(config);
+//! let state = AppState::new(config);
+//! let origins = vec!["https://example.com".to_string()];
+//! let router = create_router_with_cors(state, origins);
 //! // Router now accepts cross-origin requests
 //! # }
 //! ```

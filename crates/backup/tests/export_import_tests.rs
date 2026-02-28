@@ -39,7 +39,7 @@ fn test_export_import_json_format() {
     let importer = KeyImporter::new();
 
     let data = b"json_test_data";
-    let password = b"password123";
+    let password = b"password12345678";
 
     // Export to JSON
     let json = exporter
@@ -77,7 +77,7 @@ fn test_wrong_password_import() {
 fn test_empty_data_export() {
     let exporter = KeyExporter::new();
 
-    let result = exporter.export_keys(&[], b"password", None);
+    let result = exporter.export_keys(&[], b"test-password-1234", None);
 
     assert!(matches!(result, Err(BackupError::EmptyData)));
 }
@@ -112,7 +112,7 @@ fn test_backup_integrity_check() {
     let importer = KeyImporter::new();
 
     let backup = exporter
-        .export_keys(b"test_data", b"password", None)
+        .export_keys(b"test_data", b"test-password-1234", None)
         .unwrap();
 
     // Verify backup structure
@@ -126,7 +126,7 @@ fn test_large_data_export_import() {
 
     // Create 1MB of data
     let large_data = vec![0x42u8; 1024 * 1024];
-    let password = b"password";
+    let password = b"test-password-1234";
 
     let backup = exporter
         .export_keys(&large_data, password, None)
@@ -145,7 +145,7 @@ fn test_multiple_export_import_cycles() {
     let importer = KeyImporter::new();
 
     let mut data = b"initial_data".to_vec();
-    let password = b"password";
+    let password = b"test-password-1234";
 
     for i in 0..5 {
         // Export
@@ -169,7 +169,7 @@ fn test_metadata_preservation() {
     let importer = KeyImporter::new();
 
     let data = b"test_data";
-    let password = b"password";
+    let password = b"test-password-1234";
     let namespace = "test_namespace";
 
     let backup = exporter
@@ -201,7 +201,7 @@ fn test_concurrent_exports() {
         let exporter = Arc::clone(&exporter);
         let handle = thread::spawn(move || {
             let data = format!("data_{}", i);
-            let password = format!("password_{}", i);
+            let password = format!("test-password-{:04}", i);
 
             exporter
                 .export_keys(data.as_bytes(), password.as_bytes(), None)
@@ -221,7 +221,7 @@ fn test_invalid_json_import() {
     let importer = KeyImporter::new();
 
     let invalid_json = b"{this is not valid json}";
-    let result = importer.import_from_json(invalid_json, b"password");
+    let result = importer.import_from_json(invalid_json, b"test-password-1234");
 
     assert!(matches!(result, Err(BackupError::Deserialization(_))));
 }
@@ -230,7 +230,7 @@ fn test_invalid_json_import() {
 fn test_serialization_deserialization() {
     let exporter = KeyExporter::new();
 
-    let backup = exporter.export_keys(b"test", b"password", None).unwrap();
+    let backup = exporter.export_keys(b"test", b"test-password-1234", None).unwrap();
 
     let json = exporter.serialize_backup(&backup).unwrap();
 

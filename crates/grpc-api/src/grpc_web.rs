@@ -99,11 +99,9 @@ impl GrpcWebConfig {
             return Err("gRPC-Web enabled but no allowed origins configured".to_string());
         }
 
-        // Warn about wildcard origins (but allow them)
+        // Reject wildcard origins - explicit origins must be specified
         if self.allowed_origins.contains(&"*".to_string()) {
-            tracing::warn!(
-                "gRPC-Web CORS configured with wildcard origin - not recommended for production"
-            );
+            return Err("Wildcard CORS origins are not allowed - specify explicit origins".to_string());
         }
 
         Ok(())

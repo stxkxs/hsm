@@ -59,6 +59,14 @@ impl KeyStore {
         {
             let mut cache = self.hot_cache.lock();
             if let Some(key) = cache.get(&composite_key) {
+                // Verify namespace matches even on cache hits to prevent
+                // cross-namespace access through cache poisoning
+                if key.namespace != namespace {
+                    return Err(crate::Error::NamespaceViolation {
+                        expected: namespace.to_string(),
+                        actual: key.namespace.clone(),
+                    });
+                }
                 return Ok(key.clone());
             }
         }

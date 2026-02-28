@@ -261,7 +261,7 @@ impl fmt::Debug for SecretData {
 }
 
 /// A single secret value.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SecretValue {
     /// A string value.
@@ -270,6 +270,16 @@ pub enum SecretValue {
     Binary(Vec<u8>),
     /// A JSON value.
     Json(serde_json::Value),
+}
+
+impl fmt::Debug for SecretValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SecretValue::String(_) => f.write_str("SecretValue::String(<redacted>)"),
+            SecretValue::Binary(_) => f.write_str("SecretValue::Binary(<redacted>)"),
+            SecretValue::Json(_) => f.write_str("SecretValue::Json(<redacted>)"),
+        }
+    }
 }
 
 impl SecretValue {

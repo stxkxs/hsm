@@ -440,13 +440,20 @@ impl KeyManager for DefaultKeyManager {
     }
 
     fn delete_key(&self, key_id: &KeyId, namespace: &str) -> Result<()> {
-        // Mark as destroyed first
-        self.update_state(key_id, namespace, KeyState::Destroyed)?;
-
-        // Remove from store (this will zeroize the key material on drop)
+        // Delete from store first (this will zeroize the key material on drop)
         let _deleted_key = self.store.delete(namespace, key_id)?;
 
-        // Key material is automatically zeroized due to Drop implementation
+        // Then mark state as destroyed. If this fails after deletion,
+        // log the error but don't fail the operation since the key
+        // material has already been securely removed.
+        if let Err(e) = self.update_state(key_id, namespace, KeyState::Destroyed) {
+            tracing::error!(
+                key_id = %key_id,
+                namespace = namespace,
+                error = %e,
+                "Failed to mark key state as destroyed after deletion"
+            );
+        }
 
         Ok(())
     }

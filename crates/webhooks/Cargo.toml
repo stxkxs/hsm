@@ -43,6 +43,9 @@ backoff = { version = "0.4", features = ["tokio"] }
 # Random number generation
 rand = "0.8"
 
+# URL parsing for SSRF prevention
+url = "2.5"
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
 wiremock = "0.6"

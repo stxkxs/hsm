@@ -87,7 +87,7 @@ impl RateLimiter {
         // 2. Check per-identity limit
         let identity_limiter = self
             .per_identity
-            .entry(identity.common_name.clone())
+            .entry(format!("{}:{}", identity.common_name, identity.serial_number))
             .or_insert_with(|| {
                 let quota =
                     Quota::per_second(NonZeroU32::new(self.config.per_identity_rps).unwrap());
@@ -137,7 +137,7 @@ impl RateLimiter {
     pub fn check_identity(&self, identity: &ClientIdentity) -> Result<()> {
         let identity_limiter = self
             .per_identity
-            .entry(identity.common_name.clone())
+            .entry(format!("{}:{}", identity.common_name, identity.serial_number))
             .or_insert_with(|| {
                 let quota =
                     Quota::per_second(NonZeroU32::new(self.config.per_identity_rps).unwrap());

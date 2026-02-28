@@ -93,15 +93,72 @@ impl WebhookConfig {
             return Err("URL cannot be empty".to_string());
         }
 
-        if !self.url.starts_with("http://") && !self.url.starts_with("https://") {
-            return Err("URL must start with http:// or https://".to_string());
-        }
+        // Validate URL for SSRF prevention
+        validate_url(&self.url)?;
 
         if self.secret.len() < 16 {
             return Err("Secret must be at least 16 characters".to_string());
         }
 
         Ok(())
+    }
+}
+
+/// Validate a webhook URL to prevent SSRF attacks.
+///
+/// Checks that:
+/// - The scheme is "https" (rejects "http")
+/// - The hostname does not resolve to a private/internal IP range
+pub fn validate_url(url_str: &str) -> Result<(), String> {
+    let parsed = url::Url::parse(url_str)
+        .map_err(|e| format!("Invalid URL: {}", e))?;
+
+    // Require HTTPS
+    if parsed.scheme() != "https" {
+        return Err("URL scheme must be https".to_string());
+    }
+
+    // Check hostname against private IP ranges
+    if let Some(host) = parsed.host_str() {
+        // Try to parse as IP address directly
+        if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+            if is_private_ip(&ip) {
+                return Err(format!("URL hostname resolves to private IP range: {}", host));
+            }
+        }
+
+        // Also reject known private hostnames
+        if host == "localhost" || host.ends_with(".local") || host.ends_with(".internal") {
+            return Err(format!("URL hostname is not allowed: {}", host));
+        }
+    } else {
+        return Err("URL must have a hostname".to_string());
+    }
+
+    Ok(())
+}
+
+/// Check if an IP address is in a private/reserved range.
+fn is_private_ip(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(ipv4) => {
+            let octets = ipv4.octets();
+            // 10.0.0.0/8
+            octets[0] == 10
+            // 172.16.0.0/12
+            || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+            // 192.168.0.0/16
+            || (octets[0] == 192 && octets[1] == 168)
+            // 127.0.0.0/8 (loopback)
+            || octets[0] == 127
+            // 169.254.0.0/16 (link-local)
+            || (octets[0] == 169 && octets[1] == 254)
+            // 0.0.0.0
+            || (octets[0] == 0 && octets[1] == 0 && octets[2] == 0 && octets[3] == 0)
+        }
+        std::net::IpAddr::V6(ipv6) => {
+            ipv6.is_loopback() || ipv6.is_unspecified()
+        }
     }
 }
 

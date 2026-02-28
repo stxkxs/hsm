@@ -41,6 +41,9 @@ chrono = { version = "0.4", features = ["serde"] }
 # UUID for key IDs
 uuid = { version = "1.19", features = ["v4", "serde"] }
 
+# Logging
+tracing = "0.1"
+
 # Error handling
 thiserror = "2.0"
 anyhow = "1.0"

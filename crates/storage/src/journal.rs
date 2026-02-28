@@ -119,12 +119,26 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 /// Journal operation types
+///
+/// # Security Note
+///
+/// Journal entries currently store key data in plaintext within the write-ahead log.
+/// The `data` field in `StoreKey` contains raw key material that should be encrypted
+/// before being written to the journal. While the final storage files are encrypted
+/// via the master key, the journal itself is not encrypted.
+///
+/// TODO: Encrypt journal entries before writing to disk to prevent key material
+/// exposure through journal file access. Consider using the master key or a
+/// dedicated journal encryption key.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum JournalOp {
     /// Store a key
     StoreKey {
         key_id: KeyId,
         namespace: String,
+        /// Raw key data to be stored. WARNING: This data should be encrypted before
+        /// journaling. Currently stored in plaintext within the journal file.
+        /// See module-level security note.
         data: Vec<u8>,
     },
     /// Delete a key

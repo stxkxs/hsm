@@ -274,9 +274,45 @@ impl CertificateValidator {
             ));
         }
 
-        // In a production system, we would verify the actual signature here
-        // This requires implementing cryptographic signature verification
-        // For now, we rely on rustls to do the actual signature verification
+        // Verify the actual cryptographic signature of the certificate
+        // Extract the signature algorithm, TBS data, and CA public key
+        let sig_alg = &cert.signature_algorithm;
+        let tbs_data = cert.tbs_certificate.as_ref();
+        let sig_value = cert.signature_value.as_ref();
+
+        // Get the CA's public key info
+        let ca_spki = ca_cert.public_key();
+        let ca_pubkey_der = ca_spki.raw;
+
+        // Map X.509 signature algorithm OID to ring algorithm
+        let oid = sig_alg.algorithm.to_id_string();
+        let ring_alg: &dyn ring::signature::VerificationAlgorithm = match oid.as_str() {
+            // RSA PKCS1 with SHA-256
+            "1.2.840.113549.1.1.11" => &ring::signature::RSA_PKCS1_2048_8192_SHA256,
+            // RSA PKCS1 with SHA-384
+            "1.2.840.113549.1.1.12" => &ring::signature::RSA_PKCS1_2048_8192_SHA384,
+            // RSA PKCS1 with SHA-512
+            "1.2.840.113549.1.1.13" => &ring::signature::RSA_PKCS1_2048_8192_SHA512,
+            // ECDSA with SHA-256
+            "1.2.840.10045.4.3.2" => &ring::signature::ECDSA_P256_SHA256_ASN1,
+            // ECDSA with SHA-384
+            "1.2.840.10045.4.3.3" => &ring::signature::ECDSA_P384_SHA384_ASN1,
+            // RSA PKCS1 with SHA-1 (legacy but still used)
+            "1.2.840.113549.1.1.5" => &ring::signature::RSA_PKCS1_2048_8192_SHA256,
+            other => {
+                return Err(AuthError::CertificateValidationFailed(format!(
+                    "Unsupported signature algorithm OID: {}",
+                    other
+                )));
+            }
+        };
+
+        let public_key = ring::signature::UnparsedPublicKey::new(ring_alg, ca_pubkey_der);
+        public_key.verify(tbs_data, sig_value).map_err(|_| {
+            AuthError::CertificateValidationFailed(
+                "Certificate signature verification failed".to_string(),
+            )
+        })?;
 
         Ok(())
     }

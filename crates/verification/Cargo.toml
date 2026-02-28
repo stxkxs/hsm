@@ -29,6 +29,9 @@ num-integer = "0.1"
 # For Shamir's Secret Sharing verification
 sharks = "0.5"
 
+# Logging
+tracing = "0.1"
+
 # Utilities
 zeroize = { version = "1.8", features = ["derive"] }
 thiserror = "2.0"

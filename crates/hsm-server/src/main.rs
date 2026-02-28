@@ -90,26 +90,37 @@ async fn main() -> Result<()> {
     let metrics_addr: SocketAddr = format!("0.0.0.0:{}", args.metrics_port).parse()?;
     info!("Metrics endpoint listening on {}", metrics_addr);
 
+    // Bind listeners
+    let rest_listener = tokio::net::TcpListener::bind(rest_addr)
+        .await
+        .expect("Failed to bind REST server");
+    let metrics_listener = tokio::net::TcpListener::bind(metrics_addr)
+        .await
+        .expect("Failed to bind metrics server");
+
     // Spawn servers
     let rest_server = tokio::spawn(async move {
-        let listener = tokio::net::TcpListener::bind(rest_addr).await.unwrap();
-        axum::serve(listener, rest_app).await.unwrap();
+        axum::serve(rest_listener, rest_app).await.unwrap();
     });
 
     let metrics_server = tokio::spawn(async move {
-        let listener = tokio::net::TcpListener::bind(metrics_addr).await.unwrap();
-        axum::serve(listener, metrics_app).await.unwrap();
+        axum::serve(metrics_listener, metrics_app).await.unwrap();
     });
 
     info!("HSM Server started successfully");
 
-    // Wait for shutdown signal
-    shutdown_signal().await;
-    info!("Shutdown signal received, stopping servers...");
-
-    // Abort servers (graceful shutdown would be better in production)
-    rest_server.abort();
-    metrics_server.abort();
+    // Wait for shutdown signal or server completion
+    tokio::select! {
+        _ = shutdown_signal() => {
+            info!("Shutdown signal received, stopping servers...");
+        }
+        result = rest_server => {
+            info!("REST server exited: {:?}", result);
+        }
+        result = metrics_server => {
+            info!("Metrics server exited: {:?}", result);
+        }
+    }
 
     info!("HSM Server stopped");
     Ok(())

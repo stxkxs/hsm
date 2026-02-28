@@ -293,6 +293,9 @@ impl PolicyEngine {
         }
     }
 
+    /// Maximum heap size for WASM memory allocations (16 MB).
+    const HEAP_MAX: usize = 16 * 1024 * 1024;
+
     /// Write data to WASM memory.
     fn write_to_memory(
         &self,
@@ -304,25 +307,44 @@ impl PolicyEngine {
             .get_memory(&mut *store, "memory")
             .ok_or_else(|| PolicyError::ExecutionFailed("No memory export".into()))?;
 
+        // Validate data length fits in i32
+        let len = i32::try_from(data.len()).map_err(|_| PolicyError::MemoryLimitExceeded {
+            used: data.len(),
+            limit: Self::HEAP_MAX,
+        })?;
+
         // Simple allocation: write to beginning of memory after stack
         // In production, would use a proper allocator
         let ptr = store.data().alloc_pos;
-        let len = data.len() as i32;
+
+        // Use checked arithmetic to prevent overflow
+        let end_pos = ptr.checked_add(len).ok_or_else(|| PolicyError::MemoryLimitExceeded {
+            used: i32::MAX as usize,
+            limit: Self::HEAP_MAX,
+        })?;
+
+        // Validate against heap maximum
+        if (end_pos as usize) > Self::HEAP_MAX {
+            return Err(PolicyError::MemoryLimitExceeded {
+                used: end_pos as usize,
+                limit: Self::HEAP_MAX,
+            });
+        }
 
         {
             let mem_data = memory.data_mut(&mut *store);
-            if (ptr as usize + data.len()) > mem_data.len() {
+            if (end_pos as usize) > mem_data.len() {
                 return Err(PolicyError::MemoryLimitExceeded {
-                    used: ptr as usize + data.len(),
+                    used: end_pos as usize,
                     limit: mem_data.len(),
                 });
             }
 
-            mem_data[ptr as usize..ptr as usize + data.len()].copy_from_slice(data);
+            mem_data[ptr as usize..end_pos as usize].copy_from_slice(data);
         }
 
         // Update allocator position in host state
-        store.data_mut().alloc_pos = ptr + len;
+        store.data_mut().alloc_pos = end_pos;
 
         Ok((ptr, len))
     }

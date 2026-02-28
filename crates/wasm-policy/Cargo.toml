@@ -8,7 +8,7 @@ description = "WebAssembly policy engine for HSM transaction authorization"
 
 [dependencies]
 # WASM runtime
-wasmtime = "27"
+wasmtime = "42"
 
 # Serialization
 serde.workspace = true

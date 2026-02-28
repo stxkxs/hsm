@@ -2,8 +2,10 @@
 
 use crate::{signature::WebhookSigner, WebhookEvent};
 use chrono::Utc;
+use dashmap::DashMap;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -22,6 +24,9 @@ pub enum DeliveryError {
     /// Max retries exceeded
     #[error("Max retries exceeded after {attempts} attempts")]
     MaxRetriesExceeded { attempts: u32 },
+    /// Circuit breaker open
+    #[error("Circuit breaker open for URL: {0}")]
+    CircuitBreakerOpen(String),
 }
 
 /// Delivery status
@@ -56,9 +61,36 @@ pub struct DeliveryResult {
     pub error: Option<String>,
 }
 
+/// Circuit breaker state for a specific URL
+#[derive(Debug, Clone)]
+pub struct CircuitState {
+    /// Number of consecutive failures
+    pub consecutive_failures: u32,
+    /// Timestamp of the last failure (Unix timestamp)
+    pub last_failure_time: i64,
+    /// Whether the circuit is open (rejecting requests)
+    pub is_open: bool,
+}
+
+impl CircuitState {
+    fn new() -> Self {
+        Self {
+            consecutive_failures: 0,
+            last_failure_time: 0,
+            is_open: false,
+        }
+    }
+}
+
+/// Threshold for consecutive failures before opening the circuit
+const CIRCUIT_BREAKER_THRESHOLD: u32 = 5;
+/// Cooldown period in seconds before allowing a retry through an open circuit
+const CIRCUIT_BREAKER_COOLDOWN_SECS: i64 = 60;
+
 /// HTTP webhook deliverer
 pub struct WebhookDeliverer {
     client: Client,
+    circuit_breaker: Arc<DashMap<String, CircuitState>>,
 }
 
 impl WebhookDeliverer {
@@ -70,7 +102,10 @@ impl WebhookDeliverer {
             .build()
             .expect("Failed to create HTTP client");
 
-        Self { client }
+        Self {
+            client,
+            circuit_breaker: Arc::new(DashMap::new()),
+        }
     }
 
     /// Create with custom timeout
@@ -81,7 +116,42 @@ impl WebhookDeliverer {
             .build()
             .expect("Failed to create HTTP client");
 
-        Self { client }
+        Self {
+            client,
+            circuit_breaker: Arc::new(DashMap::new()),
+        }
+    }
+
+    /// Check if the circuit breaker is open for a given URL
+    fn is_circuit_open(&self, url: &str) -> bool {
+        if let Some(state) = self.circuit_breaker.get(url) {
+            if state.is_open {
+                let now = Utc::now().timestamp();
+                // Allow retry if cooldown period has elapsed
+                if now - state.last_failure_time < CIRCUIT_BREAKER_COOLDOWN_SECS {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Record a successful delivery, resetting the circuit breaker
+    fn record_success(&self, url: &str) {
+        self.circuit_breaker.insert(url.to_string(), CircuitState::new());
+    }
+
+    /// Record a failed delivery, potentially opening the circuit breaker
+    fn record_failure(&self, url: &str) {
+        let mut state = self
+            .circuit_breaker
+            .entry(url.to_string())
+            .or_insert_with(CircuitState::new);
+        state.consecutive_failures += 1;
+        state.last_failure_time = Utc::now().timestamp();
+        if state.consecutive_failures >= CIRCUIT_BREAKER_THRESHOLD {
+            state.is_open = true;
+        }
     }
 
     /// Deliver an event to a webhook
@@ -153,6 +223,20 @@ impl WebhookDeliverer {
         max_retries: u32,
         initial_delay: Duration,
     ) -> DeliveryResult {
+        // Check circuit breaker before attempting delivery
+        if self.is_circuit_open(url) {
+            return DeliveryResult {
+                webhook_id: String::new(),
+                event_id: event.id.clone(),
+                status: DeliveryStatus::Failed,
+                http_status: None,
+                attempt: 0,
+                timestamp: Utc::now(),
+                duration_ms: 0,
+                error: Some(format!("Circuit breaker open for URL: {}", url)),
+            };
+        }
+
         let mut attempt = 0;
         let mut delay = initial_delay;
 
@@ -162,9 +246,12 @@ impl WebhookDeliverer {
             match self.deliver(url, event, signer, headers).await {
                 Ok(mut result) => {
                     result.attempt = attempt;
+                    self.record_success(url);
                     return result;
                 }
                 Err(e) => {
+                    self.record_failure(url);
+
                     if attempt >= max_retries {
                         return DeliveryResult {
                             webhook_id: String::new(),
@@ -175,6 +262,20 @@ impl WebhookDeliverer {
                             timestamp: Utc::now(),
                             duration_ms: 0,
                             error: Some(e.to_string()),
+                        };
+                    }
+
+                    // Check circuit breaker after recording failure
+                    if self.is_circuit_open(url) {
+                        return DeliveryResult {
+                            webhook_id: String::new(),
+                            event_id: event.id.clone(),
+                            status: DeliveryStatus::Failed,
+                            http_status: None,
+                            attempt,
+                            timestamp: Utc::now(),
+                            duration_ms: 0,
+                            error: Some(format!("Circuit breaker open for URL: {}", url)),
                         };
                     }
 
@@ -223,5 +324,40 @@ mod tests {
 
         let deliverer_with_timeout = WebhookDeliverer::with_timeout(Duration::from_secs(60));
         assert!(true);
+    }
+
+    #[test]
+    fn test_circuit_breaker_initially_closed() {
+        let deliverer = WebhookDeliverer::new();
+        assert!(!deliverer.is_circuit_open("https://example.com/webhook"));
+    }
+
+    #[test]
+    fn test_circuit_breaker_opens_after_threshold() {
+        let deliverer = WebhookDeliverer::new();
+        let url = "https://example.com/webhook";
+
+        // Record failures up to threshold
+        for _ in 0..CIRCUIT_BREAKER_THRESHOLD {
+            deliverer.record_failure(url);
+        }
+
+        assert!(deliverer.is_circuit_open(url));
+    }
+
+    #[test]
+    fn test_circuit_breaker_resets_on_success() {
+        let deliverer = WebhookDeliverer::new();
+        let url = "https://example.com/webhook";
+
+        // Open the circuit
+        for _ in 0..CIRCUIT_BREAKER_THRESHOLD {
+            deliverer.record_failure(url);
+        }
+        assert!(deliverer.is_circuit_open(url));
+
+        // Reset on success
+        deliverer.record_success(url);
+        assert!(!deliverer.is_circuit_open(url));
     }
 }

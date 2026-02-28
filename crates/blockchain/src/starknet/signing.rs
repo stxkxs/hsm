@@ -184,7 +184,7 @@ impl TypedData {
         let account_felt = Felt::from_bytes_be_slice(account_address.to_bytes());
 
         // SNIP-12 prefix
-        let prefix = felt_from_short_string("StarkNet Message");
+        let prefix = felt_from_short_string("StarkNet Message")?;
 
         // Final hash: H(prefix, domain_hash, account, message_hash)
         let h1 = pedersen_hash(&prefix, &domain_hash);
@@ -196,10 +196,10 @@ impl TypedData {
 
     /// Compute the domain separator hash.
     fn compute_domain_hash(&self) -> Result<Felt> {
-        let name_felt = felt_from_short_string(&self.domain.name);
-        let version_felt = felt_from_short_string(&self.domain.version);
-        let chain_id_felt = felt_from_short_string(&self.domain.chain_id);
-        let revision_felt = felt_from_short_string(&self.domain.revision);
+        let name_felt = felt_from_short_string(&self.domain.name)?;
+        let version_felt = felt_from_short_string(&self.domain.version)?;
+        let chain_id_felt = felt_from_short_string(&self.domain.chain_id)?;
+        let revision_felt = felt_from_short_string(&self.domain.revision)?;
 
         // Hash domain components
         let h1 = pedersen_hash(&name_felt, &version_felt);
@@ -278,7 +278,7 @@ fn encode_value(field_type: &str, value: &serde_json::Value) -> Result<Felt> {
             let s = value
                 .as_str()
                 .ok_or_else(|| BlockchainError::InvalidTypedData("Expected string".into()))?;
-            Ok(felt_from_short_string(s))
+            felt_from_short_string(s)
         }
         _ => Err(BlockchainError::InvalidTypedData(format!(
             "Unsupported type: {}",
@@ -288,18 +288,21 @@ fn encode_value(field_type: &str, value: &serde_json::Value) -> Result<Felt> {
 }
 
 /// Convert a short string to a felt.
-fn felt_from_short_string(s: &str) -> Felt {
+///
+/// StarkNet short strings must be at most 31 bytes. Returns an error
+/// if the input exceeds this limit.
+fn felt_from_short_string(s: &str) -> Result<Felt> {
     let bytes = s.as_bytes();
     if bytes.len() > 31 {
-        // Truncate for now, in practice should hash long strings
-        let mut padded = [0u8; 32];
-        padded[32 - 31..].copy_from_slice(&bytes[..31]);
-        return Felt::from_bytes_be_slice(&padded);
+        return Err(BlockchainError::InvalidTypedData(format!(
+            "Short string exceeds 31-byte limit: {} bytes",
+            bytes.len()
+        )));
     }
 
     let mut padded = [0u8; 32];
     padded[32 - bytes.len()..].copy_from_slice(bytes);
-    Felt::from_bytes_be_slice(&padded)
+    Ok(Felt::from_bytes_be_slice(&padded))
 }
 
 /// Compute Pedersen hash of a message (legacy format).

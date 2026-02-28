@@ -46,15 +46,24 @@ impl AuthInterceptor {
                 Ok(identity)
             }
             None => {
-                // Dev mode - return a stub identity
-                warn!("Authentication is stubbed - using dev mode identity");
-                Ok(ClientIdentity::new(
-                    session_id.to_string(),
-                    None,
-                    "default".to_string(),
-                    vec![hsm_auth::Role::Admin], // Dev mode has full access
-                    "dev-serial".to_string(),
-                ))
+                // Dev mode - return a stub identity (only in debug builds)
+                #[cfg(debug_assertions)]
+                {
+                    warn!("Authentication is stubbed - using dev mode identity");
+                    Ok(ClientIdentity::new(
+                        session_id.to_string(),
+                        None,
+                        "default".to_string(),
+                        vec![hsm_auth::Role::Admin], // Dev mode has full access
+                        "dev-serial".to_string(),
+                    ))
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    Err(ApiError::AuthenticationFailed(
+                        "Authentication service not configured".to_string(),
+                    ))
+                }
             }
         }
     }
@@ -89,8 +98,17 @@ impl AuthInterceptor {
                 Ok(())
             }
             None => {
-                // Dev mode - allow all
-                Ok(())
+                // Dev mode - allow all (only in debug builds)
+                #[cfg(debug_assertions)]
+                {
+                    Ok(())
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    Err(ApiError::AuthorizationFailed(
+                        "Authorization service not configured".to_string(),
+                    ))
+                }
             }
         }
     }
@@ -111,7 +129,18 @@ impl AuthInterceptor {
                     })?;
                 Ok(())
             }
-            None => Ok(()),
+            None => {
+                #[cfg(debug_assertions)]
+                {
+                    Ok(())
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    Err(ApiError::AuthorizationFailed(
+                        "Authorization service not configured".to_string(),
+                    ))
+                }
+            }
         }
     }
 

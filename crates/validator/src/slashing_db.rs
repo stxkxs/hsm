@@ -490,7 +490,7 @@ impl SlashingProtectionDb {
         // Note: min epochs are NOT automatically updated here - they should only
         // be set via EIP-3076 import to prevent blocking surrounding vote detection
         validator_data.updated_at = now;
-        let _ = self.update_validator_data(&validator_data);
+        self.update_validator_data(&validator_data).map_err(|e| SlashingError::DatabaseError(format!("Failed to persist validator data: {}", e)))?;
 
         // Update stats
         self.stats.write().attestations_signed += 1;
@@ -616,7 +616,7 @@ impl SlashingProtectionDb {
         // Note: min_slot is NOT automatically updated here - it should only
         // be set via EIP-3076 import
         validator_data.updated_at = now;
-        let _ = self.update_validator_data(&validator_data);
+        self.update_validator_data(&validator_data).map_err(|e| SlashingError::DatabaseError(format!("Failed to persist validator data: {}", e)))?;
 
         // Update stats
         self.stats.write().blocks_signed += 1;

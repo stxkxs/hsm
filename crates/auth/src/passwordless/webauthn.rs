@@ -681,7 +681,7 @@ impl WebAuthnManager {
         let authenticator_data = base64_url_decode(&response.response.authenticator_data)
             .map_err(|_| AuthError::Internal("Invalid authenticator data".to_string()))?;
 
-        let signature = base64_url_decode(&response.response.signature)
+        let _signature = base64_url_decode(&response.response.signature)
             .map_err(|_| AuthError::Internal("Invalid signature".to_string()))?;
 
         // Parse client data

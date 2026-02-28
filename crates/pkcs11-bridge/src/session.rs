@@ -4,6 +4,7 @@
 //! and active cryptographic operations.
 
 use crate::ffi::*;
+use sha2::{Digest, Sha256};
 
 // =============================================================================
 // Session State
@@ -97,6 +98,9 @@ pub enum ActiveOperation {
 // Session
 // =============================================================================
 
+/// Maximum number of PIN attempts before lockout
+const MAX_PIN_ATTEMPTS: u8 = 3;
+
 /// Represents a PKCS#11 session.
 ///
 /// A session is opened on a specific slot (namespace) and maintains
@@ -125,6 +129,13 @@ pub struct Session {
 
     /// Session-specific authentication token (from HSM login)
     pub auth_token: Option<String>,
+
+    /// Failed PIN attempt counter
+    pin_attempts: u8,
+
+    /// Stored PIN hash (SHA-256) for validation
+    /// In production, this would come from the token/slot configuration
+    pin_hash: Option<Vec<u8>>,
 }
 
 impl Session {
@@ -148,16 +159,29 @@ impl Session {
             operation: ActiveOperation::None,
             logged_in_user: None,
             auth_token: None,
+            pin_attempts: 0,
+            pin_hash: None,
         }
+    }
+
+    /// Set the expected PIN hash for this session's slot.
+    /// The hash should be SHA-256 of the correct PIN.
+    pub fn set_pin_hash(&mut self, pin_hash: Vec<u8>) {
+        self.pin_hash = Some(pin_hash);
     }
 
     /// Log in a user.
     ///
     /// The PIN is used to authenticate with the HSM and obtain a session token.
-    pub fn login(&mut self, user_type: CK_USER_TYPE, _pin: &[u8]) -> CK_RV {
+    pub fn login(&mut self, user_type: CK_USER_TYPE, pin: &[u8]) -> CK_RV {
         // Check if already logged in
         if self.logged_in_user.is_some() {
             return CKR_USER_ALREADY_LOGGED_IN;
+        }
+
+        // Check if PIN is locked due to too many failed attempts
+        if self.pin_attempts >= MAX_PIN_ATTEMPTS {
+            return CKR_PIN_LOCKED;
         }
 
         // Validate user type
@@ -172,13 +196,23 @@ impl Session {
             _ => return CKR_USER_TYPE_INVALID,
         };
 
-        // TODO: Actually authenticate with HSM using the PIN
-        // For now, we just update the local state
-        // In a real implementation, this would:
-        // 1. Call HSM login API with namespace and PIN
-        // 2. Store the returned session token
-        // 3. Return appropriate error if authentication fails
+        // Validate PIN: hash the provided PIN and compare against stored hash
+        if let Some(expected_hash) = &self.pin_hash {
+            let mut hasher = Sha256::new();
+            hasher.update(pin);
+            let pin_hash = hasher.finalize().to_vec();
 
+            if pin_hash != *expected_hash {
+                self.pin_attempts += 1;
+                if self.pin_attempts >= MAX_PIN_ATTEMPTS {
+                    return CKR_PIN_LOCKED;
+                }
+                return CKR_PIN_INCORRECT;
+            }
+        }
+
+        // PIN validated successfully - reset attempt counter
+        self.pin_attempts = 0;
         self.logged_in_user = Some(user_type);
         self.state = new_state;
         self.auth_token = Some("placeholder_token".to_string()); // TODO: Real HSM token
@@ -345,6 +379,13 @@ impl Session {
 mod tests {
     use super::*;
 
+    /// Helper: compute SHA-256 of a PIN
+    fn hash_pin(pin: &[u8]) -> Vec<u8> {
+        let mut hasher = Sha256::new();
+        hasher.update(pin);
+        hasher.finalize().to_vec()
+    }
+
     #[test]
     fn test_session_new() {
         let session = Session::new(1, 0, "default".to_string(), true);
@@ -358,6 +399,7 @@ mod tests {
     #[test]
     fn test_session_login_logout() {
         let mut session = Session::new(1, 0, "default".to_string(), true);
+        session.set_pin_hash(hash_pin(b"1234"));
 
         // Login as user
         let rv = session.login(CKU_USER, b"1234");
@@ -378,6 +420,38 @@ mod tests {
         // Double logout should fail
         let rv = session.logout();
         assert_eq!(rv, CKR_USER_NOT_LOGGED_IN);
+    }
+
+    #[test]
+    fn test_pin_incorrect() {
+        let mut session = Session::new(1, 0, "default".to_string(), true);
+        session.set_pin_hash(hash_pin(b"correct_pin"));
+
+        let rv = session.login(CKU_USER, b"wrong_pin");
+        assert_eq!(rv, CKR_PIN_INCORRECT);
+        assert!(!session.is_logged_in());
+    }
+
+    #[test]
+    fn test_pin_lockout_after_max_attempts() {
+        let mut session = Session::new(1, 0, "default".to_string(), true);
+        session.set_pin_hash(hash_pin(b"correct_pin"));
+
+        // Attempt 1 - wrong
+        let rv = session.login(CKU_USER, b"wrong1");
+        assert_eq!(rv, CKR_PIN_INCORRECT);
+
+        // Attempt 2 - wrong
+        let rv = session.login(CKU_USER, b"wrong2");
+        assert_eq!(rv, CKR_PIN_INCORRECT);
+
+        // Attempt 3 - wrong, triggers lockout
+        let rv = session.login(CKU_USER, b"wrong3");
+        assert_eq!(rv, CKR_PIN_LOCKED);
+
+        // Even correct PIN should fail now
+        let rv = session.login(CKU_USER, b"correct_pin");
+        assert_eq!(rv, CKR_PIN_LOCKED);
     }
 
     #[test]

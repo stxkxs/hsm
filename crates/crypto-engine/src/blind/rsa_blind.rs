@@ -247,9 +247,12 @@ impl RsaBlindEngine {
         let m_expected = Self::encode_message(message, public_key.bit_size())?;
         let m_expected_int = BigUint::from_bytes_be(&m_expected);
 
-        // Compare using constant-time comparison for security
-        // Note: For production, use subtle::ConstantTimeEq
-        Ok(m_recovered == m_expected_int)
+        // Constant-time comparison to prevent timing attacks
+        let key_bytes = public_key.byte_size();
+        let recovered_bytes = pad_to_key_size(m_recovered.to_bytes_be(), key_bytes);
+        let expected_bytes = pad_to_key_size(m_expected_int.to_bytes_be(), key_bytes);
+        use subtle::ConstantTimeEq;
+        Ok(recovered_bytes.ct_eq(&expected_bytes).into())
     }
 
     /// Encodes a message using PKCS#1 v1.5 signature padding.

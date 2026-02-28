@@ -99,7 +99,7 @@ impl LegacyTransaction {
         // Encode as list
         alloy_rlp::encode_list::<_, &[u8]>(&[items.as_slice()], &mut buf);
 
-        Keccak256::digest(&items).into()
+        Keccak256::digest(&buf).into()
     }
 
     /// Encode the signed transaction

@@ -8,7 +8,7 @@ proptest! {
     #[test]
     fn prop_export_import_roundtrip(
         data in prop::collection::vec(any::<u8>(), 1..10000),
-        password in prop::collection::vec(any::<u8>(), 8..64),
+        password in prop::collection::vec(any::<u8>(), 16..64),
     ) {
         let exporter = export::KeyExporter::new();
         let importer = import::KeyImporter::new();
@@ -219,8 +219,8 @@ proptest! {
     #[test]
     fn prop_wrong_password_fails(
         data in prop::collection::vec(any::<u8>(), 1..1000),
-        correct_password in prop::collection::vec(any::<u8>(), 8..64),
-        wrong_password in prop::collection::vec(any::<u8>(), 8..64),
+        correct_password in prop::collection::vec(any::<u8>(), 16..64),
+        wrong_password in prop::collection::vec(any::<u8>(), 16..64),
     ) {
         // Skip if passwords are the same
         if correct_password == wrong_password {
@@ -243,7 +243,7 @@ proptest! {
     #[test]
     fn prop_backup_verification(
         data in prop::collection::vec(any::<u8>(), 1..1000),
-        password in prop::collection::vec(any::<u8>(), 8..64),
+        password in prop::collection::vec(any::<u8>(), 16..64),
     ) {
         let exporter = export::KeyExporter::new();
         let verifier = verification::BackupVerifier::new();
@@ -260,7 +260,7 @@ proptest! {
     #[test]
     fn prop_health_check_valid_backups(
         data in prop::collection::vec(any::<u8>(), 1..1000),
-        password in prop::collection::vec(any::<u8>(), 8..64),
+        password in prop::collection::vec(any::<u8>(), 16..64),
     ) {
         let exporter = export::KeyExporter::new();
         let checker = health::BackupHealthChecker::new();

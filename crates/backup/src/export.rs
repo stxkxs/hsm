@@ -67,7 +67,7 @@ impl KeyExporter {
             return Err(BackupError::EmptyData);
         }
 
-        if password.is_empty() {
+        if password.len() < 16 {
             return Err(BackupError::WeakPassword);
         }
 
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn test_empty_data() {
         let exporter = KeyExporter::new();
-        let result = exporter.export_keys(&[], b"password", None);
+        let result = exporter.export_keys(&[], b"test-password-1234", None);
         assert!(matches!(result, Err(BackupError::EmptyData)));
     }
 

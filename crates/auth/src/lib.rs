@@ -1,8 +1,5 @@
 #![allow(clippy::manual_div_ceil)]
 #![allow(clippy::field_reassign_with_default)]
-#![allow(dead_code)]
-#![allow(unused_imports)]
-#![allow(unused_variables)]
 #![allow(clippy::should_implement_trait)]
 #![allow(clippy::unwrap_or_default)]
 #![allow(clippy::type_complexity)]

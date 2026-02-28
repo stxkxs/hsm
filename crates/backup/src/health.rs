@@ -231,7 +231,7 @@ mod tests {
         let exporter = KeyExporter::new();
         let checker = BackupHealthChecker::new();
 
-        let password = b"test_password";
+        let password = b"test-password-1234";
         let backup = exporter.export_keys(b"test_data", password, None).unwrap();
 
         let health = checker.check_backup_health(&backup, password);
@@ -245,7 +245,7 @@ mod tests {
         let checker = BackupHealthChecker::new();
 
         let backup = exporter
-            .export_keys(b"test_data", b"correct", None)
+            .export_keys(b"test_data", b"correct-password1", None)
             .unwrap();
 
         let health = checker.check_backup_health(&backup, b"wrong");
@@ -258,7 +258,7 @@ mod tests {
         let exporter = KeyExporter::new();
         let checker = BackupHealthChecker::new();
 
-        let password = b"test_password";
+        let password = b"test-password-1234";
         let backup = exporter.export_keys(b"test_data", password, None).unwrap();
 
         let result = checker.test_restore(&backup, password);
@@ -272,7 +272,7 @@ mod tests {
         let exporter = KeyExporter::new();
         let checker = BackupHealthChecker::new();
 
-        let password = b"test_password";
+        let password = b"test-password-1234";
         let backup = exporter.export_keys(b"test_data", password, None).unwrap();
 
         assert!(checker.verify_restorable(&backup, password).is_ok());
@@ -283,7 +283,7 @@ mod tests {
         let exporter = KeyExporter::new();
         let checker = BackupHealthChecker::new();
 
-        let password = b"test_password";
+        let password = b"test-password-1234";
         let backup = exporter.export_keys(b"test_data", password, None).unwrap();
 
         let result = checker.sample_restore_test(&backup, password, 10).unwrap();
@@ -295,7 +295,7 @@ mod tests {
         let exporter = KeyExporter::new();
         let checker = BackupHealthChecker::new();
 
-        let password = b"test_password";
+        let password = b"test-password-1234";
         let backup = exporter
             .export_keys(b"test_data", password, Some("test_ns".to_string()))
             .unwrap();
@@ -313,7 +313,7 @@ mod tests {
         let exporter = KeyExporter::new();
         let checker = BackupHealthChecker::new();
 
-        let password = b"test_password";
+        let password = b"test-password-1234";
         let mut backup = exporter.export_keys(b"test_data", password, None).unwrap();
 
         // Corrupt the data
@@ -331,7 +331,7 @@ mod tests {
         let exporter = KeyExporter::new();
 
         // This should fail during export
-        let result = exporter.export_keys(&[], b"password", None);
+        let result = exporter.export_keys(&[], b"test-password-1234", None);
         assert!(result.is_err());
     }
 }

@@ -86,12 +86,24 @@ use crate::journal::{JournalOp, WriteAheadLog};
 use crate::master_key::{EncryptedData, MasterKey};
 use crate::KeyId;
 use std::collections::HashMap;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
+
 const KEY_FILE_EXT: &str = "enc";
 const META_FILE_EXT: &str = "meta";
+
+/// Create a file with restricted permissions (0o600 on Unix)
+fn create_restricted_file(path: &std::path::Path) -> std::io::Result<File> {
+    let mut opts = OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    opts.mode(0o600);
+    opts.open(path)
+}
 
 /// Encrypted filesystem storage implementation
 ///
@@ -280,16 +292,39 @@ impl EncryptedFileStorage {
             .join("wal.log")
     }
 
+    /// Validate that a path component (key ID or namespace) does not contain
+    /// path traversal sequences or dangerous characters.
+    ///
+    /// Rejects values containing `/`, `\`, `..`, or null bytes to prevent
+    /// path traversal attacks that could read/write outside the storage directory.
+    fn validate_path_component(component: &str, label: &str) -> StorageResult<()> {
+        if component.contains('/')
+            || component.contains('\\')
+            || component.contains("..")
+            || component.contains('\0')
+        {
+            return Err(StorageError::OperationFailed(format!(
+                "Invalid {}: contains path traversal characters",
+                label
+            )));
+        }
+        Ok(())
+    }
+
     /// Get path to encrypted key file
-    fn get_key_file_path(&self, namespace: &str, key_id: &KeyId) -> PathBuf {
-        self.get_keys_path(namespace)
-            .join(format!("key-{}.{}", key_id, KEY_FILE_EXT))
+    fn get_key_file_path(&self, namespace: &str, key_id: &KeyId) -> StorageResult<PathBuf> {
+        Self::validate_path_component(namespace, "namespace")?;
+        Self::validate_path_component(&key_id.to_string(), "key ID")?;
+        Ok(self.get_keys_path(namespace)
+            .join(format!("key-{}.{}", key_id, KEY_FILE_EXT)))
     }
 
     /// Get path to metadata file
-    fn get_meta_file_path(&self, namespace: &str, key_id: &KeyId) -> PathBuf {
-        self.get_keys_path(namespace)
-            .join(format!("key-{}.{}", key_id, META_FILE_EXT))
+    fn get_meta_file_path(&self, namespace: &str, key_id: &KeyId) -> StorageResult<PathBuf> {
+        Self::validate_path_component(namespace, "namespace")?;
+        Self::validate_path_component(&key_id.to_string(), "key ID")?;
+        Ok(self.get_keys_path(namespace)
+            .join(format!("key-{}.{}", key_id, META_FILE_EXT)))
     }
 
     /// Store key implementation (without journaling)
@@ -305,18 +340,18 @@ impl EncryptedFileStorage {
         // Create metadata
         let metadata = KeyMetadata::new(&encrypted_bytes);
 
-        // Write encrypted key
-        let key_path = self.get_key_file_path(namespace, key_id);
-        let mut key_file = File::create(&key_path)?;
+        // Write encrypted key with restricted permissions
+        let key_path = self.get_key_file_path(namespace, key_id)?;
+        let mut key_file = create_restricted_file(&key_path)?;
         key_file.write_all(&encrypted_bytes)?;
         key_file.sync_all()?;
 
-        // Write metadata
-        let meta_path = self.get_meta_file_path(namespace, key_id);
+        // Write metadata with restricted permissions
+        let meta_path = self.get_meta_file_path(namespace, key_id)?;
         let meta_bytes = postcard::to_allocvec(&metadata).map_err(|e| {
             StorageError::Serialization(format!("Failed to serialize metadata: {}", e))
         })?;
-        let mut meta_file = File::create(&meta_path)?;
+        let mut meta_file = create_restricted_file(&meta_path)?;
         meta_file.write_all(&meta_bytes)?;
         meta_file.sync_all()?;
 
@@ -324,17 +359,42 @@ impl EncryptedFileStorage {
     }
 
     /// Delete key implementation (without journaling)
+    ///
+    /// Performs secure deletion by overwriting file contents with random bytes
+    /// before removing the file, to prevent recovery of sensitive key material.
     fn delete_key_impl(&self, key_id: &KeyId, namespace: &str) -> StorageResult<()> {
-        let key_path = self.get_key_file_path(namespace, key_id);
-        let meta_path = self.get_meta_file_path(namespace, key_id);
+        let key_path = self.get_key_file_path(namespace, key_id)?;
+        let meta_path = self.get_meta_file_path(namespace, key_id)?;
 
-        // Remove both files
-        if key_path.exists() {
-            fs::remove_file(key_path)?;
+        // Securely overwrite and remove both files
+        Self::secure_remove(&key_path)?;
+        Self::secure_remove(&meta_path)?;
+
+        Ok(())
+    }
+
+    /// Securely remove a file by overwriting its contents with random bytes before deletion.
+    fn secure_remove(path: &std::path::Path) -> StorageResult<()> {
+        if !path.exists() {
+            return Ok(());
         }
-        if meta_path.exists() {
-            fs::remove_file(meta_path)?;
+
+        // Overwrite file contents with random bytes before removal
+        if let Ok(metadata) = fs::metadata(path) {
+            let file_size = metadata.len() as usize;
+            if file_size > 0 {
+                let mut random_bytes = vec![0u8; file_size];
+                if rand::RngCore::try_fill_bytes(&mut rand::thread_rng(), &mut random_bytes).is_ok() {
+                    if let Ok(mut file) = File::create(path) {
+                        let _ = file.write_all(&random_bytes);
+                        let _ = file.sync_all();
+                    }
+                }
+            }
         }
+
+        // Always attempt removal even if overwrite fails
+        fs::remove_file(path)?;
 
         Ok(())
     }
@@ -391,8 +451,8 @@ impl StorageBackend for EncryptedFileStorage {
             return Err(StorageError::NamespaceNotFound(namespace.to_string()));
         }
 
-        let key_path = self.get_key_file_path(namespace, key_id);
-        let meta_path = self.get_meta_file_path(namespace, key_id);
+        let key_path = self.get_key_file_path(namespace, key_id)?;
+        let meta_path = self.get_meta_file_path(namespace, key_id)?;
 
         // Check if key exists
         if !key_path.exists() {
@@ -432,7 +492,7 @@ impl StorageBackend for EncryptedFileStorage {
         }
 
         // Check if key exists
-        if !self.get_key_file_path(namespace, key_id).exists() {
+        if !self.get_key_file_path(namespace, key_id)?.exists() {
             return Err(StorageError::KeyNotFound(key_id.to_string()));
         }
 
@@ -478,7 +538,7 @@ impl StorageBackend for EncryptedFileStorage {
     }
 
     fn key_exists(&self, key_id: &KeyId, namespace: &str) -> StorageResult<bool> {
-        let key_path = self.get_key_file_path(namespace, key_id);
+        let key_path = self.get_key_file_path(namespace, key_id)?;
         Ok(key_path.exists())
     }
 

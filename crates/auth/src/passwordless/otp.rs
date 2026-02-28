@@ -4,13 +4,12 @@
 //! authentication support.
 
 use crate::error::{AuthError, Result};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use dashmap::DashMap;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// OTP algorithm type
@@ -440,7 +439,7 @@ impl OtpManager {
     /// Start OTP registration for a user
     pub fn start_registration(
         &self,
-        user_id: &str,
+        _user_id: &str,
         account_name: &str,
     ) -> (OtpSecret, String, Vec<String>) {
         let secret = OtpSecret::generate();

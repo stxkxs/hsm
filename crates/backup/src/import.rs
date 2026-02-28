@@ -210,7 +210,7 @@ mod tests {
         let exporter = KeyExporter::new();
         let importer = KeyImporter::new();
 
-        let backup = exporter.export_keys(b"data", b"password", None).unwrap();
+        let backup = exporter.export_keys(b"data", b"test-password-1234", None).unwrap();
 
         assert!(importer.verify_backup(&backup).is_ok());
     }
@@ -220,7 +220,7 @@ mod tests {
         let exporter = KeyExporter::new();
         let importer = KeyImporter::new();
 
-        let password = b"test_password";
+        let password = b"test-password-1234";
         let backup = exporter.export_keys(b"data", password, None).unwrap();
 
         assert!(importer.check_password(&backup, password).unwrap());
@@ -232,7 +232,7 @@ mod tests {
         let importer = KeyImporter::new();
         let invalid_json = b"{invalid json}";
 
-        let result = importer.import_from_json(invalid_json, b"password");
+        let result = importer.import_from_json(invalid_json, b"test-password-1234");
         assert!(matches!(result, Err(BackupError::Deserialization(_))));
     }
 }

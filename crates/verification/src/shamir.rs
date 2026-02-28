@@ -7,6 +7,7 @@
 //!
 //! This is based on polynomial interpolation over finite fields (GF(2^8) or GF(256)).
 
+use tracing::{debug, info};
 use z3::ast::{Ast, Int};
 use z3::{Config, Context, SatResult, Solver};
 
@@ -101,12 +102,12 @@ impl ShamirVerifier {
             SatResult::Sat => {
                 // Verify with a concrete model
                 if let Some(model) = solver.get_model() {
-                    println!("        Lagrange interpolation verified with model:");
+                    debug!("        Lagrange interpolation verified with model:");
                     if let Some(a0_val) = model.eval(&a0, true) {
-                        println!("          a0 (secret) = {}", a0_val);
+                        debug!("          a0 (secret) = {}", a0_val);
                     }
                     if let Some(a1_val) = model.eval(&a1, true) {
-                        println!("          a1 = {}", a1_val);
+                        debug!("          a1 = {}", a1_val);
                     }
                 }
                 Ok(VerificationResult::Verified)
@@ -181,15 +182,15 @@ impl ShamirVerifier {
         match solver.check() {
             SatResult::Sat => {
                 if let Some(model) = solver.get_model() {
-                    println!("        Information-theoretic security verified:");
-                    println!(
+                    debug!("        Information-theoretic security verified:");
+                    debug!(
                         "          Same 2 shares consistent with both secret1=42 and secret2=100"
                     );
                     if let Some(a1_1_val) = model.eval(&a1_1, true) {
-                        println!("          For secret1: a1={}", a1_1_val);
+                        debug!("          For secret1: a1={}", a1_1_val);
                     }
                     if let Some(a1_2_val) = model.eval(&a1_2, true) {
-                        println!("          For secret2: a1={}", a1_2_val);
+                        debug!("          For secret2: a1={}", a1_2_val);
                     }
                 }
                 Ok(VerificationResult::Verified)
@@ -274,10 +275,10 @@ impl ShamirVerifier {
         match solver.check() {
             SatResult::Sat => {
                 if let Some(model) = solver.get_model() {
-                    println!("        Share consistency verified:");
+                    debug!("        Share consistency verified:");
                     if let Some(a0_val) = model.eval(&a0, true) {
-                        println!("          Secret a0 = {}", a0_val);
-                        println!("          Both share combinations reconstruct the same secret");
+                        debug!("          Secret a0 = {}", a0_val);
+                        debug!("          Both share combinations reconstruct the same secret");
                     }
                 }
                 Ok(VerificationResult::Verified)
@@ -295,27 +296,27 @@ impl ShamirVerifier {
     pub fn verify_all() -> Result<Vec<(&'static str, VerificationResult)>> {
         let mut results = Vec::new();
 
-        println!("Running Shamir's Secret Sharing formal verification...");
+        info!("Running Shamir's Secret Sharing formal verification...");
 
-        println!("  [1/4] Verifying polynomial construction...");
+        info!("  [1/4] Verifying polynomial construction...");
         let poly_const = Self::verify_polynomial_construction()?;
         results.push(("Polynomial Construction", poly_const.clone()));
-        println!("        Result: {:?}", poly_const);
+        info!("        Result: {:?}", poly_const);
 
-        println!("  [2/4] Verifying Lagrange interpolation correctness...");
+        info!("  [2/4] Verifying Lagrange interpolation correctness...");
         let lagrange = Self::verify_lagrange_interpolation()?;
         results.push(("Lagrange Interpolation", lagrange.clone()));
-        println!("        Result: {:?}", lagrange);
+        info!("        Result: {:?}", lagrange);
 
-        println!("  [3/4] Verifying information-theoretic security...");
+        info!("  [3/4] Verifying information-theoretic security...");
         let it_security = Self::verify_information_theoretic_security()?;
         results.push(("Information-Theoretic Security", it_security.clone()));
-        println!("        Result: {:?}", it_security);
+        info!("        Result: {:?}", it_security);
 
-        println!("  [4/4] Verifying share consistency...");
+        info!("  [4/4] Verifying share consistency...");
         let consistency = Self::verify_share_consistency()?;
         results.push(("Share Consistency", consistency.clone()));
-        println!("        Result: {:?}", consistency);
+        info!("        Result: {:?}", consistency);
 
         Ok(results)
     }
@@ -323,41 +324,41 @@ impl ShamirVerifier {
 
 /// Verify Shamir's Secret Sharing correctness (main entry point)
 pub fn verify_shamir_correctness() -> Result<()> {
-    println!("\n═══════════════════════════════════════════════════════════");
-    println!("  Formal Verification: Shamir's Secret Sharing");
-    println!("═══════════════════════════════════════════════════════════\n");
+    info!("===============================================================");
+    info!("  Formal Verification: Shamir's Secret Sharing");
+    info!("===============================================================");
 
     let results = ShamirVerifier::verify_all()?;
 
-    println!("\n═══════════════════════════════════════════════════════════");
-    println!("  Verification Results");
-    println!("═══════════════════════════════════════════════════════════\n");
+    info!("===============================================================");
+    info!("  Verification Results");
+    info!("===============================================================");
 
     let mut all_passed = true;
     for (name, result) in &results {
         match result {
             VerificationResult::Verified => {
-                println!("  ✓ {} verification passed", name);
+                info!("  [PASS] {} verification passed", name);
             }
             VerificationResult::Violated(msg) => {
-                println!("  ✗ {} verification failed: {}", name, msg);
+                info!("  [FAIL] {} verification failed: {}", name, msg);
                 all_passed = false;
             }
             VerificationResult::Inconclusive(msg) => {
-                println!("  ? {} verification inconclusive: {}", name, msg);
+                info!("  [UNKNOWN] {} verification inconclusive: {}", name, msg);
             }
         }
     }
 
-    println!("\n═══════════════════════════════════════════════════════════\n");
+    info!("===============================================================");
 
     if all_passed {
-        println!("✓ All Shamir's Secret Sharing properties formally verified!\n");
-        println!("Proven properties:");
-        println!("  1. Any k shares correctly reconstruct the secret");
-        println!("  2. k-1 shares reveal zero information (information-theoretic)");
-        println!("  3. All k-combinations yield consistent secret");
-        println!("  4. Lagrange interpolation is correct\n");
+        info!("All Shamir's Secret Sharing properties formally verified!");
+        info!("Proven properties:");
+        info!("  1. Any k shares correctly reconstruct the secret");
+        info!("  2. k-1 shares reveal zero information (information-theoretic)");
+        info!("  3. All k-combinations yield consistent secret");
+        info!("  4. Lagrange interpolation is correct");
         Ok(())
     } else {
         Err(VerificationError::ShamirError(

@@ -365,7 +365,7 @@ mod tests {
         let mut manager = SimpleBackupManager::new();
         manager.add_key("prod", "api_key", b"secret".to_vec());
 
-        let password = b"password";
+        let password = b"test-password-1234";
         let backup = manager.export_keys("prod", password).unwrap();
 
         let mut new_manager = SimpleBackupManager::new();
@@ -377,7 +377,7 @@ mod tests {
     #[test]
     fn test_export_empty_namespace() {
         let manager = SimpleBackupManager::new();
-        let result = manager.export_keys("empty", b"password");
+        let result = manager.export_keys("empty", b"test-password-1234");
 
         assert!(matches!(result, Err(BackupError::EmptyData)));
     }

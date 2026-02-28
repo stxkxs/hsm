@@ -30,3 +30,4 @@ test-data/keys/
 # Build artifacts
 dist/
 build/
+.claude/worktrees/

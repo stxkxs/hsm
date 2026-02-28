@@ -31,6 +31,7 @@ struct CachedJwks {
     /// The JWKS
     jwks: Jwks,
     /// Fetch timestamp
+    #[allow(dead_code)]
     fetched_at: DateTime<Utc>,
     /// Expiration
     expires_at: DateTime<Utc>,
