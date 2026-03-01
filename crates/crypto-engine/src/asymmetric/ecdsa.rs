@@ -128,8 +128,8 @@ impl EcdsaEngine {
         let verifying_key = VerifyingKey::from_sec1_bytes(public_key)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
-        let sig = Signature::from_slice(signature)
-            .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
+        let sig =
+            Signature::from_slice(signature).map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
         verifying_key
             .verify(message, &sig)

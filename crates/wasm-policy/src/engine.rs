@@ -318,10 +318,12 @@ impl PolicyEngine {
         let ptr = store.data().alloc_pos;
 
         // Use checked arithmetic to prevent overflow
-        let end_pos = ptr.checked_add(len).ok_or_else(|| PolicyError::MemoryLimitExceeded {
-            used: i32::MAX as usize,
-            limit: Self::HEAP_MAX,
-        })?;
+        let end_pos = ptr
+            .checked_add(len)
+            .ok_or(PolicyError::MemoryLimitExceeded {
+                used: i32::MAX as usize,
+                limit: Self::HEAP_MAX,
+            })?;
 
         // Validate against heap maximum
         if (end_pos as usize) > Self::HEAP_MAX {

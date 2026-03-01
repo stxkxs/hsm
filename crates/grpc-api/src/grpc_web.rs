@@ -101,7 +101,9 @@ impl GrpcWebConfig {
 
         // Reject wildcard origins - explicit origins must be specified
         if self.allowed_origins.contains(&"*".to_string()) {
-            return Err("Wildcard CORS origins are not allowed - specify explicit origins".to_string());
+            return Err(
+                "Wildcard CORS origins are not allowed - specify explicit origins".to_string(),
+            );
         }
 
         Ok(())

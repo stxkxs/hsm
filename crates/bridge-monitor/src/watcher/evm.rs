@@ -109,7 +109,7 @@ impl EvmWatcher {
             return Err(BridgeError::ChainConnection(error.to_string()));
         }
 
-        serde_json::from_value(json["result"].clone()).map_err(|e| BridgeError::Serialization(e))
+        serde_json::from_value(json["result"].clone()).map_err(BridgeError::Serialization)
     }
 
     /// Get current block number
@@ -189,7 +189,7 @@ impl EvmWatcher {
         let amount_hex = data.trim_start_matches("0x");
         let amount = u128::from_str_radix(amount_hex, 16)
             .ok()
-            .map(|a| BigDecimal::from(a))?;
+            .map(BigDecimal::from)?;
 
         Some((from, to, amount))
     }

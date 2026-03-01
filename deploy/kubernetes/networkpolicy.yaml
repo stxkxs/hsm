@@ -1,0 +1,40 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hsm-server
+  namespace: hsm-system
+  labels:
+    app.kubernetes.io/name: hsm
+    app.kubernetes.io/component: server
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: hsm
+      app.kubernetes.io/component: server
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow HTTPS traffic from any namespace
+    - ports:
+        - port: 8443
+          protocol: TCP
+    # Allow metrics scraping from monitoring namespace only
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - port: 9090
+          protocol: TCP
+  egress:
+    # Allow DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow HTTPS outbound (for OIDC, webhooks)
+    - ports:
+        - port: 443
+          protocol: TCP

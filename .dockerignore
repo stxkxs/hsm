@@ -1,0 +1,13 @@
+target/
+.git/
+.github/
+ui/
+docs/
+scripts/
+test-data/
+*.md
+!README.md
+.claude/
+.env
+*.swp
+*.swo

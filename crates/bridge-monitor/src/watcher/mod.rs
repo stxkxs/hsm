@@ -79,6 +79,7 @@ pub struct BridgeEvent {
 
 impl BridgeEvent {
     /// Create a new bridge event
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         chain_id: &str,
         block_number: u64,

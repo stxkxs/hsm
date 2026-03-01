@@ -38,6 +38,7 @@ impl AuthInterceptor {
         match &self.auth_service {
             Some(auth) => {
                 // Validate session with AuthService
+                #[allow(deprecated)]
                 let identity = auth.validate_session(session_id).map_err(|e| {
                     debug!("Session validation failed: {}", e);
                     ApiError::AuthenticationFailed(format!("Invalid session: {}", e))

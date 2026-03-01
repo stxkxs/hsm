@@ -303,7 +303,11 @@ mod tests {
         let verifier = BackupVerifier::new();
 
         let backup = exporter
-            .export_keys(b"test_data", b"test-password-1234", Some("test".to_string()))
+            .export_keys(
+                b"test_data",
+                b"test-password-1234",
+                Some("test".to_string()),
+            )
             .unwrap();
 
         let result = verifier.verify_backup(&backup);

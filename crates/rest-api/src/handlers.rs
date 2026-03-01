@@ -93,7 +93,7 @@ fn to_usage_policy(purpose: &KeyPurpose) -> KeyUsagePolicy {
 
 /// Development login endpoint (for testing only)
 ///
-/// This endpoint is only available in development mode.
+/// This endpoint is only available in development/debug builds.
 /// Username determines the role:
 /// - "admin" → Admin role
 /// - "operator" → Operator role
@@ -101,6 +101,11 @@ fn to_usage_policy(purpose: &KeyPurpose) -> KeyUsagePolicy {
 /// - anything else → User role
 ///
 /// Password must be "dev" for development mode.
+///
+/// # Safety
+/// This endpoint is gated behind `#[cfg(debug_assertions)]` and will
+/// not be compiled into release builds.
+#[cfg(debug_assertions)]
 pub async fn dev_login(
     State(state): State<AppState>,
     Json(request): Json<DevLoginRequest>,
@@ -400,7 +405,11 @@ pub async fn rotate_key(
     let original_metadata = state
         .key_manager
         .get_metadata(&key_id_parsed, "default")
-        .or_else(|_| state.key_manager.get_metadata(&key_id_parsed, &identity.common_name))
+        .or_else(|_| {
+            state
+                .key_manager
+                .get_metadata(&key_id_parsed, &identity.common_name)
+        })
         .map_err(|e| ApiError::NotFound(format!("Key not found: {}", e)))?;
 
     // Rotate key
@@ -636,15 +645,17 @@ pub async fn verify_signature(
     // Verify based on key type
     // Note: Invalid signatures return Err from the crypto engine, so we convert those to valid=false
     let valid = match key.key_type {
-        KeyType::Ed25519 => ed25519::Ed25519Engine::verify(public_key, &data, &signature)
-            .unwrap_or(false),
-        KeyType::EcdsaP256 => ecdsa::EcdsaEngine::verify_p256(public_key, &data, &signature)
-            .unwrap_or(false),
-        KeyType::EcdsaP384 => ecdsa::EcdsaEngine::verify_p384(public_key, &data, &signature)
-            .unwrap_or(false),
+        KeyType::Ed25519 => {
+            ed25519::Ed25519Engine::verify(public_key, &data, &signature).unwrap_or(false)
+        }
+        KeyType::EcdsaP256 => {
+            ecdsa::EcdsaEngine::verify_p256(public_key, &data, &signature).unwrap_or(false)
+        }
+        KeyType::EcdsaP384 => {
+            ecdsa::EcdsaEngine::verify_p384(public_key, &data, &signature).unwrap_or(false)
+        }
         KeyType::Rsa2048 | KeyType::Rsa3072 | KeyType::Rsa4096 => {
-            rsa::RsaEngine::verify_pkcs1v15_sha256(public_key, &data, &signature)
-                .unwrap_or(false)
+            rsa::RsaEngine::verify_pkcs1v15_sha256(public_key, &data, &signature).unwrap_or(false)
         }
         _ => {
             return Err(ApiError::BadRequest(

@@ -9,7 +9,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use hsm_auth::{ClientIdentity, SessionManager, SessionToken};
+use hsm_auth::{ClientIdentity, RateLimiter, SessionManager, SessionToken};
 use hsm_key_manager::{DefaultKeyManager, KeyManager};
 use std::sync::Arc;
 
@@ -20,6 +20,8 @@ pub struct AppState {
     pub sessions: Arc<SessionManager>,
     /// Key manager for key operations
     pub key_manager: Arc<dyn KeyManager>,
+    /// Rate limiter for request throttling
+    pub rate_limiter: Arc<RateLimiter>,
     /// Start time for uptime calculation
     pub start_time: std::time::Instant,
 }
@@ -30,6 +32,7 @@ impl AppState {
         Self {
             sessions,
             key_manager: Arc::new(DefaultKeyManager::new()),
+            rate_limiter: Arc::new(RateLimiter::new()),
             start_time: std::time::Instant::now(),
         }
     }
@@ -42,6 +45,7 @@ impl AppState {
         Self {
             sessions,
             key_manager,
+            rate_limiter: Arc::new(RateLimiter::new()),
             start_time: std::time::Instant::now(),
         }
     }
@@ -143,6 +147,29 @@ pub async fn request_tracking_middleware(request: Request, next: Next) -> Respon
     );
 
     response
+}
+
+/// Rate limiting middleware
+///
+/// Applies global rate limiting using a token bucket algorithm.
+/// Returns 429 Too Many Requests when the limit is exceeded.
+pub async fn rate_limit_middleware(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    // Skip rate limiting for health/ready endpoints
+    let path = request.uri().path();
+    if path == "/health" || path == "/ready" {
+        return Ok(next.run(request).await);
+    }
+
+    state
+        .rate_limiter
+        .check_global()
+        .map_err(|_| ApiError::RateLimitExceeded)?;
+
+    Ok(next.run(request).await)
 }
 
 /// Extract client identity from request extensions

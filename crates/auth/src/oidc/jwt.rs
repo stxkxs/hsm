@@ -163,31 +163,32 @@ impl JwtValidator {
         use rsa::BigUint as RsaBigUint;
 
         // Extract n and e from the JWK
-        let n_b64 = jwk
-            .get("n")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| JwtValidationError::InvalidFormat("Missing 'n' in RSA JWK".to_string()))?;
-        let e_b64 = jwk
-            .get("e")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| JwtValidationError::InvalidFormat("Missing 'e' in RSA JWK".to_string()))?;
+        let n_b64 = jwk.get("n").and_then(|v| v.as_str()).ok_or_else(|| {
+            JwtValidationError::InvalidFormat("Missing 'n' in RSA JWK".to_string())
+        })?;
+        let e_b64 = jwk.get("e").and_then(|v| v.as_str()).ok_or_else(|| {
+            JwtValidationError::InvalidFormat("Missing 'e' in RSA JWK".to_string())
+        })?;
 
-        let n_bytes = base64_url_decode(n_b64)
-            .map_err(|e| JwtValidationError::DecodingError(format!("Failed to decode 'n': {}", e)))?;
-        let e_bytes = base64_url_decode(e_b64)
-            .map_err(|e| JwtValidationError::DecodingError(format!("Failed to decode 'e': {}", e)))?;
+        let n_bytes = base64_url_decode(n_b64).map_err(|e| {
+            JwtValidationError::DecodingError(format!("Failed to decode 'n': {}", e))
+        })?;
+        let e_bytes = base64_url_decode(e_b64).map_err(|e| {
+            JwtValidationError::DecodingError(format!("Failed to decode 'e': {}", e))
+        })?;
 
         let n = RsaBigUint::from_bytes_be(&n_bytes);
         let e = RsaBigUint::from_bytes_be(&e_bytes);
 
-        let public_key = rsa::RsaPublicKey::new(n, e)
-            .map_err(|e| JwtValidationError::DecodingError(format!("Invalid RSA public key: {}", e)))?;
+        let public_key = rsa::RsaPublicKey::new(n, e).map_err(|e| {
+            JwtValidationError::DecodingError(format!("Invalid RSA public key: {}", e))
+        })?;
 
         match alg {
             "RS256" => {
                 let verifying_key = RsaVerifyingKey::<sha2::Sha256>::new(public_key);
                 let sig = rsa::pkcs1v15::Signature::try_from(signature)
-                    .map_err(|e| JwtValidationError::InvalidSignature)?;
+                    .map_err(|_| JwtValidationError::InvalidSignature)?;
                 verifying_key
                     .verify(message.as_bytes(), &sig)
                     .map_err(|_| JwtValidationError::InvalidSignature)
@@ -195,7 +196,7 @@ impl JwtValidator {
             "RS384" => {
                 let verifying_key = RsaVerifyingKey::<sha2::Sha384>::new(public_key);
                 let sig = rsa::pkcs1v15::Signature::try_from(signature)
-                    .map_err(|e| JwtValidationError::InvalidSignature)?;
+                    .map_err(|_| JwtValidationError::InvalidSignature)?;
                 verifying_key
                     .verify(message.as_bytes(), &sig)
                     .map_err(|_| JwtValidationError::InvalidSignature)
@@ -203,7 +204,7 @@ impl JwtValidator {
             "RS512" => {
                 let verifying_key = RsaVerifyingKey::<sha2::Sha512>::new(public_key);
                 let sig = rsa::pkcs1v15::Signature::try_from(signature)
-                    .map_err(|e| JwtValidationError::InvalidSignature)?;
+                    .map_err(|_| JwtValidationError::InvalidSignature)?;
                 verifying_key
                     .verify(message.as_bytes(), &sig)
                     .map_err(|_| JwtValidationError::InvalidSignature)
@@ -224,19 +225,19 @@ impl JwtValidator {
         alg: &str,
     ) -> Result<(), JwtValidationError> {
         // Extract x and y from JWK
-        let x_b64 = jwk
-            .get("x")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| JwtValidationError::InvalidFormat("Missing 'x' in EC JWK".to_string()))?;
-        let y_b64 = jwk
-            .get("y")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| JwtValidationError::InvalidFormat("Missing 'y' in EC JWK".to_string()))?;
+        let x_b64 = jwk.get("x").and_then(|v| v.as_str()).ok_or_else(|| {
+            JwtValidationError::InvalidFormat("Missing 'x' in EC JWK".to_string())
+        })?;
+        let y_b64 = jwk.get("y").and_then(|v| v.as_str()).ok_or_else(|| {
+            JwtValidationError::InvalidFormat("Missing 'y' in EC JWK".to_string())
+        })?;
 
-        let x_bytes = base64_url_decode(x_b64)
-            .map_err(|e| JwtValidationError::DecodingError(format!("Failed to decode 'x': {}", e)))?;
-        let y_bytes = base64_url_decode(y_b64)
-            .map_err(|e| JwtValidationError::DecodingError(format!("Failed to decode 'y': {}", e)))?;
+        let x_bytes = base64_url_decode(x_b64).map_err(|e| {
+            JwtValidationError::DecodingError(format!("Failed to decode 'x': {}", e))
+        })?;
+        let y_bytes = base64_url_decode(y_b64).map_err(|e| {
+            JwtValidationError::DecodingError(format!("Failed to decode 'y': {}", e))
+        })?;
 
         match alg {
             "ES256" => {
@@ -248,8 +249,9 @@ impl JwtValidator {
                     p256::FieldBytes::from_slice(&y_bytes),
                     false,
                 );
-                let verifying_key = VerifyingKey::from_encoded_point(&point)
-                    .map_err(|e| JwtValidationError::DecodingError(format!("Invalid EC P-256 key: {}", e)))?;
+                let verifying_key = VerifyingKey::from_encoded_point(&point).map_err(|e| {
+                    JwtValidationError::DecodingError(format!("Invalid EC P-256 key: {}", e))
+                })?;
 
                 // JWT uses raw R||S format (not DER) for EC signatures
                 let sig = Signature::from_slice(signature)
@@ -267,8 +269,9 @@ impl JwtValidator {
                     p384::FieldBytes::from_slice(&y_bytes),
                     false,
                 );
-                let verifying_key = VerifyingKey::from_encoded_point(&point)
-                    .map_err(|e| JwtValidationError::DecodingError(format!("Invalid EC P-384 key: {}", e)))?;
+                let verifying_key = VerifyingKey::from_encoded_point(&point).map_err(|e| {
+                    JwtValidationError::DecodingError(format!("Invalid EC P-384 key: {}", e))
+                })?;
 
                 let sig = Signature::from_slice(signature)
                     .map_err(|_| JwtValidationError::InvalidSignature)?;

@@ -424,7 +424,11 @@ mod tests {
         let data = b"test data";
 
         // Write directly to backend (bypass cache)
-        cached.backend().lock().store_key(&key_id, data, "test").unwrap();
+        cached
+            .backend()
+            .lock()
+            .store_key(&key_id, data, "test")
+            .unwrap();
 
         // Read (cache miss)
         let loaded = cached.load_key_cached(&key_id, "test").unwrap();

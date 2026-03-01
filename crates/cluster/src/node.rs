@@ -178,7 +178,7 @@ impl ClusterNode {
         let timeout = self.config.raft.election_timeout();
 
         tokio::spawn({
-            let state = self.state.read().clone();
+            let state = *self.state.read();
             async move {
                 tokio::time::sleep(timeout).await;
                 // If still follower, start election

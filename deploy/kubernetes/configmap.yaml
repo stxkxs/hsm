@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hsm-config
+  namespace: hsm-system
+  labels:
+    app.kubernetes.io/name: hsm
+    app.kubernetes.io/component: server
+data:
+  HSM_REST_PORT: "8443"
+  HSM_METRICS_PORT: "9090"
+  HSM_LOG_LEVEL: "info"
+  HSM_JSON_LOGS: "true"

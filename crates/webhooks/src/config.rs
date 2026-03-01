@@ -110,8 +110,7 @@ impl WebhookConfig {
 /// - The scheme is "https" (rejects "http")
 /// - The hostname does not resolve to a private/internal IP range
 pub fn validate_url(url_str: &str) -> Result<(), String> {
-    let parsed = url::Url::parse(url_str)
-        .map_err(|e| format!("Invalid URL: {}", e))?;
+    let parsed = url::Url::parse(url_str).map_err(|e| format!("Invalid URL: {}", e))?;
 
     // Require HTTPS
     if parsed.scheme() != "https" {
@@ -123,7 +122,10 @@ pub fn validate_url(url_str: &str) -> Result<(), String> {
         // Try to parse as IP address directly
         if let Ok(ip) = host.parse::<std::net::IpAddr>() {
             if is_private_ip(&ip) {
-                return Err(format!("URL hostname resolves to private IP range: {}", host));
+                return Err(format!(
+                    "URL hostname resolves to private IP range: {}",
+                    host
+                ));
             }
         }
 
@@ -156,9 +158,7 @@ fn is_private_ip(ip: &std::net::IpAddr) -> bool {
             // 0.0.0.0
             || (octets[0] == 0 && octets[1] == 0 && octets[2] == 0 && octets[3] == 0)
         }
-        std::net::IpAddr::V6(ipv6) => {
-            ipv6.is_loopback() || ipv6.is_unspecified()
-        }
+        std::net::IpAddr::V6(ipv6) => ipv6.is_loopback() || ipv6.is_unspecified(),
     }
 }
 

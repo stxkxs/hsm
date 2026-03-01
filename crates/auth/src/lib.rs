@@ -446,7 +446,9 @@ impl AuthService {
     }
 
     /// Validate a session and return the identity
+    #[deprecated(note = "Use validate_session_with_token for security")]
     pub fn validate_session(&self, session_id: &str) -> Result<ClientIdentity> {
+        #[allow(deprecated)]
         let session = self.sessions.validate_session(session_id)?;
         Ok(session.identity)
     }
@@ -472,6 +474,7 @@ impl AuthService {
     }
 
     /// Full authorization check for a session
+    #[deprecated(note = "Use token-based session validation")]
     pub fn authorize_session(
         &self,
         session_id: &str,
@@ -480,6 +483,7 @@ impl AuthService {
         permission: &Permission,
     ) -> Result<ClientIdentity> {
         // Validate session and get identity
+        #[allow(deprecated)]
         let identity = self.validate_session(session_id)?;
 
         // Authorize access

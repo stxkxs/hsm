@@ -206,7 +206,7 @@ impl AnomalyDetector {
                 AnomalyType::BlacklistedAddress,
                 Severity::Critical,
                 1.0,
-                format!("Transaction involves blacklisted address"),
+                "Transaction involves blacklisted address".to_string(),
             )
             .with_action("Block transaction and alert"));
         }
@@ -217,7 +217,7 @@ impl AnomalyDetector {
                 AnomalyType::AmountMismatch,
                 Severity::High,
                 1.0,
-                format!("Amount mismatch between deposit and withdrawal"),
+                "Amount mismatch between deposit and withdrawal".to_string(),
             )
             .with_action("Investigate and possibly pause bridge"));
         }
@@ -306,7 +306,7 @@ impl AnomalyDetector {
         let stats = self.token_stats.get(token)?;
         let stats = stats.read();
 
-        if stats.source_tvl == BigDecimal::from(0) {
+        if stats.source_tvl == 0 {
             return None;
         }
 
@@ -427,7 +427,7 @@ impl AnomalyDetector {
         let stats = self.token_stats.get(token)?;
         let stats = stats.read();
 
-        if stats.source_tvl == BigDecimal::from(0) || stats.dest_tvl == BigDecimal::from(0) {
+        if stats.source_tvl == 0 || stats.dest_tvl == 0 {
             return None;
         }
 

@@ -230,7 +230,9 @@ fn test_invalid_json_import() {
 fn test_serialization_deserialization() {
     let exporter = KeyExporter::new();
 
-    let backup = exporter.export_keys(b"test", b"test-password-1234", None).unwrap();
+    let backup = exporter
+        .export_keys(b"test", b"test-password-1234", None)
+        .unwrap();
 
     let json = exporter.serialize_backup(&backup).unwrap();
 

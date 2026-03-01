@@ -210,7 +210,9 @@ mod tests {
         let exporter = KeyExporter::new();
         let importer = KeyImporter::new();
 
-        let backup = exporter.export_keys(b"data", b"test-password-1234", None).unwrap();
+        let backup = exporter
+            .export_keys(b"data", b"test-password-1234", None)
+            .unwrap();
 
         assert!(importer.verify_backup(&backup).is_ok());
     }

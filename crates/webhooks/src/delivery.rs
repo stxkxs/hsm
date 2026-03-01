@@ -138,7 +138,8 @@ impl WebhookDeliverer {
 
     /// Record a successful delivery, resetting the circuit breaker
     fn record_success(&self, url: &str) {
-        self.circuit_breaker.insert(url.to_string(), CircuitState::new());
+        self.circuit_breaker
+            .insert(url.to_string(), CircuitState::new());
     }
 
     /// Record a failed delivery, potentially opening the circuit breaker

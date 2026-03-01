@@ -3,13 +3,18 @@
 //! Route definitions and router configuration.
 
 use crate::handlers;
-use crate::middleware::{auth_middleware, request_tracking_middleware, AppState};
+use crate::middleware::{
+    auth_middleware, rate_limit_middleware, request_tracking_middleware, AppState,
+};
 use axum::{
     middleware,
     routing::{delete, get, post},
     Router,
 };
+use std::time::Duration;
+use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::timeout::TimeoutLayer;
 
 /// Create the REST API router
 pub fn create_router(state: AppState) -> Router {
@@ -55,11 +60,25 @@ pub fn create_router(state: AppState) -> Router {
             auth_middleware,
         ));
 
-    // Build the full router
+    // Build the full router with middleware stack:
+    // 1. Request timeout (30s)
+    // 2. Rate limiting
+    // 3. Request tracking (logging, metrics)
     Router::new()
         .merge(public_routes)
         .merge(authenticated_routes)
-        .layer(middleware::from_fn(request_tracking_middleware))
+        .layer(
+            ServiceBuilder::new()
+                .layer(TimeoutLayer::with_status_code(
+                    axum::http::StatusCode::REQUEST_TIMEOUT,
+                    Duration::from_secs(30),
+                ))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    rate_limit_middleware,
+                ))
+                .layer(middleware::from_fn(request_tracking_middleware)),
+        )
         .with_state(state)
 }
 

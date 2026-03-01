@@ -315,7 +315,8 @@ impl EncryptedFileStorage {
     fn get_key_file_path(&self, namespace: &str, key_id: &KeyId) -> StorageResult<PathBuf> {
         Self::validate_path_component(namespace, "namespace")?;
         Self::validate_path_component(&key_id.to_string(), "key ID")?;
-        Ok(self.get_keys_path(namespace)
+        Ok(self
+            .get_keys_path(namespace)
             .join(format!("key-{}.{}", key_id, KEY_FILE_EXT)))
     }
 
@@ -323,7 +324,8 @@ impl EncryptedFileStorage {
     fn get_meta_file_path(&self, namespace: &str, key_id: &KeyId) -> StorageResult<PathBuf> {
         Self::validate_path_component(namespace, "namespace")?;
         Self::validate_path_component(&key_id.to_string(), "key ID")?;
-        Ok(self.get_keys_path(namespace)
+        Ok(self
+            .get_keys_path(namespace)
             .join(format!("key-{}.{}", key_id, META_FILE_EXT)))
     }
 
@@ -384,7 +386,8 @@ impl EncryptedFileStorage {
             let file_size = metadata.len() as usize;
             if file_size > 0 {
                 let mut random_bytes = vec![0u8; file_size];
-                if rand::RngCore::try_fill_bytes(&mut rand::thread_rng(), &mut random_bytes).is_ok() {
+                if rand::RngCore::try_fill_bytes(&mut rand::thread_rng(), &mut random_bytes).is_ok()
+                {
                     if let Ok(mut file) = File::create(path) {
                         let _ = file.write_all(&random_bytes);
                         let _ = file.sync_all();

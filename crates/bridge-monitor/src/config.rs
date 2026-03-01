@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 /// Monitor configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MonitorConfig {
     /// Bridge configuration
     pub bridge: BridgeConfig,
@@ -24,19 +24,6 @@ pub struct MonitorConfig {
     /// Alert settings
     #[serde(default)]
     pub alerts: AlertConfig,
-}
-
-impl Default for MonitorConfig {
-    fn default() -> Self {
-        Self {
-            bridge: BridgeConfig::default(),
-            chains: HashMap::new(),
-            correlation: CorrelationConfig::default(),
-            detection: DetectionConfig::default(),
-            policy: PolicyConfig::default(),
-            alerts: AlertConfig::default(),
-        }
-    }
 }
 
 /// Bridge configuration

@@ -21,6 +21,7 @@ impl AuthAdapter {
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| ApiError::AuthenticationFailed("Missing session-id header".to_string()))?;
 
+        #[allow(deprecated)]
         let identity = self.auth_service
             .validate_session(session_id)
             .map_err(ApiError::from)?;

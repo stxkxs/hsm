@@ -274,7 +274,11 @@ impl MtlsAuthenticator {
     /// Checks for a custom roles extension (OID 1.3.6.1.4.1.99999.1) first.
     /// The extension value should be a UTF-8 string of comma-separated role names.
     /// Falls back to CN-based role derivation with a warning if no extension is found.
-    fn extract_roles(cert: &X509Certificate, common_name: &str, organization: &Option<String>) -> Vec<Role> {
+    fn extract_roles(
+        cert: &X509Certificate,
+        common_name: &str,
+        organization: &Option<String>,
+    ) -> Vec<Role> {
         // Custom OID for roles extension: 1.3.6.1.4.1.99999.1
         let roles_oid = x509_parser::oid_registry::Oid::from(&[1, 3, 6, 1, 4, 1, 99999, 1])
             .expect("valid OID for roles extension");

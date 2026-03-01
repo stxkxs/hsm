@@ -161,10 +161,8 @@ where
             Ok(r) => r,
             Err(e) => {
                 warn!("Failed to decode KMIP request: {}", e);
-                let error_response = build_error_response(
-                    ResultReason::InvalidMessage,
-                    "Invalid message format",
-                );
+                let error_response =
+                    build_error_response(ResultReason::InvalidMessage, "Invalid message format");
                 let response_bytes = TtlvEncoder::encode(&error_response);
                 stream.write_all(&response_bytes).await?;
                 continue;

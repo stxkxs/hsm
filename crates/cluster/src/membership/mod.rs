@@ -219,7 +219,7 @@ impl MembershipManager {
             .count();
 
         // Need n/2 + 1 for quorum (including self)
-        let quorum_size = (voting_count + 1) / 2 + 1;
+        let quorum_size = voting_count.div_ceil(2) + 1;
         healthy_voting + 1 >= quorum_size // +1 for self
     }
 

@@ -314,43 +314,33 @@ impl PolicyEnforcer {
             Severity::Critical => {
                 // Critical anomalies may pause the bridge
                 if self.config.auto_pause_on_anomaly {
-                    return Ok(PolicyAction::PauseBridge {
+                    Ok(PolicyAction::PauseBridge {
                         reason: detection.description.clone(),
-                    });
+                    })
                 } else {
-                    return Ok(PolicyAction::Block {
+                    Ok(PolicyAction::Block {
                         reason: detection.description.clone(),
-                    });
+                    })
                 }
             }
             Severity::High => match anomaly_type {
-                AnomalyType::LargeWithdrawal => {
-                    return Ok(PolicyAction::RequireApproval {
-                        required_approvers: self.config.required_approvers,
-                        reason: detection.description.clone(),
-                    });
-                }
-                AnomalyType::BlacklistedAddress => {
-                    return Ok(PolicyAction::Block {
-                        reason: "Blacklisted address".to_string(),
-                    });
-                }
-                _ => {
-                    return Ok(PolicyAction::RequireApproval {
-                        required_approvers: self.config.required_approvers,
-                        reason: detection.description.clone(),
-                    });
-                }
+                AnomalyType::LargeWithdrawal => Ok(PolicyAction::RequireApproval {
+                    required_approvers: self.config.required_approvers,
+                    reason: detection.description.clone(),
+                }),
+                AnomalyType::BlacklistedAddress => Ok(PolicyAction::Block {
+                    reason: "Blacklisted address".to_string(),
+                }),
+                _ => Ok(PolicyAction::RequireApproval {
+                    required_approvers: self.config.required_approvers,
+                    reason: detection.description.clone(),
+                }),
             },
-            Severity::Medium => {
-                return Ok(PolicyAction::AlertOnly {
-                    severity: Severity::Medium,
-                    message: detection.description.clone(),
-                });
-            }
-            Severity::Low => {
-                return Ok(PolicyAction::Allow);
-            }
+            Severity::Medium => Ok(PolicyAction::AlertOnly {
+                severity: Severity::Medium,
+                message: detection.description.clone(),
+            }),
+            Severity::Low => Ok(PolicyAction::Allow),
         }
     }
 
