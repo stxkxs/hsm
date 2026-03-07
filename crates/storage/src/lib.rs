@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! Storage Backend Module
 //!
 //! This module provides a secure, encrypted storage backend for persisting cryptographic keys

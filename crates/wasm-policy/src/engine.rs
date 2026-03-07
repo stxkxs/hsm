@@ -243,7 +243,10 @@ impl PolicyEngine {
         // Build stats
         let stats = ExecutionStats {
             fuel_consumed,
-            peak_memory_bytes: 0, // TODO: track memory
+            peak_memory_bytes: instance
+                .get_memory(&mut store, "memory")
+                .map(|m| m.data_size(&store))
+                .unwrap_or(0),
             execution_time,
             host_calls: host.call_count(),
         };

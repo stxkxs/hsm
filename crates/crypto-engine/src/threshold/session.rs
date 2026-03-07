@@ -127,7 +127,7 @@ impl ThresholdSession {
     pub fn new(config: SigningSessionConfig, message: Vec<u8>) -> Result<Self, ThresholdError> {
         config.validate()?;
 
-        let session_id = config.session_id.clone().unwrap_or_else(SessionId::new);
+        let session_id = config.session_id.clone().unwrap_or_default();
 
         let participants: HashMap<ParticipantId, ParticipantSessionState> = config
             .participants

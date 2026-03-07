@@ -72,7 +72,7 @@ impl MnemonicStrength {
     }
 
     /// Convert to blockchain crate's MnemonicType
-    fn to_mnemonic_type(&self) -> MnemonicType {
+    fn to_mnemonic_type(self) -> MnemonicType {
         match self {
             Self::Words12 => MnemonicType::Words12,
             Self::Words15 => MnemonicType::Words15,
@@ -389,7 +389,7 @@ impl HdKeyManager {
 
     /// Derive a key for a specific coin type using BIP-44
     ///
-    /// Creates a key at path: m/44'/<coin>'/<account>'/0/<address_index>
+    /// Creates a key at path: `m/44'/<coin>'/<account>'/0/<address_index>`
     pub fn derive_coin_key(
         &self,
         master_key_id: &KeyId,

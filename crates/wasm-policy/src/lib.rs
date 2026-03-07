@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! WebAssembly Policy Engine for HSM
 //!
 //! This module provides a WebAssembly-based policy engine that allows users to write

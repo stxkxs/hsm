@@ -63,6 +63,10 @@ pub enum ApiError {
     /// Cryptographic operation failed
     #[error("cryptographic operation failed")]
     CryptoError(String),
+
+    /// Feature not implemented
+    #[error("not implemented: {0}")]
+    NotImplemented(String),
 }
 
 impl IntoResponse for ApiError {
@@ -115,6 +119,11 @@ impl IntoResponse for ApiError {
                     "Cryptographic operation failed".to_string(),
                 )
             }
+            ApiError::NotImplemented(msg) => (
+                StatusCode::NOT_IMPLEMENTED,
+                "NOT_IMPLEMENTED",
+                msg.clone(),
+            ),
         };
 
         // Increment error metrics

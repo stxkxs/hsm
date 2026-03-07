@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! gRPC API Server for Hardware Security Module (HSM)
 //!
 //! This crate provides a production-grade gRPC API server for HSM cryptographic operations.
@@ -286,7 +287,7 @@
 //! - Error rates by type
 //! - Connection count and duration
 //!
-//! See [`crate::metrics`] documentation for full list of available metrics.
+//! See `crate::metrics` documentation for full list of available metrics.
 
 pub mod cache;
 pub mod circuit_breaker;

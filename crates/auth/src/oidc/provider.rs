@@ -63,7 +63,7 @@ impl OidcProvider {
 pub struct OidcProviderConfig {
     /// Provider type
     pub provider: OidcProvider,
-    /// Issuer URL (e.g., "https://example.okta.com")
+    /// Issuer URL (e.g., `https://example.okta.com`)
     pub issuer: String,
     /// Client ID
     pub client_id: String,

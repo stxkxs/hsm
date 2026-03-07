@@ -159,6 +159,12 @@ impl Drop for Mnemonic {
 impl Mnemonic {
     /// Generate a new random mnemonic
     pub fn generate(mnemonic_type: MnemonicType, language: Language) -> Result<Self> {
+        if !language.is_supported() {
+            return Err(BlockchainError::InvalidMnemonic(
+                "Only English is currently supported. Other languages require feature flags."
+                    .to_string(),
+            ));
+        }
         let word_count = mnemonic_type.word_count();
 
         let mnemonic = bip39_crate::Mnemonic::generate_in(language.to_bip39_language(), word_count)
@@ -174,6 +180,12 @@ impl Mnemonic {
 
     /// Create a mnemonic from a phrase
     pub fn from_phrase(phrase: &str, language: Language) -> Result<Self> {
+        if !language.is_supported() {
+            return Err(BlockchainError::InvalidMnemonic(
+                "Only English is currently supported. Other languages require feature flags."
+                    .to_string(),
+            ));
+        }
         let parsed =
             bip39_crate::Mnemonic::parse_in_normalized(language.to_bip39_language(), phrase)
                 .map_err(|e| BlockchainError::InvalidMnemonic(e.to_string()))?;
@@ -189,6 +201,12 @@ impl Mnemonic {
 
     /// Create a mnemonic from entropy
     pub fn from_entropy(entropy: &[u8], language: Language) -> Result<Self> {
+        if !language.is_supported() {
+            return Err(BlockchainError::InvalidMnemonic(
+                "Only English is currently supported. Other languages require feature flags."
+                    .to_string(),
+            ));
+        }
         let mnemonic =
             bip39_crate::Mnemonic::from_entropy_in(language.to_bip39_language(), entropy)
                 .map_err(|e| BlockchainError::InvalidMnemonic(e.to_string()))?;
@@ -231,6 +249,9 @@ impl Mnemonic {
 
     /// Validate a phrase without creating a Mnemonic object
     pub fn validate(phrase: &str, language: Language) -> bool {
+        if !language.is_supported() {
+            return false;
+        }
         bip39_crate::Mnemonic::parse_in_normalized(language.to_bip39_language(), phrase).is_ok()
     }
 }

@@ -4,7 +4,6 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-repository.workspace = true
 description = "HSM Server - Production-grade Hardware Security Module for Kubernetes"
 
 [[bin]]
@@ -24,6 +23,7 @@ hsm-config = { path = "../config" }
 
 # Async runtime
 tokio = { workspace = true, features = ["full", "signal"] }
+tokio-util = "0.7"
 
 # HTTP server
 axum = { version = "0.8", features = ["json", "macros"] }
@@ -32,7 +32,7 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 
 # TLS
 rustls = { workspace = true }
-rustls-pemfile = "2"
+rustls-pki-types = { workspace = true }
 tokio-rustls = { workspace = true }
 hyper-util = { version = "0.1", features = ["tokio", "server-auto", "http1", "http2", "service"] }
 

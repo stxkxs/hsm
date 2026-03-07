@@ -177,7 +177,7 @@ impl P256ThresholdOps {
         let mut result = Scalar::ZERO;
         for (id, share) in shares {
             let lambda = Self::lagrange_coefficient(*id, &participants);
-            result += *share * &lambda;
+            result += *share * lambda;
         }
 
         result
@@ -197,7 +197,7 @@ impl P256ThresholdOps {
         let mut x_pow = Scalar::ONE;
 
         for commitment in commitments {
-            expected += *commitment * &x_pow;
+            expected += *commitment * x_pow;
             x_pow *= x;
         }
 

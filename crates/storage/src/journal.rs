@@ -127,6 +127,9 @@ use std::path::{Path, PathBuf};
 /// before being written to the journal. While the final storage files are encrypted
 /// via the master key, the journal itself is not encrypted.
 ///
+/// A runtime warning is emitted when `StoreKey` entries with non-empty data are
+/// committed, and the journal file permissions are restricted to `0o600` on Unix.
+///
 /// TODO: Encrypt journal entries before writing to disk to prevent key material
 /// exposure through journal file access. Consider using the master key or a
 /// dedicated journal encryption key.
@@ -248,6 +251,18 @@ impl WriteAheadLog {
             .open(&self.journal_path)?;
 
         for entry in &self.pending {
+            // Warn if StoreKey entries contain non-empty data (unencrypted key material)
+            if let JournalOp::StoreKey { ref data, ref key_id, .. } = entry.operation {
+                if !data.is_empty() {
+                    tracing::warn!(
+                        key_id = %key_id,
+                        data_len = data.len(),
+                        "Journal entry contains unencrypted key material; \
+                         journal encryption is not yet implemented"
+                    );
+                }
+            }
+
             // Serialize entry
             let entry_bytes = postcard::to_allocvec(entry).map_err(|e| {
                 StorageError::Serialization(format!("Failed to serialize journal entry: {}", e))
@@ -267,6 +282,14 @@ impl WriteAheadLog {
 
         // Ensure data is written to disk
         file.sync_all()?;
+
+        // Restrict journal file permissions to owner-only on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o600);
+            std::fs::set_permissions(&self.journal_path, perms)?;
+        }
 
         self.pending.clear();
         Ok(())

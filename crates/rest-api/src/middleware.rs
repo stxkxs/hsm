@@ -5,7 +5,7 @@
 use crate::error::ApiError;
 use axum::{
     extract::{Request, State},
-    http::header,
+    http::{header, HeaderValue},
     middleware::Next,
     response::Response,
 };
@@ -127,7 +127,7 @@ pub async fn request_tracking_middleware(request: Request, next: Next) -> Respon
         "X-Request-ID",
         request_id
             .parse()
-            .unwrap_or_else(|_| "unknown".parse().unwrap()),
+            .unwrap_or_else(|_| HeaderValue::from_static("unknown")),
     );
 
     // Record metrics

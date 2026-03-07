@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! # Backup and Recovery Module for HSM
 //!
 //! This module provides comprehensive backup and disaster recovery capabilities

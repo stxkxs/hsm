@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! HSM Server
 //!
 //! Production-grade Hardware Security Module server for Kubernetes.
@@ -34,6 +35,7 @@ use prometheus::TextEncoder;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::signal;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -81,6 +83,14 @@ struct Args {
     /// TLS private key path (required when --tls-cert is set)
     #[arg(long, env = "HSM_TLS_KEY")]
     tls_key: Option<String>,
+
+    /// TLS CA certificate for client authentication (enables mTLS)
+    #[arg(long, env = "HSM_TLS_CA")]
+    tls_ca: Option<String>,
+
+    /// Session timeout in seconds
+    #[arg(long, env = "HSM_SESSION_TIMEOUT", default_value = "3600")]
+    session_timeout: i64,
 }
 
 #[tokio::main]
@@ -102,7 +112,7 @@ async fn main() -> Result<()> {
         MetricsCollector::new().context("Failed to initialize metrics collector")?;
 
     // Initialize components
-    let session_manager = Arc::new(SessionManager::new(3600));
+    let session_manager = Arc::new(SessionManager::new(args.session_timeout));
     let key_manager = Arc::new(DefaultKeyManager::new());
 
     // Create REST API state
@@ -133,28 +143,41 @@ async fn main() -> Result<()> {
         .await
         .context("Failed to bind metrics server")?;
 
+    // Shutdown coordination
+    let shutdown_token = CancellationToken::new();
+
     // Optionally configure TLS for REST API
     let rest_server = if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
         info!("REST API listening on {} (TLS enabled)", rest_addr);
         let tls_config =
-            build_tls_config(cert_path, key_path).context("Failed to configure TLS")?;
+            build_tls_config(cert_path, key_path, args.tls_ca.as_deref())
+                .context("Failed to configure TLS")?;
         let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(tls_config));
-        tokio::spawn(serve_tls(rest_listener, rest_app, acceptor))
+        let token = shutdown_token.clone();
+        tokio::spawn(serve_tls(rest_listener, rest_app, acceptor, token))
     } else {
         warn!(
             "REST API listening on {} (TLS disabled - NOT recommended for production)",
             rest_addr
         );
+        let token = shutdown_token.clone();
         tokio::spawn(async move {
-            if let Err(e) = axum::serve(rest_listener, rest_app).await {
+            if let Err(e) = axum::serve(rest_listener, rest_app)
+                .with_graceful_shutdown(token.cancelled_owned())
+                .await
+            {
                 error!("REST server error: {}", e);
             }
         })
     };
 
     info!("Metrics endpoint listening on {}", metrics_addr);
+    let token = shutdown_token.clone();
     let metrics_server = tokio::spawn(async move {
-        if let Err(e) = axum::serve(metrics_listener, metrics_app).await {
+        if let Err(e) = axum::serve(metrics_listener, metrics_app)
+            .with_graceful_shutdown(token.cancelled_owned())
+            .await
+        {
             error!("Metrics server error: {}", e);
         }
     });
@@ -165,6 +188,7 @@ async fn main() -> Result<()> {
     tokio::select! {
         _ = shutdown_signal() => {
             info!("Shutdown signal received, stopping servers...");
+            shutdown_token.cancel();
         }
         result = rest_server => {
             match result {
@@ -184,72 +208,103 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Build a rustls ServerConfig from cert and key files
-fn build_tls_config(cert_path: &str, key_path: &str) -> Result<rustls::ServerConfig> {
-    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-    use std::fs;
+/// Build a rustls ServerConfig from cert and key files.
+/// When `ca_path` is provided, client certificate verification is enforced (mTLS).
+fn build_tls_config(
+    cert_path: &str,
+    key_path: &str,
+    ca_path: Option<&str>,
+) -> Result<rustls::ServerConfig> {
+    use rustls_pki_types::pem::PemObject;
+    use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 
-    let cert_pem = fs::read(cert_path)
-        .with_context(|| format!("Failed to read TLS certificate: {}", cert_path))?;
-    let key_pem =
-        fs::read(key_path).with_context(|| format!("Failed to read TLS key: {}", key_path))?;
-
-    let certs: Vec<CertificateDer<'static>> = rustls_pemfile::certs(&mut &cert_pem[..])
+    let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(cert_path)
+        .with_context(|| format!("Failed to read TLS certificate: {}", cert_path))?
         .collect::<std::result::Result<Vec<_>, _>>()
         .context("Failed to parse TLS certificates")?;
 
-    let key: PrivateKeyDer<'static> = rustls_pemfile::private_key(&mut &key_pem[..])
-        .context("Failed to parse TLS private key")?
-        .context("No private key found in key file")?;
+    let key: PrivateKeyDer<'static> = PrivateKeyDer::from_pem_file(key_path)
+        .with_context(|| format!("Failed to read TLS key: {}", key_path))?;
 
-    let config = rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(certs, key)
-        .context("Failed to build TLS config")?;
+    let config = if let Some(ca) = ca_path {
+        info!("mTLS enabled — requiring client certificates");
+        let ca_certs: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(ca)
+            .with_context(|| format!("Failed to read CA certificate: {}", ca))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to parse CA certificates")?;
+
+        let mut root_store = rustls::RootCertStore::empty();
+        for cert in ca_certs {
+            root_store.add(cert).context("Failed to add CA certificate to root store")?;
+        }
+
+        let verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
+            .build()
+            .context("Failed to build client certificate verifier")?;
+
+        rustls::ServerConfig::builder()
+            .with_client_cert_verifier(verifier)
+            .with_single_cert(certs, key)
+            .context("Failed to build mTLS config")?
+    } else {
+        rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .context("Failed to build TLS config")?
+    };
 
     Ok(config)
 }
 
-/// Serve HTTP over TLS using tokio-rustls
+/// Serve HTTP over TLS using tokio-rustls with graceful shutdown support
 async fn serve_tls(
     listener: tokio::net::TcpListener,
     app: axum::Router,
     acceptor: tokio_rustls::TlsAcceptor,
+    shutdown: CancellationToken,
 ) {
     use hyper_util::rt::TokioIo;
 
     loop {
-        let (stream, addr) = match listener.accept().await {
-            Ok(conn) => conn,
-            Err(e) => {
-                error!("Failed to accept connection: {}", e);
-                continue;
+        tokio::select! {
+            _ = shutdown.cancelled() => {
+                info!("TLS server shutting down gracefully");
+                break;
             }
-        };
+            result = listener.accept() => {
+                let (stream, addr) = match result {
+                    Ok(conn) => conn,
+                    Err(e) => {
+                        error!("Failed to accept connection: {}", e);
+                        continue;
+                    }
+                };
 
-        let acceptor = acceptor.clone();
-        let app = app.clone();
+                let acceptor = acceptor.clone();
+                let app = app.clone();
 
-        tokio::spawn(async move {
-            let tls_stream = match acceptor.accept(stream).await {
-                Ok(s) => s,
-                Err(e) => {
-                    warn!("TLS handshake failed from {}: {}", addr, e);
-                    return;
-                }
-            };
+                tokio::spawn(async move {
+                    let tls_stream = match acceptor.accept(stream).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            warn!("TLS handshake failed from {}: {}", addr, e);
+                            return;
+                        }
+                    };
 
-            let io = TokioIo::new(tls_stream);
-            let service = hyper_util::service::TowerToHyperService::new(app);
+                    let io = TokioIo::new(tls_stream);
+                    let service = hyper_util::service::TowerToHyperService::new(app);
 
-            if let Err(e) =
-                hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
-                    .serve_connection(io, service)
-                    .await
-            {
-                warn!("Connection error from {}: {}", addr, e);
+                    if let Err(e) =
+                        hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
+                            .serve_connection(io, service)
+                            .await
+                    {
+                        warn!("Connection error from {}: {}", addr, e);
+                    }
+                });
             }
-        });
+        }
     }
 }
 

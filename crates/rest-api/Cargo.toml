@@ -4,7 +4,6 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-repository.workspace = true
 description = "REST/JSON API Gateway for HSM"
 
 [dependencies]
@@ -42,3 +41,6 @@ getrandom = "0.2"
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }
 tokio-test = "0.4"
+tower = { version = "0.5", features = ["util"] }
+http = "1"
+http-body-util = "0.1"

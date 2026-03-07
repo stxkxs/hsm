@@ -504,7 +504,7 @@ impl EcdsaDkg {
             let sender_commitments = self
                 .received_commitments
                 .get(&package.sender.0)
-                .ok_or_else(|| ThresholdError::DkgMissingCommitments(package.sender))?;
+                .ok_or(ThresholdError::DkgMissingCommitments(package.sender))?;
 
             // Verify share against commitments
             let valid = FeldmanVss::verify_share(

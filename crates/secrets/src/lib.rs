@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! HSM Secrets Manager
 //!
 //! This crate provides secrets management capabilities similar to HashiCorp Vault,

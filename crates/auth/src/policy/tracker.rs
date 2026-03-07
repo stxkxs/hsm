@@ -171,7 +171,7 @@ impl SpendingTracker {
     fn record_for_key(&self, key: TrackerKey, record: TransactionRecord) {
         self.transactions
             .entry(key)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(record);
 
         // Trim if over limit

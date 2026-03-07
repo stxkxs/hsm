@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![deny(unsafe_code)]
 #![allow(dead_code)]
 #![allow(unused_imports)]
 //! # HSM Webhook Delivery System
@@ -265,8 +265,8 @@ impl WebhookEventType {
         }
     }
 
-    /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parse from string representation
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "key.created" => Some(Self::KeyCreated),
             "key.deleted" => Some(Self::KeyDeleted),

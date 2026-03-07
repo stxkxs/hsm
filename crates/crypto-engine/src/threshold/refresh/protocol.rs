@@ -506,7 +506,7 @@ impl KeyRefreshProtocol {
                         &mut result,
                         generator,
                         coeff_bytes.as_ptr(),
-                        (coeff_bytes.len() * 8) as usize,
+                        coeff_bytes.len() * 8,
                     );
 
                     // Compress the result

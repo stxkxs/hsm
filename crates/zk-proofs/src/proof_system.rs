@@ -159,7 +159,7 @@ impl ProofSystem {
             generation_time,
             verification_time,
             proof_size: proof.size_bytes,
-            num_constraints: 0, // TODO: Track actual constraint count
+            num_constraints: 0, // Merkle proofs use hash chains, not constraint systems
         };
 
         Ok((proof, metrics))

@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! # REST/JSON API Gateway for HSM
 //!
 //! This module provides a REST API wrapper around the HSM's gRPC API,

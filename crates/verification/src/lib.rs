@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! Formal verification framework for HSM cryptographic operations.
 //!
 //! This crate provides formal verification using SMT solvers (Z3) and bounded

@@ -58,8 +58,13 @@ pub fn sign_init(
         return CKR_MECHANISM_INVALID;
     }
 
-    // TODO: Validate key handle exists and is a signing key
-    // This would require calling HSM to check key type and permissions
+    // Validate key handle exists in key store
+    {
+        use super::keystore::KEY_STORE;
+        if KEY_STORE.get(h_key).is_none() {
+            return CKR_KEY_HANDLE_INVALID;
+        }
+    }
 
     // Initialize the signing operation
     session.operation = ActiveOperation::SignInit {

@@ -1,4 +1,3 @@
-#![allow(clippy::all)]
 //! Core cryptographic engine for HSM
 //!
 //! Provides secure implementations of:

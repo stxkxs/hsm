@@ -51,7 +51,7 @@ impl KeyStore {
         Ok(())
     }
 
-    /// Get a key from the store (returns Arc<Key> for zero-copy)
+    /// Get a key from the store (returns `Arc<Key>` for zero-copy)
     pub fn get(&self, namespace: &str, key_id: &KeyId) -> Result<Arc<Key>, crate::Error> {
         let composite_key = (namespace.to_string(), *key_id);
 

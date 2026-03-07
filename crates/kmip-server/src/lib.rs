@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! # KMIP (Key Management Interoperability Protocol) Server
 //!
 //! This crate provides a KMIP 1.4+ server implementation for enterprise key management

@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! # HSM Metrics & Monitoring
 //!
 //! This crate provides comprehensive Prometheus metrics collection and health

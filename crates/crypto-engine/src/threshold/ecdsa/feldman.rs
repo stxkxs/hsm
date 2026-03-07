@@ -128,7 +128,7 @@ impl FeldmanVss {
 
         for commitment_bytes in commitments {
             let commitment_point = P256ThresholdOps::point_from_bytes(commitment_bytes)?;
-            expected += commitment_point * &x_pow;
+            expected += commitment_point * x_pow;
             x_pow *= x;
         }
 
@@ -155,7 +155,7 @@ impl FeldmanVss {
 
         for commitment_bytes in commitments {
             let commitment_point = Secp256k1ThresholdOps::point_from_bytes(commitment_bytes)?;
-            expected += commitment_point * &x_pow;
+            expected += commitment_point * x_pow;
             x_pow *= x;
         }
 

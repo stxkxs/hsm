@@ -398,12 +398,8 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    // Note: These tests require tokio runtime and proper async context
-    // They are temporarily disabled to allow the rest of the module to compile
-    // TODO: Fix async tests by ensuring proper tokio runtime setup
-
     #[tokio::test]
-    #[ignore]
+    #[ignore = "pre-existing bug: store_key returns ENOENT after create_namespace succeeds"]
     async fn test_store_and_load_key() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().to_path_buf();
@@ -428,7 +424,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "pre-existing bug: store_key returns ENOENT after create_namespace succeeds"]
     async fn test_secure_delete() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().to_path_buf();
@@ -452,7 +448,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "pre-existing bug: store_key returns ENOENT after create_namespace succeeds"]
     async fn test_batch_operations() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().to_path_buf();
@@ -485,7 +481,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "pre-existing bug: store_key returns ENOENT after create_namespace succeeds"]
     async fn test_list_keys() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().to_path_buf();
@@ -516,7 +512,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "pre-existing bug: store_key returns ENOENT after create_namespace succeeds"]
     async fn test_atomic_write() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().to_path_buf();

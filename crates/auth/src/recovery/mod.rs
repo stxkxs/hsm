@@ -270,7 +270,7 @@ pub struct RecoveryCode(String);
 impl RecoveryCode {
     /// Generate a new recovery code
     pub fn generate(length: usize) -> Self {
-        let mut bytes = vec![0u8; (length + 1) / 2];
+        let mut bytes = vec![0u8; length.div_ceil(2)];
         getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
         let code = hex::encode(&bytes)[..length].to_uppercase();
         Self(code)

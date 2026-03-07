@@ -44,7 +44,28 @@ jobs:
     - name: Install cargo-audit
       run: cargo install cargo-audit
     - name: Security audit
-      run: cargo audit
+      run: |
+        cargo audit --deny warnings \
+          --ignore RUSTSEC-2024-0436 \
+          --ignore RUSTSEC-2024-0388 \
+          --ignore RUSTSEC-2025-0057 \
+          --ignore RUSTSEC-2021-0127
+        # Ignored advisories (unmaintained transitive deps with no fix available):
+        # RUSTSEC-2024-0436: paste - via ark-ff/pqcrypto-mldsa
+        # RUSTSEC-2024-0388: derivative - via ark-ff
+        # RUSTSEC-2025-0057: fxhash - via sled
+        # RUSTSEC-2021-0127: serde_cbor - via aws-nitro-enclaves-cose (optional)
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@1.91
+    - uses: Swatinem/rust-cache@v2
+    - name: Install system dependencies
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libz3-dev libclang-dev
+    - name: Check MSRV
+      run: cargo check --all
 
   container:
     runs-on: ubuntu-latest

@@ -115,7 +115,7 @@ impl Ed25519Verifier {
 
     /// Verify Ed25519 signature verification equation
     ///
-    /// Verification equation: [S]B = R + [H(R,A,M)]A
+    /// Verification equation: \[S\]B = R + \[H(R,A,M)\]A
     /// where S is signature scalar, B is base point, R is signature point,
     /// A is public key, M is message
     pub fn verify_verification_equation() -> Result<VerificationResult> {

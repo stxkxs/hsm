@@ -159,7 +159,7 @@ impl SocialProvider {
     }
 
     /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_provider(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "google" => Some(Self::Google),
             "apple" => Some(Self::Apple),
@@ -1057,15 +1057,15 @@ mod tests {
     #[test]
     fn test_provider_from_str() {
         assert_eq!(
-            SocialProvider::from_str("google"),
+            SocialProvider::parse_provider("google"),
             Some(SocialProvider::Google)
         );
         assert_eq!(
-            SocialProvider::from_str("GITHUB"),
+            SocialProvider::parse_provider("GITHUB"),
             Some(SocialProvider::GitHub)
         );
-        assert_eq!(SocialProvider::from_str("x"), Some(SocialProvider::Twitter));
-        assert_eq!(SocialProvider::from_str("invalid"), None);
+        assert_eq!(SocialProvider::parse_provider("x"), Some(SocialProvider::Twitter));
+        assert_eq!(SocialProvider::parse_provider("invalid"), None);
     }
 
     #[test]

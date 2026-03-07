@@ -215,19 +215,21 @@ impl Session {
         self.pin_attempts = 0;
         self.logged_in_user = Some(user_type);
         self.state = new_state;
-        self.auth_token = Some("placeholder_token".to_string()); // TODO: Real HSM token
+        tracing::warn!("HSM backend authentication is not yet integrated; session token not issued");
+        self.auth_token = None;
 
         CKR_OK
     }
 
     /// Log out the current user.
+    ///
+    /// Note: HSM backend session token invalidation is not yet implemented.
+    /// Currently only clears local session state.
     pub fn logout(&mut self) -> CK_RV {
         // Check if logged in
         if self.logged_in_user.is_none() {
             return CKR_USER_NOT_LOGGED_IN;
         }
-
-        // TODO: Invalidate HSM session token
 
         self.logged_in_user = None;
         self.auth_token = None;

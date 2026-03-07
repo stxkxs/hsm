@@ -434,7 +434,7 @@ fn generate_bls_commitments(coefficients: &[Vec<u8>]) -> Result<Vec<Vec<u8>>, Th
                     &mut result,
                     generator,
                     coeff_bytes.as_ptr(),
-                    (coeff_bytes.len() * 8) as usize,
+                    coeff_bytes.len() * 8,
                 );
 
                 let mut compressed = [0u8; 48];

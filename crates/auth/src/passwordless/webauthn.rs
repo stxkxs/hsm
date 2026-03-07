@@ -44,25 +44,20 @@ pub enum AuthenticatorAttachment {
 }
 
 /// User verification requirement
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum UserVerification {
     /// User verification required
     Required,
     /// User verification preferred
+    #[default]
     Preferred,
     /// User verification discouraged
     Discouraged,
 }
 
-impl Default for UserVerification {
-    fn default() -> Self {
-        Self::Preferred
-    }
-}
-
 /// Resident key requirement
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ResidentKey {
     /// Resident key required (passkey)
@@ -70,20 +65,16 @@ pub enum ResidentKey {
     /// Resident key preferred
     Preferred,
     /// Resident key discouraged
+    #[default]
     Discouraged,
 }
 
-impl Default for ResidentKey {
-    fn default() -> Self {
-        Self::Discouraged
-    }
-}
-
 /// Attestation conveyance preference
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AttestationConveyance {
     /// No attestation
+    #[default]
     None,
     /// Indirect attestation
     Indirect,
@@ -93,17 +84,12 @@ pub enum AttestationConveyance {
     Enterprise,
 }
 
-impl Default for AttestationConveyance {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 /// COSE algorithm identifier
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CoseAlgorithm {
     /// ECDSA with P-256 and SHA-256
     #[serde(rename = "-7")]
+    #[default]
     ES256 = -7,
     /// ECDSA with P-384 and SHA-384
     #[serde(rename = "-35")]
@@ -117,12 +103,6 @@ pub enum CoseAlgorithm {
     /// Ed25519
     #[serde(rename = "-8")]
     EdDSA = -8,
-}
-
-impl Default for CoseAlgorithm {
-    fn default() -> Self {
-        Self::ES256
-    }
 }
 
 /// Public key credential parameters
@@ -151,7 +131,7 @@ pub struct WebAuthnConfig {
     pub rp_id: String,
     /// Relying party name
     pub rp_name: String,
-    /// Origin (e.g., "https://example.com")
+    /// Origin (e.g., `https://example.com`)
     pub origin: String,
     /// Challenge timeout
     #[serde(default = "default_timeout")]
@@ -615,7 +595,7 @@ impl WebAuthnManager {
         // Update user index
         self.user_credentials
             .entry(user_id.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(cred_id_base64);
 
         Ok(credential)
@@ -781,7 +761,7 @@ impl WebAuthnManager {
         // Store challenge
         let challenge_hash = {
             let mut hasher = Sha256::new();
-            hasher.update(&challenge_bytes);
+            hasher.update(challenge_bytes);
             hex::encode(hasher.finalize())
         };
         self.pending_challenges

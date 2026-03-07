@@ -1,6 +1,4 @@
-#![allow(clippy::all)]
-#![allow(dead_code)]
-#![allow(unused_imports)]
+#![deny(unsafe_code)]
 
 //! Key Management Module
 //!

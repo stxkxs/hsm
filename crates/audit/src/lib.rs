@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! # Audit & Logging System
 //!
 //! A tamper-evident audit logging system using hash chains and Merkle trees

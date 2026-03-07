@@ -21,7 +21,7 @@ impl PolicyId {
     }
 
     /// Parse from string
-    pub fn from_str(s: &str) -> Result<Self, uuid::Error> {
+    pub fn parse(s: &str) -> Result<Self, uuid::Error> {
         Ok(Self(Uuid::parse_str(s)?))
     }
 
@@ -278,7 +278,7 @@ mod tests {
         assert_ne!(id1, id2);
 
         let id_str = id1.as_string();
-        let parsed = PolicyId::from_str(&id_str).unwrap();
+        let parsed = PolicyId::parse(&id_str).unwrap();
         assert_eq!(id1, parsed);
     }
 

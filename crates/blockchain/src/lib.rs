@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 #![allow(clippy::wrong_self_convention)]
 #![allow(clippy::should_implement_trait)]
 #![allow(clippy::inherent_to_string)]

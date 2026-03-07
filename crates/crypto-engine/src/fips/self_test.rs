@@ -513,7 +513,7 @@ fn test_frost_ed25519_kat() -> Result<(), String> {
     // This is for KAT purposes only - actual FROST uses proper key generation
     let pk_bytes: [u8; 32] = {
         let mut hasher = Sha512::new();
-        hasher.update(&seed);
+        hasher.update(seed);
         hasher.update(b"group_public_key");
         let hash = hasher.finalize();
         let mut bytes = [0u8; 32];
@@ -586,7 +586,7 @@ fn test_threshold_ecdsa_p256_kat() -> Result<(), String> {
     // Test scalar field arithmetic
     let scalar_bytes: [u8; 32] = {
         let mut hasher = Sha256::new();
-        hasher.update(&seed);
+        hasher.update(seed);
         hasher.update(b"scalar_test");
         let hash = hasher.finalize();
         let mut bytes = [0u8; 32];

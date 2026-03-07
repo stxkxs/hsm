@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![allow(unused_variables)]

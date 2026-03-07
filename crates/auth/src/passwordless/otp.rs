@@ -13,20 +13,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// OTP algorithm type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OtpAlgorithm {
     /// SHA-1 (RFC 6238 default)
+    #[default]
     Sha1,
     /// SHA-256
     Sha256,
     /// SHA-512
     Sha512,
-}
-
-impl Default for OtpAlgorithm {
-    fn default() -> Self {
-        Self::Sha1
-    }
 }
 
 impl std::fmt::Display for OtpAlgorithm {
@@ -40,18 +35,13 @@ impl std::fmt::Display for OtpAlgorithm {
 }
 
 /// OTP type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OtpType {
     /// Time-based OTP (RFC 6238)
+    #[default]
     Totp,
     /// HMAC-based OTP (RFC 4226)
     Hotp,
-}
-
-impl Default for OtpType {
-    fn default() -> Self {
-        Self::Totp
-    }
 }
 
 /// OTP secret
@@ -426,8 +416,10 @@ pub struct OtpManager {
 impl OtpManager {
     /// Create a new OTP manager
     pub fn new(issuer: &str) -> Self {
-        let mut default_config = OtpConfig::default();
-        default_config.issuer = issuer.to_string();
+        let default_config = OtpConfig {
+            issuer: issuer.to_string(),
+            ..Default::default()
+        };
 
         Self {
             registrations: DashMap::new(),

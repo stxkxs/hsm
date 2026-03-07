@@ -34,7 +34,7 @@ impl PolicyStore {
         // Add to scope index
         self.scope_index
             .entry(scope_key)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(id);
 
         id

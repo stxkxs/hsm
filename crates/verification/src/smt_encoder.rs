@@ -114,7 +114,7 @@ impl<'ctx> FiniteFieldEncoder<'ctx> {
 
     /// Encode scalar multiplication on elliptic curve (simplified)
     ///
-    /// For Ed25519: [k]P where k is scalar and P is curve point
+    /// For Ed25519: \[k\]P where k is scalar and P is curve point
     /// This is a simplified encoding - full implementation would encode curve arithmetic
     pub fn scalar_mult_constraint(
         &self,

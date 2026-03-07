@@ -151,7 +151,7 @@ impl Default for KeyUsagePolicy {
 }
 
 /// HD (Hierarchical Deterministic) key information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HdKeyInfo {
     /// Derivation path (e.g., "m/44'/60'/0'/0/0")
     pub derivation_path: Option<String>,
@@ -171,22 +171,6 @@ pub struct HdKeyInfo {
     pub child_index: Option<u32>,
     /// Fingerprint of parent key (4 bytes)
     pub parent_fingerprint: Option<[u8; 4]>,
-}
-
-impl Default for HdKeyInfo {
-    fn default() -> Self {
-        Self {
-            derivation_path: None,
-            master_key_id: None,
-            chain_code: None,
-            coin_type: None,
-            account_index: None,
-            can_derive_children: false,
-            depth: 0,
-            child_index: None,
-            parent_fingerprint: None,
-        }
-    }
 }
 
 /// Complete key structure

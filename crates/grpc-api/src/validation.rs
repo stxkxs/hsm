@@ -108,7 +108,7 @@ pub const MAX_METADATA_VALUE_SIZE: usize = 1024;
 ///
 /// # Errors
 ///
-/// Returns [`Status::InvalidArgument`] if:
+/// Returns `Status::InvalidArgument` if:
 /// - `key_id` is empty
 /// - `key_id` exceeds [`MAX_KEY_ID_SIZE`] bytes
 ///
@@ -157,7 +157,7 @@ pub fn validate_key_id(key_id: &[u8]) -> Result<(), Status> {
 ///
 /// # Errors
 ///
-/// Returns [`Status::InvalidArgument`] if:
+/// Returns `Status::InvalidArgument` if:
 /// - `namespace` is empty
 /// - `namespace` exceeds [`MAX_NAMESPACE_SIZE`] bytes
 /// - `namespace` contains non-alphanumeric characters (except hyphens and underscores)
@@ -227,7 +227,7 @@ pub fn validate_namespace(namespace: &str) -> Result<(), Status> {
 ///
 /// # Errors
 ///
-/// Returns [`Status::InvalidArgument`] if:
+/// Returns `Status::InvalidArgument` if:
 /// - `data` is empty
 /// - `data` exceeds [`MAX_MESSAGE_SIZE`] (10 MB)
 ///
@@ -275,7 +275,7 @@ pub fn validate_data_size(data: &[u8], operation: &str) -> Result<(), Status> {
 ///
 /// # Errors
 ///
-/// Returns [`Status::InvalidArgument`] if:
+/// Returns `Status::InvalidArgument` if:
 /// - `algorithm` is empty
 /// - `algorithm` exceeds [`MAX_ALGORITHM_NAME_SIZE`] (64 bytes)
 ///
@@ -321,7 +321,7 @@ pub fn validate_algorithm(algorithm: &str) -> Result<(), Status> {
 ///
 /// # Errors
 ///
-/// Returns [`Status::InvalidArgument`] if:
+/// Returns `Status::InvalidArgument` if:
 /// - `size` is 0 (empty batch)
 /// - `size` exceeds [`MAX_BATCH_SIZE`] (1000 items)
 ///
@@ -376,7 +376,7 @@ pub fn validate_batch_size(size: usize, operation: &str) -> Result<(), Status> {
 ///
 /// # Errors
 ///
-/// Returns [`Status::InvalidArgument`] if:
+/// Returns `Status::InvalidArgument` if:
 /// - More than [`MAX_METADATA_ENTRIES`] entries
 /// - Any key exceeds [`MAX_METADATA_KEY_SIZE`]
 /// - Any value exceeds [`MAX_METADATA_VALUE_SIZE`]

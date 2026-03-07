@@ -31,3 +31,4 @@ bitflags = "2.4"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
+async-trait = "0.1"

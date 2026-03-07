@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! Configuration management for the HSM (Hardware Security Module) system.
 //!
 //! This crate provides comprehensive configuration management including:

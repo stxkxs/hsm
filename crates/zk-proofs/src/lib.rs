@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 // Allow some clippy warnings for the experimental ZK proofs module
 // These can be cleaned up in a future refactoring pass
 #![allow(dead_code)]

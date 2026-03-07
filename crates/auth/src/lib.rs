@@ -1,14 +1,4 @@
-#![allow(clippy::manual_div_ceil)]
-#![allow(clippy::field_reassign_with_default)]
-#![allow(clippy::should_implement_trait)]
-#![allow(clippy::unwrap_or_default)]
-#![allow(clippy::type_complexity)]
-#![allow(clippy::too_many_arguments)]
-#![allow(clippy::manual_strip)]
-#![allow(clippy::needless_borrows_for_generic_args)]
-#![allow(clippy::useless_conversion)]
-#![allow(clippy::derivable_impls)]
-#![allow(clippy::result_large_err)]
+#![deny(unsafe_code)]
 
 //! Authentication and Authorization Module for HSM.
 //!

@@ -39,7 +39,8 @@ fn to_key_type(algo: &KeyAlgorithm) -> Result<KeyType> {
         KeyAlgorithm::Rsa3072 => Ok(KeyType::Rsa3072),
         KeyAlgorithm::Rsa4096 => Ok(KeyType::Rsa4096),
         KeyAlgorithm::Aes128 | KeyAlgorithm::Aes256 => Err(ApiError::BadRequest(
-            "Symmetric keys not supported via REST API".to_string(),
+            "Symmetric key generation is not supported via REST API. Use the gRPC API instead."
+                .to_string(),
         )),
     }
 }
@@ -196,7 +197,9 @@ pub async fn logout(
 
     // The session ID is stored in serial_number field for dev sessions
     // In production, would extract from auth header
-    let _ = state.sessions.delete_session(&identity.serial_number);
+    if let Err(e) = state.sessions.delete_session(&identity.serial_number) {
+        tracing::warn!(error = %e, client = %identity.common_name, "Failed to delete session during logout");
+    }
 
     metrics::counter!("rest_api.auth.logout").increment(1);
 
@@ -727,14 +730,13 @@ pub async fn encrypt_data(
 
 /// Decrypt data
 ///
-/// Note: This endpoint requires the encryption key to be provided or stored.
-/// Currently returns an error as symmetric key storage is not yet implemented.
-#[allow(unreachable_code)]
+/// Note: Decryption requires symmetric key storage, which is not yet implemented
+/// in the REST API. Use the gRPC API for decryption operations.
 pub async fn decrypt_data(
     State(_state): State<AppState>,
     Extension(identity): Extension<ClientIdentity>,
     Path(key_id): Path<String>,
-    Json(request): Json<DecryptRequest>,
+    Json(_request): Json<DecryptRequest>,
 ) -> Result<Json<DecryptResponse>> {
     tracing::info!(
         client = %identity.common_name,
@@ -742,24 +744,10 @@ pub async fn decrypt_data(
         "Decrypting data"
     );
 
-    // Decode the ciphertext and nonce
-    let _ciphertext = BASE64
-        .decode(&request.ciphertext)
-        .map_err(|e| ApiError::BadRequest(format!("Invalid base64 ciphertext: {}", e)))?;
-
-    let _nonce = BASE64
-        .decode(&request.nonce)
-        .map_err(|e| ApiError::BadRequest(format!("Invalid base64 nonce: {}", e)))?;
-
-    // Note: In a real implementation, we would retrieve the encryption key
-    // associated with the key_id from storage. For now, we return an error
-    // indicating the key is needed.
-    Err(ApiError::BadRequest(
-        "Symmetric key retrieval not implemented. Encryption keys must be stored separately."
+    Err(ApiError::NotImplemented(
+        "Decryption is not yet available via REST API. Use the gRPC API for decryption operations."
             .to_string(),
     ))
-
-    // TODO: Implement symmetric key retrieval and decryption
 }
 
 // ============================================================================

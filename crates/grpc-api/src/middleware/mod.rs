@@ -9,7 +9,7 @@
 //!
 //! 1. **Logging** ([`logging`]): Structured request/response logging
 //! 2. **Metrics** ([`metrics`]): Operation counters and latency tracking
-//! 3. **Authentication** ([`auth`]): Session validation and authorization (TODO: integrate with auth service)
+//! 3. **Authentication** ([`auth`]): Session validation and authorization
 //!
 //! # Architecture
 //!
