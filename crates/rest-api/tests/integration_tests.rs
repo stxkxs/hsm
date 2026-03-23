@@ -6,10 +6,10 @@
 
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
-use http_body_util::BodyExt;
 use hsm_auth::{ClientIdentity, Role, SessionManager};
-use hsm_rest_api::routes::create_router;
 use hsm_rest_api::middleware::AppState;
+use hsm_rest_api::routes::create_router;
+use http_body_util::BodyExt;
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -139,12 +139,7 @@ async fn test_get_keys_without_auth_returns_401() {
     let app = create_router(state);
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/keys")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/keys").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -707,8 +702,7 @@ async fn test_verify_with_wrong_data_returns_false() {
     let signature = sign_json["signature"].as_str().unwrap().to_string();
 
     // Verify with WRONG data
-    let wrong_data =
-        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b"Goodbye");
+    let wrong_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b"Goodbye");
     let verify_body = serde_json::json!({
         "data": wrong_data,
         "signature": signature

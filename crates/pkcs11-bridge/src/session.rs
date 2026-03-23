@@ -215,7 +215,9 @@ impl Session {
         self.pin_attempts = 0;
         self.logged_in_user = Some(user_type);
         self.state = new_state;
-        tracing::warn!("HSM backend authentication is not yet integrated; session token not issued");
+        tracing::warn!(
+            "HSM backend authentication is not yet integrated; session token not issued"
+        );
         self.auth_token = None;
 
         CKR_OK

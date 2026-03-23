@@ -11,10 +11,9 @@ use tokio::sync::Mutex;
 
 use hsm_kmip::operations;
 use hsm_kmip::{
-    Attribute, CryptoParams, CryptographicAlgorithm, CryptographicUsageMask,
-    EncryptResult, HsmClient, KeyInfo, KeyState, KmipError, ObjectType, Operation,
-    RevocationReason, ServerInfo, Tag, Ttlv, TtlvDecoder, TtlvEncoder, TtlvError, TtlvType,
-    TtlvValue,
+    Attribute, CryptoParams, CryptographicAlgorithm, CryptographicUsageMask, EncryptResult,
+    HsmClient, KeyInfo, KeyState, KmipError, ObjectType, Operation, RevocationReason, ServerInfo,
+    Tag, Ttlv, TtlvDecoder, TtlvEncoder, TtlvError, TtlvType, TtlvValue,
 };
 
 // ============================================================================
@@ -422,7 +421,10 @@ fn ttlv_roundtrip_mixed_types_in_structure() {
         Tag::REQUEST_BATCH_ITEM,
         vec![
             Ttlv::integer(Tag::CRYPTOGRAPHIC_LENGTH, 256),
-            Ttlv::enumeration(Tag::CRYPTOGRAPHIC_ALGORITHM, CryptographicAlgorithm::Aes as u32),
+            Ttlv::enumeration(
+                Tag::CRYPTOGRAPHIC_ALGORITHM,
+                CryptographicAlgorithm::Aes as u32,
+            ),
             Ttlv::text_string(Tag::UNIQUE_ID, "my-test-key"),
             Ttlv::byte_string(Tag::DATA, vec![0xFF; 32]),
             Ttlv::boolean(Tag::ATTRIBUTE_VALUE, false),
@@ -562,10 +564,7 @@ async fn create_key_missing_length() {
                     Tag::ATTRIBUTE,
                     vec![
                         Ttlv::text_string(Tag::ATTRIBUTE_NAME, "Cryptographic Algorithm"),
-                        Ttlv::enumeration(
-                            Tag::ATTRIBUTE_VALUE,
-                            CryptographicAlgorithm::Aes as u32,
-                        ),
+                        Ttlv::enumeration(Tag::ATTRIBUTE_VALUE, CryptographicAlgorithm::Aes as u32),
                     ],
                 )],
             ),
@@ -639,7 +638,9 @@ async fn get_key_after_create() {
 
     // Now get it
     let get_request = build_get_request(key_id);
-    let get_response = operations::get::handle(&get_request, &client).await.unwrap();
+    let get_response = operations::get::handle(&get_request, &client)
+        .await
+        .unwrap();
 
     assert_eq!(get_response.tag, Tag::RESPONSE_PAYLOAD);
 
@@ -749,7 +750,10 @@ async fn destroy_key_after_create() {
     let get_request = build_get_request(&key_id);
     let get_result = operations::get::handle(&get_request, &client).await;
     assert!(get_result.is_err());
-    assert!(matches!(get_result.unwrap_err(), KmipError::ItemNotFound(_)));
+    assert!(matches!(
+        get_result.unwrap_err(),
+        KmipError::ItemNotFound(_)
+    ));
 }
 
 #[tokio::test]
@@ -772,10 +776,7 @@ async fn destroy_key_missing_unique_id() {
 
     let request = Ttlv::structure(
         Tag::REQUEST_BATCH_ITEM,
-        vec![Ttlv::enumeration(
-            Tag::OPERATION,
-            Operation::Destroy as u32,
-        )],
+        vec![Ttlv::enumeration(Tag::OPERATION, Operation::Destroy as u32)],
     );
 
     let result = operations::destroy::handle(&request, &client).await;
@@ -806,10 +807,7 @@ async fn destroy_same_key_twice_fails_second_time() {
     // Second destroy fails
     let result2 = operations::destroy::handle(&build_destroy_request(&key_id), &client).await;
     assert!(result2.is_err());
-    assert!(matches!(
-        result2.unwrap_err(),
-        KmipError::ItemNotFound(_)
-    ));
+    assert!(matches!(result2.unwrap_err(), KmipError::ItemNotFound(_)));
 }
 
 // ============================================================================
@@ -1099,7 +1097,10 @@ async fn query_supported_operations() {
         Tag::REQUEST_BATCH_ITEM,
         vec![
             Ttlv::enumeration(Tag::OPERATION, Operation::Query as u32),
-            Ttlv::enumeration(Tag::QUERY_FUNCTION, hsm_kmip::QueryFunction::QueryOperations as u32),
+            Ttlv::enumeration(
+                Tag::QUERY_FUNCTION,
+                hsm_kmip::QueryFunction::QueryOperations as u32,
+            ),
         ],
     );
 
@@ -1241,10 +1242,7 @@ fn ttlv_roundtrip_full_response_message() {
                     Ttlv::structure(
                         Tag::RESPONSE_PAYLOAD,
                         vec![
-                            Ttlv::enumeration(
-                                Tag::OBJECT_TYPE,
-                                ObjectType::SymmetricKey as u32,
-                            ),
+                            Ttlv::enumeration(Tag::OBJECT_TYPE, ObjectType::SymmetricKey as u32),
                             Ttlv::text_string(Tag::UNIQUE_ID, "key-uuid-12345"),
                         ],
                     ),

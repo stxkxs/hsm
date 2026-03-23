@@ -252,7 +252,12 @@ impl WriteAheadLog {
 
         for entry in &self.pending {
             // Warn if StoreKey entries contain non-empty data (unencrypted key material)
-            if let JournalOp::StoreKey { ref data, ref key_id, .. } = entry.operation {
+            if let JournalOp::StoreKey {
+                ref data,
+                ref key_id,
+                ..
+            } = entry.operation
+            {
                 if !data.is_empty() {
                     tracing::warn!(
                         key_id = %key_id,

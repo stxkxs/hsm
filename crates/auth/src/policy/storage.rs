@@ -32,10 +32,7 @@ impl PolicyStore {
         self.policies.insert(id, policy);
 
         // Add to scope index
-        self.scope_index
-            .entry(scope_key)
-            .or_default()
-            .push(id);
+        self.scope_index.entry(scope_key).or_default().push(id);
 
         id
     }

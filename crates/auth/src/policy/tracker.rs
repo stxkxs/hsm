@@ -169,10 +169,7 @@ impl SpendingTracker {
     }
 
     fn record_for_key(&self, key: TrackerKey, record: TransactionRecord) {
-        self.transactions
-            .entry(key)
-            .or_default()
-            .push(record);
+        self.transactions.entry(key).or_default().push(record);
 
         // Trim if over limit
         self.transactions.alter_all(|_, mut v| {

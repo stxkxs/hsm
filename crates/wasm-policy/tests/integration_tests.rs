@@ -4,9 +4,9 @@
 //! limit configuration, and context creation and population.
 
 use hsm_wasm_policy::{
-    EnvironmentContext, HostFunctions, HostState, LogLevel, Policy, PolicyContext,
+    EnvironmentContext, ExecutionStats, HostFunctions, HostState, LogLevel, Policy, PolicyContext,
     PolicyDecision, PolicyEngine, PolicyId, PolicyMetadata, PolicyStore, ResourceLimits,
-    SignerContext, TransactionContext, ExecutionStats,
+    SignerContext, TransactionContext,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -180,10 +180,7 @@ fn test_engine_evaluate_deny_policy() {
     let result = engine.evaluate(&test_context()).unwrap();
     assert!(result.is_denied());
     assert!(!result.is_allowed());
-    assert_eq!(
-        result.denying_policy().unwrap().as_str(),
-        "deny-policy"
-    );
+    assert_eq!(result.denying_policy().unwrap().as_str(), "deny-policy");
 }
 
 #[test]
@@ -216,15 +213,13 @@ fn test_engine_deny_overrides_allow() {
     let engine = PolicyEngine::new(ResourceLimits::default()).unwrap();
 
     // Allow with lower priority (evaluated second)
-    let meta_allow = make_metadata("allow-it", "Allow")
-        .with_priority(10);
+    let meta_allow = make_metadata("allow-it", "Allow").with_priority(10);
     engine
         .register_policy(Policy::new(meta_allow, allow_wasm()))
         .unwrap();
 
     // Deny with higher priority (lower number = evaluated first)
-    let meta_deny = make_metadata("deny-it", "Deny")
-        .with_priority(0);
+    let meta_deny = make_metadata("deny-it", "Deny").with_priority(0);
     engine
         .register_policy(Policy::new(meta_deny, deny_wasm()))
         .unwrap();
@@ -345,7 +340,11 @@ fn test_store_list_returns_all_ids() {
         store.register(Policy::new(metadata, allow_wasm())).unwrap();
     }
 
-    let listed: Vec<String> = store.list().iter().map(|p| p.as_str().to_string()).collect();
+    let listed: Vec<String> = store
+        .list()
+        .iter()
+        .map(|p| p.as_str().to_string())
+        .collect();
     for id in &ids {
         assert!(listed.contains(&id.to_string()), "Missing policy: {}", id);
     }
@@ -532,15 +531,11 @@ fn test_store_find_applicable_sorted_by_priority() {
     let meta_high = make_metadata("high-prio", "High Priority").with_priority(1);
     let meta_med = make_metadata("med-prio", "Medium Priority").with_priority(50);
 
-    store
-        .register(Policy::new(meta_low, allow_wasm()))
-        .unwrap();
+    store.register(Policy::new(meta_low, allow_wasm())).unwrap();
     store
         .register(Policy::new(meta_high, allow_wasm()))
         .unwrap();
-    store
-        .register(Policy::new(meta_med, allow_wasm()))
-        .unwrap();
+    store.register(Policy::new(meta_med, allow_wasm())).unwrap();
 
     let applicable = store.find_applicable("default", "key-1", "1", "transfer");
     assert_eq!(applicable.len(), 3);
@@ -738,8 +733,8 @@ fn test_per_policy_resource_limits() {
     let engine = PolicyEngine::new(ResourceLimits::default()).unwrap();
 
     // Policy with custom strict limits
-    let metadata = make_metadata("custom-limits", "Custom Limits")
-        .with_limits(ResourceLimits::strict());
+    let metadata =
+        make_metadata("custom-limits", "Custom Limits").with_limits(ResourceLimits::strict());
     engine
         .register_policy(Policy::new(metadata, allow_wasm()))
         .unwrap();
@@ -786,10 +781,7 @@ fn test_context_with_metadata() {
         context.metadata.get("department"),
         Some(&"engineering".to_string())
     );
-    assert_eq!(
-        context.metadata.get("project"),
-        Some(&"defi".to_string())
-    );
+    assert_eq!(context.metadata.get("project"), Some(&"defi".to_string()));
 }
 
 #[test]
@@ -897,10 +889,7 @@ fn test_signer_context_full() {
         signer.labels.get("department"),
         Some(&"trading".to_string())
     );
-    assert_eq!(
-        signer.labels.get("risk_level"),
-        Some(&"high".to_string())
-    );
+    assert_eq!(signer.labels.get("risk_level"), Some(&"high".to_string()));
 }
 
 #[test]
@@ -1017,7 +1006,10 @@ fn test_policy_decision_from_i32() {
 fn test_policy_decision_display() {
     assert_eq!(PolicyDecision::Deny.to_string(), "deny");
     assert_eq!(PolicyDecision::Allow.to_string(), "allow");
-    assert_eq!(PolicyDecision::RequireApproval.to_string(), "require_approval");
+    assert_eq!(
+        PolicyDecision::RequireApproval.to_string(),
+        "require_approval"
+    );
 }
 
 #[test]
@@ -1106,8 +1098,7 @@ fn test_host_functions_roles() {
 fn test_host_functions_labels() {
     let context = PolicyContext::new(
         TransactionContext::transfer("1", "0xa", "0xb", "0"),
-        SignerContext::new("k1", "0xp", "secp256k1", "default")
-            .with_label("env", "prod"),
+        SignerContext::new("k1", "0xp", "secp256k1", "default").with_label("env", "prod"),
         EnvironmentContext::new("req-1"),
     );
 

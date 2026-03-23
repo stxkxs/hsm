@@ -49,12 +49,14 @@ jobs:
           --ignore RUSTSEC-2024-0436 \
           --ignore RUSTSEC-2024-0388 \
           --ignore RUSTSEC-2025-0057 \
-          --ignore RUSTSEC-2021-0127
+          --ignore RUSTSEC-2021-0127 \
+          --ignore RUSTSEC-2026-0049
         # Ignored advisories (unmaintained transitive deps with no fix available):
         # RUSTSEC-2024-0436: paste - via ark-ff/pqcrypto-mldsa
         # RUSTSEC-2024-0388: derivative - via ark-ff
         # RUSTSEC-2025-0057: fxhash - via sled
         # RUSTSEC-2021-0127: serde_cbor - via aws-nitro-enclaves-cose (optional)
+        # RUSTSEC-2026-0049: rustls-webpki 0.101.7 - via aws-smithy-http-client (CRL matching bug, no fix until AWS SDK updates)
 
   msrv:
     runs-on: ubuntu-latest

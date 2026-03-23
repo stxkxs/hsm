@@ -5,8 +5,8 @@
 
 use hsm_secrets::{
     EncryptedSecretData, InMemorySecretStore, LeaseConfig, LeaseError, LeaseEvent, SecretData,
-    SecretError, SecretId, SecretMetadata, SecretPath, SecretStore, SecretValue, SecretsManager,
-    VersionManager, VersionPolicy, SecretVersion,
+    SecretError, SecretId, SecretMetadata, SecretPath, SecretStore, SecretValue, SecretVersion,
+    SecretsManager, VersionManager, VersionPolicy,
 };
 use std::sync::Arc;
 
@@ -35,8 +35,7 @@ async fn test_create_secret_store_with_custom_lease_config() {
         .with_max_ttl(chrono::Duration::hours(2))
         .with_renewable(false);
 
-    let (manager, _rx) =
-        SecretsManager::with_lease_config(store, "test-key".to_string(), config);
+    let (manager, _rx) = SecretsManager::with_lease_config(store, "test-key".to_string(), config);
 
     // The lease config should affect created leases
     let path = SecretPath::new("/test/secret").unwrap();
@@ -73,13 +72,7 @@ async fn test_create_secret() {
         .with_owner("platform-team");
 
     let (secret, lease) = manager
-        .create_secret(
-            path.clone(),
-            data,
-            metadata,
-            "deployer".to_string(),
-            None,
-        )
+        .create_secret(path.clone(), data, metadata, "deployer".to_string(), None)
         .await
         .unwrap();
 
@@ -566,10 +559,7 @@ async fn test_list_secrets_under_prefix() {
     assert_eq!(team_a_db.len(), 2);
 
     // List under /org (should include team-a and team-b)
-    let org = store
-        .list(&SecretPath::new("/org").unwrap())
-        .await
-        .unwrap();
+    let org = store.list(&SecretPath::new("/org").unwrap()).await.unwrap();
     assert_eq!(org.len(), 4);
 
     // List under /other
@@ -602,10 +592,7 @@ async fn test_list_root_returns_all() {
             .unwrap();
     }
 
-    let all = store
-        .list(&SecretPath::new("/").unwrap())
-        .await
-        .unwrap();
+    let all = store.list(&SecretPath::new("/").unwrap()).await.unwrap();
     assert_eq!(all.len(), 3);
 }
 
@@ -719,8 +706,7 @@ async fn test_lease_not_renewable() {
     let store = Arc::new(InMemorySecretStore::new());
     let config = LeaseConfig::new().with_renewable(false);
 
-    let (manager, _rx) =
-        SecretsManager::with_lease_config(store, "test-key".to_string(), config);
+    let (manager, _rx) = SecretsManager::with_lease_config(store, "test-key".to_string(), config);
 
     let path = SecretPath::new("/app/no-renew").unwrap();
     let (_, lease) = manager
@@ -1151,8 +1137,7 @@ async fn test_lease_custom_ttl_capped_by_max() {
         .with_default_ttl(chrono::Duration::hours(1))
         .with_max_ttl(chrono::Duration::hours(2));
 
-    let (manager, _rx) =
-        SecretsManager::with_lease_config(store, "test-key".to_string(), config);
+    let (manager, _rx) = SecretsManager::with_lease_config(store, "test-key".to_string(), config);
 
     let path = SecretPath::new("/app/ttl-cap").unwrap();
     let (_, lease) = manager

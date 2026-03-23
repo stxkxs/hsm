@@ -1064,7 +1064,10 @@ mod tests {
             SocialProvider::parse_provider("GITHUB"),
             Some(SocialProvider::GitHub)
         );
-        assert_eq!(SocialProvider::parse_provider("x"), Some(SocialProvider::Twitter));
+        assert_eq!(
+            SocialProvider::parse_provider("x"),
+            Some(SocialProvider::Twitter)
+        );
         assert_eq!(SocialProvider::parse_provider("invalid"), None);
     }
 

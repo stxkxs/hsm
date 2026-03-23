@@ -294,6 +294,7 @@ pub mod circuit_breaker;
 pub mod config;
 pub mod error;
 pub mod grpc_web;
+pub mod handlers_simple;
 pub mod middleware;
 pub mod server;
 pub mod tracing_support;

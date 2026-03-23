@@ -119,11 +119,9 @@ impl IntoResponse for ApiError {
                     "Cryptographic operation failed".to_string(),
                 )
             }
-            ApiError::NotImplemented(msg) => (
-                StatusCode::NOT_IMPLEMENTED,
-                "NOT_IMPLEMENTED",
-                msg.clone(),
-            ),
+            ApiError::NotImplemented(msg) => {
+                (StatusCode::NOT_IMPLEMENTED, "NOT_IMPLEMENTED", msg.clone())
+            }
         };
 
         // Increment error metrics

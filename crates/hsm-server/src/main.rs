@@ -149,9 +149,8 @@ async fn main() -> Result<()> {
     // Optionally configure TLS for REST API
     let rest_server = if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
         info!("REST API listening on {} (TLS enabled)", rest_addr);
-        let tls_config =
-            build_tls_config(cert_path, key_path, args.tls_ca.as_deref())
-                .context("Failed to configure TLS")?;
+        let tls_config = build_tls_config(cert_path, key_path, args.tls_ca.as_deref())
+            .context("Failed to configure TLS")?;
         let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(tls_config));
         let token = shutdown_token.clone();
         tokio::spawn(serve_tls(rest_listener, rest_app, acceptor, token))
@@ -235,7 +234,9 @@ fn build_tls_config(
 
         let mut root_store = rustls::RootCertStore::empty();
         for cert in ca_certs {
-            root_store.add(cert).context("Failed to add CA certificate to root store")?;
+            root_store
+                .add(cert)
+                .context("Failed to add CA certificate to root store")?;
         }
 
         let verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))

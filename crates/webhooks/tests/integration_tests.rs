@@ -3,12 +3,12 @@
 //! Covers: webhook registration/deregistration, event filtering, HMAC signature
 //! generation and verification, configuration validation, and dispatcher event matching.
 
+use hsm_webhooks::delivery::{DeliveryResult, DeliveryStatus};
+use hsm_webhooks::filter::{event_severity, presets, EventSeverity};
 use hsm_webhooks::{
     EventFilter, Webhook, WebhookConfig, WebhookDispatcher, WebhookEvent, WebhookEventType,
     WebhookRegistry, WebhookSigner,
 };
-use hsm_webhooks::filter::{event_severity, presets, EventSeverity};
-use hsm_webhooks::delivery::{DeliveryResult, DeliveryStatus};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -265,8 +265,8 @@ fn test_filter_namespace_exclusion() {
 
 #[test]
 fn test_filter_combined_event_and_namespace() {
-    let filter = EventFilter::events(&[WebhookEventType::KeyCreated])
-        .include_namespace("production");
+    let filter =
+        EventFilter::events(&[WebhookEventType::KeyCreated]).include_namespace("production");
 
     // Must match both: correct event AND correct namespace
     assert!(filter.matches(WebhookEventType::KeyCreated, "production"));
@@ -527,10 +527,19 @@ fn test_generate_secret_uniqueness() {
 
 #[test]
 fn test_signature_header_constants() {
-    assert_eq!(hsm_webhooks::signature::headers::SIGNATURE, "X-Webhook-Signature");
-    assert_eq!(hsm_webhooks::signature::headers::TIMESTAMP, "X-Webhook-Timestamp");
+    assert_eq!(
+        hsm_webhooks::signature::headers::SIGNATURE,
+        "X-Webhook-Signature"
+    );
+    assert_eq!(
+        hsm_webhooks::signature::headers::TIMESTAMP,
+        "X-Webhook-Timestamp"
+    );
     assert_eq!(hsm_webhooks::signature::headers::ID, "X-Webhook-ID");
-    assert_eq!(hsm_webhooks::signature::headers::EVENT_TYPE, "X-Webhook-Event");
+    assert_eq!(
+        hsm_webhooks::signature::headers::EVENT_TYPE,
+        "X-Webhook-Event"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -585,10 +594,7 @@ fn test_config_rejects_local_domain() {
 
 #[test]
 fn test_config_rejects_internal_domain() {
-    let config = WebhookConfig::new(
-        "https://service.internal/webhook",
-        "super_secret_key_123",
-    );
+    let config = WebhookConfig::new("https://service.internal/webhook", "super_secret_key_123");
     assert!(config.validate().is_err());
 }
 
@@ -672,7 +678,12 @@ fn test_registry_get_matching_all_events() {
     // An "all" filter webhook should match any event type
     for event_type in WebhookEventType::all() {
         let matches = registry.get_matching(*event_type, "default");
-        assert_eq!(matches.len(), 1, "Should match event type: {:?}", event_type);
+        assert_eq!(
+            matches.len(),
+            1,
+            "Should match event type: {:?}",
+            event_type
+        );
     }
 }
 
@@ -682,14 +693,12 @@ fn test_registry_get_matching_filtered_events() {
 
     // Webhook for key events only
     let cfg1 = WebhookConfig::new("https://example.com/keys", "secret_key_12345678");
-    let wh1 = Webhook::new("Key Events", cfg1, "admin")
-        .with_filter(presets::key_lifecycle());
+    let wh1 = Webhook::new("Key Events", cfg1, "admin").with_filter(presets::key_lifecycle());
     registry.register(wh1);
 
     // Webhook for security events only
     let cfg2 = WebhookConfig::new("https://example.com/security", "secret_key_12345678");
-    let wh2 = Webhook::new("Security Events", cfg2, "admin")
-        .with_filter(presets::security_only());
+    let wh2 = Webhook::new("Security Events", cfg2, "admin").with_filter(presets::security_only());
     registry.register(wh2);
 
     // KeyCreated should match only key lifecycle webhook
@@ -787,7 +796,12 @@ fn test_event_type_roundtrip_str() {
     for event_type in WebhookEventType::all() {
         let as_str = event_type.as_str();
         let parsed = WebhookEventType::parse(as_str);
-        assert_eq!(parsed, Some(*event_type), "Roundtrip failed for {:?}", event_type);
+        assert_eq!(
+            parsed,
+            Some(*event_type),
+            "Roundtrip failed for {:?}",
+            event_type
+        );
     }
 }
 
@@ -932,8 +946,7 @@ async fn test_dispatcher_with_registered_webhooks() {
     let registry = Arc::new(WebhookRegistry::new());
 
     let config = WebhookConfig::new("https://example.com/hook", "secret_key_12345678");
-    let webhook = Webhook::new("Test Hook", config, "admin")
-        .with_filter(presets::key_lifecycle());
+    let webhook = Webhook::new("Test Hook", config, "admin").with_filter(presets::key_lifecycle());
     registry.register(webhook);
 
     let dispatcher = WebhookDispatcher::new(registry.clone());
