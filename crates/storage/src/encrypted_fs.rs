@@ -241,7 +241,8 @@ impl EncryptedFileStorage {
                                 namespace,
                                 data,
                             } => {
-                                self.store_key_impl(&key_id, &data, &namespace)?;
+                                // Journal data is already encrypted; write directly to disk
+                                self.write_encrypted_to_disk(&key_id, &data, &namespace)?;
                             }
                             JournalOp::DeleteKey { key_id, namespace } => {
                                 self.delete_key_impl(&key_id, &namespace)?;
@@ -329,23 +330,31 @@ impl EncryptedFileStorage {
             .join(format!("key-{}.{}", key_id, META_FILE_EXT)))
     }
 
-    /// Store key implementation (without journaling)
-    fn store_key_impl(&self, key_id: &KeyId, data: &[u8], namespace: &str) -> StorageResult<()> {
-        // Encrypt the data
+    /// Encrypt plaintext key data and return the serialized ciphertext bytes.
+    fn encrypt_key_data(&self, data: &[u8]) -> StorageResult<Vec<u8>> {
         let encrypted = self.master_key.encrypt(data)?;
-
-        // Serialize encrypted data
-        let encrypted_bytes = postcard::to_allocvec(&encrypted).map_err(|e| {
+        postcard::to_allocvec(&encrypted).map_err(|e| {
             StorageError::Serialization(format!("Failed to serialize encrypted data: {}", e))
-        })?;
+        })
+    }
 
-        // Create metadata
-        let metadata = KeyMetadata::new(&encrypted_bytes);
+    /// Write pre-encrypted key bytes and metadata to disk (without journaling).
+    ///
+    /// The caller is responsible for ensuring `encrypted_bytes` is already encrypted
+    /// via [`Self::encrypt_key_data`]. This method creates the key file and its
+    /// companion metadata file with restricted permissions.
+    fn write_encrypted_to_disk(
+        &self,
+        key_id: &KeyId,
+        encrypted_bytes: &[u8],
+        namespace: &str,
+    ) -> StorageResult<()> {
+        let metadata = KeyMetadata::new(encrypted_bytes);
 
         // Write encrypted key with restricted permissions
         let key_path = self.get_key_file_path(namespace, key_id)?;
         let mut key_file = create_restricted_file(&key_path)?;
-        key_file.write_all(&encrypted_bytes)?;
+        key_file.write_all(encrypted_bytes)?;
         key_file.sync_all()?;
 
         // Write metadata with restricted permissions
@@ -433,17 +442,20 @@ impl StorageBackend for EncryptedFileStorage {
             return Err(StorageError::NamespaceNotFound(namespace.to_string()));
         }
 
-        // Journal the operation
+        // Encrypt BEFORE journaling so the WAL never contains plaintext key material
+        let encrypted_bytes = self.encrypt_key_data(data)?;
+
+        // Journal the already-encrypted data
         let journal = self.get_or_create_journal(namespace)?;
         journal.append(JournalOp::StoreKey {
             key_id: key_id.clone(),
             namespace: namespace.to_string(),
-            data: data.to_vec(),
+            data: encrypted_bytes.clone(),
         })?;
         journal.commit()?;
 
-        // Perform the actual operation
-        self.store_key_impl(key_id, data, namespace)?;
+        // Write encrypted data to disk
+        self.write_encrypted_to_disk(key_id, &encrypted_bytes, namespace)?;
 
         Ok(())
     }

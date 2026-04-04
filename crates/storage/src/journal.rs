@@ -120,28 +120,20 @@ use std::path::{Path, PathBuf};
 
 /// Journal operation types
 ///
-/// # Security Note
+/// # Security
 ///
-/// Journal entries currently store key data in plaintext within the write-ahead log.
-/// The `data` field in `StoreKey` contains raw key material that should be encrypted
-/// before being written to the journal. While the final storage files are encrypted
-/// via the master key, the journal itself is not encrypted.
-///
-/// A runtime warning is emitted when `StoreKey` entries with non-empty data are
-/// committed, and the journal file permissions are restricted to `0o600` on Unix.
-///
-/// TODO: Encrypt journal entries before writing to disk to prevent key material
-/// exposure through journal file access. Consider using the master key or a
-/// dedicated journal encryption key.
+/// The `data` field in `StoreKey` contains ciphertext that was encrypted by the
+/// caller before being appended to the journal. Plaintext key material is never
+/// written to the write-ahead log. Journal file permissions are restricted to
+/// `0o600` on Unix as defense-in-depth.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum JournalOp {
     /// Store a key
     StoreKey {
         key_id: KeyId,
         namespace: String,
-        /// Raw key data to be stored. WARNING: This data should be encrypted before
-        /// journaling. Currently stored in plaintext within the journal file.
-        /// See module-level security note.
+        /// Pre-encrypted key data (ciphertext). Callers must encrypt key material
+        /// before appending to the journal.
         data: Vec<u8>,
     },
     /// Delete a key
@@ -251,23 +243,6 @@ impl WriteAheadLog {
             .open(&self.journal_path)?;
 
         for entry in &self.pending {
-            // Warn if StoreKey entries contain non-empty data (unencrypted key material)
-            if let JournalOp::StoreKey {
-                ref data,
-                ref key_id,
-                ..
-            } = entry.operation
-            {
-                if !data.is_empty() {
-                    tracing::warn!(
-                        key_id = %key_id,
-                        data_len = data.len(),
-                        "Journal entry contains unencrypted key material; \
-                         journal encryption is not yet implemented"
-                    );
-                }
-            }
-
             // Serialize entry
             let entry_bytes = postcard::to_allocvec(entry).map_err(|e| {
                 StorageError::Serialization(format!("Failed to serialize journal entry: {}", e))
