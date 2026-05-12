@@ -378,6 +378,12 @@ impl SessionManager {
             template_id: parent.template_id.clone(),
         };
 
+        // Release the DashMap read guard before any writes to `self.sessions`.
+        // Holding `parent` across `self.sessions.insert(...)` below would deadlock
+        // when parent_session_id and delegated.id hash to the same DashMap shard
+        // (hash-seed dependent — passes on some platforms, hangs on others).
+        drop(parent);
+
         // Set up rate limiter if configured
         if let Some(rate_limit) = effective_scope.rate_limit {
             self.rate_limiters.insert(
