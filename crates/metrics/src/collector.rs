@@ -70,7 +70,7 @@ pub type Result<T> = std::result::Result<T, MetricsError>;
 /// Basic usage:
 ///
 /// ```
-/// use metrics::CardinalityLimiter;
+/// use hsm_metrics::CardinalityLimiter;
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Limit to 1000 unique namespace values
@@ -117,7 +117,7 @@ impl CardinalityLimiter {
     /// # Examples
     ///
     /// ```
-    /// use metrics::CardinalityLimiter;
+    /// use hsm_metrics::CardinalityLimiter;
     ///
     /// let limiter = CardinalityLimiter::new(1000);
     /// ```
@@ -142,7 +142,7 @@ impl CardinalityLimiter {
     /// # Examples
     ///
     /// ```
-    /// use metrics::CardinalityLimiter;
+    /// use hsm_metrics::CardinalityLimiter;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let limiter = CardinalityLimiter::new(2);
@@ -175,12 +175,36 @@ impl CardinalityLimiter {
         Ok(())
     }
 
+    /// Coerce a label value into the bounded set: returns the input if it's already tracked
+    /// or fits under the cardinality cap, otherwise returns the `overflow` sentinel.
+    ///
+    /// Use this instead of [`check_label`] when you want guarantees against unbounded
+    /// Prometheus series growth: rejected labels collapse into a single overflow bucket
+    /// rather than producing errors.
+    ///
+    /// [`check_label`]: Self::check_label
+    pub fn bound<'a>(&self, label: &'a str, overflow: &'a str) -> &'a str {
+        // Fast path: label already tracked.
+        if self.current_labels.read().unwrap().contains(label) {
+            return label;
+        }
+        let mut labels = self.current_labels.write().unwrap();
+        if labels.contains(label) {
+            return label;
+        }
+        if labels.len() >= self.max_cardinality {
+            return overflow;
+        }
+        labels.insert(label.to_string());
+        label
+    }
+
     /// Returns the current number of unique labels seen.
     ///
     /// # Examples
     ///
     /// ```
-    /// use metrics::CardinalityLimiter;
+    /// use hsm_metrics::CardinalityLimiter;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let limiter = CardinalityLimiter::new(100);
@@ -226,7 +250,7 @@ impl CardinalityLimiter {
 /// No sampling (100% of events recorded):
 ///
 /// ```
-/// use metrics::SamplingConfig;
+/// use hsm_metrics::SamplingConfig;
 ///
 /// let config = SamplingConfig::new(1.0);  // 100%
 /// ```
@@ -234,7 +258,7 @@ impl CardinalityLimiter {
 /// Sample 10% of events:
 ///
 /// ```
-/// use metrics::SamplingConfig;
+/// use hsm_metrics::SamplingConfig;
 ///
 /// let config = SamplingConfig::new(0.1);  // 10%
 ///
@@ -247,7 +271,7 @@ impl CardinalityLimiter {
 /// Dynamic sampling (increase for errors):
 ///
 /// ```
-/// use metrics::SamplingConfig;
+/// use hsm_metrics::SamplingConfig;
 ///
 /// let success_sampling = SamplingConfig::new(0.01);  // 1% for successes
 /// let error_sampling = SamplingConfig::new(1.0);     // 100% for errors
@@ -629,6 +653,19 @@ impl MetricsCollector {
         })
     }
 
+    /// Sentinel label used when a high-cardinality value exceeds the cap.
+    const OVERFLOW_LABEL: &'static str = "_other_";
+
+    /// Coerce a namespace label into the bounded set.
+    ///
+    /// Untrusted input (namespace, key_id) flows into Prometheus label values; without bounding,
+    /// an attacker — or a buggy client — can explode metric cardinality and OOM the scrape pipeline.
+    /// Excess labels collapse into a single `_other_` bucket.
+    fn bounded_ns<'a>(&self, namespace: &'a str) -> &'a str {
+        self.cardinality_limiter
+            .bound(namespace, Self::OVERFLOW_LABEL)
+    }
+
     /// Record an operation
     pub fn record_operation(
         &self,
@@ -637,8 +674,9 @@ impl MetricsCollector {
         namespace: &str,
         status: OperationStatus,
     ) {
+        let ns = self.bounded_ns(namespace);
         self.operations_total
-            .with_label_values(&[operation, algorithm, namespace, status.as_str()])
+            .with_label_values(&[operation, algorithm, ns, status.as_str()])
             .inc();
     }
 
@@ -656,8 +694,9 @@ impl MetricsCollector {
 
         // Record duration with sampling for high-volume ops
         if self.sampling_config.should_sample() {
+            let ns = self.bounded_ns(namespace);
             self.sign_duration
-                .with_label_values(&[algorithm, namespace])
+                .with_label_values(&[algorithm, ns])
                 .observe(duration.as_secs_f64());
         }
     }
@@ -668,8 +707,9 @@ impl MetricsCollector {
             .fetch_add(1, Ordering::Relaxed);
 
         if self.sampling_config.should_sample() {
+            let ns = self.bounded_ns(namespace);
             self.verify_duration
-                .with_label_values(&[algorithm, namespace])
+                .with_label_values(&[algorithm, ns])
                 .observe(duration.as_secs_f64());
         }
     }
@@ -680,8 +720,9 @@ impl MetricsCollector {
             .fetch_add(1, Ordering::Relaxed);
 
         if self.sampling_config.should_sample() {
+            let ns = self.bounded_ns(namespace);
             self.encrypt_duration
-                .with_label_values(&[algorithm, namespace])
+                .with_label_values(&[algorithm, ns])
                 .observe(duration.as_secs_f64());
         }
     }
@@ -692,8 +733,9 @@ impl MetricsCollector {
             .fetch_add(1, Ordering::Relaxed);
 
         if self.sampling_config.should_sample() {
+            let ns = self.bounded_ns(namespace);
             self.decrypt_duration
-                .with_label_values(&[algorithm, namespace])
+                .with_label_values(&[algorithm, ns])
                 .observe(duration.as_secs_f64());
         }
     }
@@ -724,22 +766,25 @@ impl MetricsCollector {
 
     /// Record key generation
     pub fn record_key_generation(&self, algorithm: &str, namespace: &str) {
+        let ns = self.bounded_ns(namespace);
         self.key_generation_total
-            .with_label_values(&[algorithm, namespace])
+            .with_label_values(&[algorithm, ns])
             .inc();
     }
 
     /// Record key deletion
     pub fn record_key_deletion(&self, namespace: &str, reason: &str) {
+        let ns = self.bounded_ns(namespace);
         self.key_deletion_total
-            .with_label_values(&[namespace, reason])
+            .with_label_values(&[ns, reason])
             .inc();
     }
 
     /// Set active keys count
     pub fn set_active_keys(&self, namespace: &str, algorithm: &str, count: i64) {
+        let ns = self.bounded_ns(namespace);
         self.active_keys_gauge
-            .with_label_values(&[namespace, algorithm])
+            .with_label_values(&[ns, algorithm])
             .set(count as f64);
     }
 

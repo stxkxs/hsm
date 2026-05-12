@@ -44,7 +44,7 @@
 //! Basic usage:
 //!
 //! ```
-//! use grpc_api::{CircuitBreaker, CircuitBreakerConfig};
+//! use hsm_grpc_api::{CircuitBreaker, CircuitBreakerConfig};
 //! use std::time::Duration;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -183,7 +183,7 @@ pub struct CircuitBreaker {
 /// Sensitive configuration (open fast, recover fast):
 ///
 /// ```
-/// use grpc_api::CircuitBreakerConfig;
+/// use hsm_grpc_api::CircuitBreakerConfig;
 /// use std::time::Duration;
 ///
 /// let config = CircuitBreakerConfig {
@@ -197,7 +197,7 @@ pub struct CircuitBreaker {
 /// Conservative configuration (tolerant, careful recovery):
 ///
 /// ```
-/// use grpc_api::CircuitBreakerConfig;
+/// use hsm_grpc_api::CircuitBreakerConfig;
 /// use std::time::Duration;
 ///
 /// let config = CircuitBreakerConfig {
@@ -242,8 +242,14 @@ impl CircuitBreaker {
         }
     }
 
-    /// Check if request can proceed
-    pub fn call<F, T, E>(&self, f: F) -> Result<T, CircuitBreakerError>
+    /// Execute an operation through the circuit breaker.
+    ///
+    /// Returns `Err(CircuitBreakerError)` only when the breaker itself rejects the call
+    /// (circuit open, too many half-open requests). When the breaker allows the call,
+    /// the inner `Result<T, E>` is returned so the caller sees the actual operation
+    /// outcome (and its error type). Inner errors still count toward the failure
+    /// threshold that opens the breaker.
+    pub fn call<F, T, E>(&self, f: F) -> Result<Result<T, E>, CircuitBreakerError>
     where
         F: FnOnce() -> Result<T, E>,
     {
@@ -251,16 +257,12 @@ impl CircuitBreaker {
         self.check_state()?;
 
         // Execute the call
-        match f() {
-            Ok(result) => {
-                self.on_success();
-                Ok(result)
-            }
-            Err(_) => {
-                self.on_failure();
-                Err(CircuitBreakerError::CircuitOpen)
-            }
+        let result = f();
+        match &result {
+            Ok(_) => self.on_success(),
+            Err(_) => self.on_failure(),
         }
+        Ok(result)
     }
 
     /// Check and update circuit breaker state

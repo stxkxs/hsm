@@ -1,6 +1,7 @@
 // Simplified handlers for Module 4
 // These implement the core HSM operations by delegating to key-manager and crypto-engine.
 
+use crate::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError};
 use crate::error::ApiError;
 use crate::middleware::metrics::MetricsCollector;
 use crate::proto::hsm::*;
@@ -14,17 +15,19 @@ use hsm_crypto_engine::{
     KeyMaterial,
 };
 use hsm_key_manager::{
-    DefaultKeyManager, KeyFilter, KeyId, KeyManager, KeySpec, KeyState, KeyType,
+    DefaultKeyManager, Error as KeyManagerError, KeyFilter, KeyId, KeyManager, KeySpec, KeyState,
+    KeyType,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tonic::{Request, Response, Status};
 use tracing::info;
 
 pub struct SimpleHsmHandler {
     metrics: MetricsCollector,
     key_manager: Arc<dyn KeyManager>,
+    key_manager_breaker: Arc<CircuitBreaker>,
 }
 
 impl Default for SimpleHsmHandler {
@@ -35,16 +38,40 @@ impl Default for SimpleHsmHandler {
 
 impl SimpleHsmHandler {
     pub fn new() -> Self {
-        Self {
-            metrics: MetricsCollector::new(),
-            key_manager: Arc::new(DefaultKeyManager::new()),
-        }
+        Self::with_key_manager(Arc::new(DefaultKeyManager::new()))
     }
 
     pub fn with_key_manager(key_manager: Arc<dyn KeyManager>) -> Self {
         Self {
             metrics: MetricsCollector::new(),
             key_manager,
+            key_manager_breaker: Arc::new(CircuitBreaker::new(CircuitBreakerConfig {
+                failure_threshold: 10,
+                success_threshold: 2,
+                timeout: Duration::from_secs(30),
+                half_open_max_requests: 2,
+            })),
+        }
+    }
+
+    /// Run a key-manager operation through the circuit breaker.
+    ///
+    /// Returns `Status::unavailable` when the breaker is open or saturated, otherwise
+    /// propagates the inner Result. The breaker is configured to tolerate transient
+    /// failures (10 consecutive errors) and recover quickly (30s) so backend hiccups
+    /// don't cascade into request floods.
+    fn run_km<F, T>(&self, op: F) -> std::result::Result<T, Status>
+    where
+        F: FnOnce() -> std::result::Result<T, KeyManagerError>,
+    {
+        match self.key_manager_breaker.call(op) {
+            Ok(inner) => inner.map_err(|e| Status::from(ApiError::from(e))),
+            Err(CircuitBreakerError::CircuitOpen) => Err(Status::unavailable(
+                "key-manager unavailable (circuit breaker open); retry after backoff",
+            )),
+            Err(CircuitBreakerError::TooManyRequests) => Err(Status::resource_exhausted(
+                "key-manager recovering; too many in-flight requests",
+            )),
         }
     }
 
@@ -101,16 +128,10 @@ impl SimpleHsmHandler {
         };
 
         // Generate key
-        let key_id = self
-            .key_manager
-            .generate_key(spec)
-            .map_err(|e| Status::from(ApiError::from(e)))?;
+        let key_id = self.run_km(|| self.key_manager.generate_key(spec))?;
 
         // Retrieve the key to get the public material
-        let key = self
-            .key_manager
-            .get_key(&key_id, &req.namespace)
-            .map_err(|e| Status::from(ApiError::from(e)))?;
+        let key = self.run_km(|| self.key_manager.get_key(&key_id, &req.namespace))?;
 
         let public_key = key.public_material.clone().unwrap_or_default();
 
@@ -149,12 +170,11 @@ impl SimpleHsmHandler {
             .map_err(|_| Status::invalid_argument("Invalid key ID format"))?;
 
         // Get key metadata
-        let km_metadata = self
-            .key_manager
-            .get_metadata(&key_id, &req.namespace)
-            .map_err(|e| Status::from(ApiError::from(e)))?;
+        let km_metadata = self.run_km(|| self.key_manager.get_metadata(&key_id, &req.namespace))?;
 
-        // Get public key material (best-effort; deactivated keys may not allow get_key)
+        // Get public key material (best-effort; deactivated keys may not allow get_key).
+        // Skip the breaker here: this is a best-effort lookup and we don't want a transient
+        // failure to count against the breaker's threshold since we'd return an empty key anyway.
         let public_key = self
             .key_manager
             .get_key(&key_id, &req.namespace)
@@ -194,9 +214,7 @@ impl SimpleHsmHandler {
             .map_err(|_| Status::invalid_argument("Invalid key ID format"))?;
 
         // Delete key
-        self.key_manager
-            .delete_key(&key_id, &req.namespace)
-            .map_err(|e| Status::from(ApiError::from(e)))?;
+        self.run_km(|| self.key_manager.delete_key(&key_id, &req.namespace))?;
 
         info!(key_id = %req.key_id, namespace = %req.namespace, "Key deleted");
         timer.finish_success();
@@ -220,16 +238,10 @@ impl SimpleHsmHandler {
             .map_err(|_| Status::invalid_argument("Invalid key ID format"))?;
 
         // Rotate key
-        let new_key_id = self
-            .key_manager
-            .rotate_key(&key_id, &req.namespace)
-            .map_err(|e| Status::from(ApiError::from(e)))?;
+        let new_key_id = self.run_km(|| self.key_manager.rotate_key(&key_id, &req.namespace))?;
 
         // Get new key metadata
-        let new_key = self
-            .key_manager
-            .get_key(&new_key_id, &req.namespace)
-            .map_err(|e| Status::from(ApiError::from(e)))?;
+        let new_key = self.run_km(|| self.key_manager.get_key(&new_key_id, &req.namespace))?;
 
         let metadata = Some(build_key_metadata(
             &new_key_id,
@@ -276,10 +288,7 @@ impl SimpleHsmHandler {
             ..Default::default()
         };
 
-        let metadata_list = self
-            .key_manager
-            .list_keys(ns, filter)
-            .map_err(|e| Status::from(ApiError::from(e)))?;
+        let metadata_list = self.run_km(|| self.key_manager.list_keys(ns, filter))?;
 
         let limit = if max_results > 0 {
             max_results as usize
@@ -322,10 +331,7 @@ impl SimpleHsmHandler {
             .map_err(|_| Status::invalid_argument("Invalid key ID format"))?;
 
         // Get the key
-        let key = self
-            .key_manager
-            .get_key(&key_id, &req.namespace)
-            .map_err(|e| Status::from(ApiError::from(e)))?;
+        let key = self.run_km(|| self.key_manager.get_key(&key_id, &req.namespace))?;
 
         // Get private key material
         let private_key = key.private_material.as_ref().ok_or_else(|| {
@@ -370,10 +376,7 @@ impl SimpleHsmHandler {
             .map_err(|_| Status::invalid_argument("Invalid key ID format"))?;
 
         // Get the key
-        let key = self
-            .key_manager
-            .get_key(&key_id, &req.namespace)
-            .map_err(|e| Status::from(ApiError::from(e)))?;
+        let key = self.run_km(|| self.key_manager.get_key(&key_id, &req.namespace))?;
 
         // Get public key material
         let public_key = key.public_material.as_ref().ok_or_else(|| {
@@ -407,10 +410,7 @@ impl SimpleHsmHandler {
             .map_err(|_| Status::invalid_argument("Invalid key ID format"))?;
 
         // Get the key
-        let key = self
-            .key_manager
-            .get_key(&key_id, &req.namespace)
-            .map_err(|e| Status::from(ApiError::from(e)))?;
+        let key = self.run_km(|| self.key_manager.get_key(&key_id, &req.namespace))?;
 
         // Get key material for encryption
         let key_material = key
@@ -470,10 +470,7 @@ impl SimpleHsmHandler {
             .map_err(|_| Status::invalid_argument("Invalid key ID format"))?;
 
         // Get the key
-        let key = self
-            .key_manager
-            .get_key(&key_id, &req.namespace)
-            .map_err(|e| Status::from(ApiError::from(e)))?;
+        let key = self.run_km(|| self.key_manager.get_key(&key_id, &req.namespace))?;
 
         // Get key material for decryption
         let key_material = key
