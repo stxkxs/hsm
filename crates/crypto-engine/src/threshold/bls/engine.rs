@@ -396,6 +396,8 @@ impl ThresholdBlsEngine {
 
         let mut x_scalar = blst_scalar::default();
         let mut x_fr = blst_fr::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from x_bytes (a [u8; 32]);
+        // blst_fr_from_scalar operates on caller-owned struct references.
         unsafe {
             blst_scalar_from_bendian(&mut x_scalar, x_bytes.as_ptr());
             blst_fr_from_scalar(&mut x_fr, &x_scalar);
@@ -404,6 +406,8 @@ impl ThresholdBlsEngine {
         // Initialize result with highest coefficient (Horner's method)
         let mut result_fr = blst_fr::default();
         let mut coef_scalar = blst_scalar::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from the last coefficient (a [u8; 32]);
+        // blst_fr_from_scalar operates on caller-owned struct references.
         unsafe {
             blst_scalar_from_bendian(&mut coef_scalar, coefficients.last().unwrap().as_ptr());
             blst_fr_from_scalar(&mut result_fr, &coef_scalar);
@@ -413,12 +417,15 @@ impl ThresholdBlsEngine {
         for coef in coefficients.iter().rev().skip(1) {
             // result = result * x + coef
             let mut temp = blst_fr::default();
+            // SAFETY: blst_fr_mul reads caller-owned result_fr and x_fr and writes to caller-owned temp.
             unsafe {
                 blst_fr_mul(&mut temp, &result_fr, &x_fr);
             }
 
             let mut coef_scalar_inner = blst_scalar::default();
             let mut coef_fr = blst_fr::default();
+            // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from coef (a [u8; 32]);
+            // blst_fr_from_scalar and blst_fr_add operate on caller-owned struct references.
             unsafe {
                 blst_scalar_from_bendian(&mut coef_scalar_inner, coef.as_ptr());
                 blst_fr_from_scalar(&mut coef_fr, &coef_scalar_inner);
@@ -428,11 +435,13 @@ impl ThresholdBlsEngine {
 
         // Convert result back to bytes
         let mut result_scalar = blst_scalar::default();
+        // SAFETY: blst_scalar_from_fr reads caller-owned result_fr and writes to caller-owned result_scalar.
         unsafe {
             blst_scalar_from_fr(&mut result_scalar, &result_fr);
         }
 
         let mut result_bytes = [0u8; 32];
+        // SAFETY: blst_bendian_from_scalar writes exactly 32 bytes to result_bytes (a [u8; 32]).
         unsafe {
             blst_bendian_from_scalar(result_bytes.as_mut_ptr(), &result_scalar);
         }
@@ -465,6 +474,8 @@ impl ThresholdBlsEngine {
             bytes
         };
         let mut one_scalar = blst_scalar::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from one_bytes (a [u8; 32]);
+        // blst_fr_from_scalar operates on caller-owned struct references.
         unsafe {
             blst_scalar_from_bendian(&mut one_scalar, one_bytes.as_ptr());
             blst_fr_from_scalar(&mut numerator, &one_scalar);
@@ -483,6 +494,8 @@ impl ThresholdBlsEngine {
             xj_bytes[24..32].copy_from_slice(&x_j.to_be_bytes());
             let mut xj_scalar = blst_scalar::default();
             let mut xj_fr = blst_fr::default();
+            // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from xj_bytes (a [u8; 32]);
+            // blst_fr_from_scalar and blst_fr_mul operate on caller-owned struct references.
             unsafe {
                 blst_scalar_from_bendian(&mut xj_scalar, xj_bytes.as_ptr());
                 blst_fr_from_scalar(&mut xj_fr, &xj_scalar);
@@ -494,12 +507,15 @@ impl ThresholdBlsEngine {
             xi_bytes[24..32].copy_from_slice(&x_i.to_be_bytes());
             let mut xi_scalar = blst_scalar::default();
             let mut xi_fr = blst_fr::default();
+            // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from xi_bytes (a [u8; 32]);
+            // blst_fr_from_scalar operates on caller-owned struct references.
             unsafe {
                 blst_scalar_from_bendian(&mut xi_scalar, xi_bytes.as_ptr());
                 blst_fr_from_scalar(&mut xi_fr, &xi_scalar);
             }
 
             let mut diff = blst_fr::default();
+            // SAFETY: blst_fr_sub and blst_fr_mul operate on caller-owned blst_fr struct references.
             unsafe {
                 blst_fr_sub(&mut diff, &xj_fr, &xi_fr);
                 blst_fr_mul(&mut denominator, &denominator, &diff);
@@ -508,22 +524,26 @@ impl ThresholdBlsEngine {
 
         // result = numerator / denominator = numerator * inverse(denominator)
         let mut denom_inv = blst_fr::default();
+        // SAFETY: blst_fr_inverse reads caller-owned denominator and writes to caller-owned denom_inv.
         unsafe {
             blst_fr_inverse(&mut denom_inv, &denominator);
         }
 
         let mut result_fr = blst_fr::default();
+        // SAFETY: blst_fr_mul reads caller-owned numerator and denom_inv and writes to caller-owned result_fr.
         unsafe {
             blst_fr_mul(&mut result_fr, &numerator, &denom_inv);
         }
 
         // Convert back to scalar bytes
         let mut result_scalar = blst_scalar::default();
+        // SAFETY: blst_scalar_from_fr reads caller-owned result_fr and writes to caller-owned result_scalar.
         unsafe {
             blst_scalar_from_fr(&mut result_scalar, &result_fr);
         }
 
         let mut result_bytes = [0u8; 32];
+        // SAFETY: blst_bendian_from_scalar writes exactly 32 bytes to result_bytes (a [u8; 32]).
         unsafe {
             blst_bendian_from_scalar(result_bytes.as_mut_ptr(), &result_scalar);
         }
@@ -563,6 +583,9 @@ impl ThresholdBlsEngine {
             let mut sig_point = blst_p2::default();
 
             // Decompress signature to get G2 point
+            // SAFETY: blst_p2_uncompress reads exactly 96 bytes from sig_bytes (sig.to_bytes() returns
+            // a fixed-size compressed G2 array) and writes to caller-owned sig_affine; blst_p2_from_affine
+            // converts caller-owned sig_affine into caller-owned sig_point.
             unsafe {
                 let sig_affine_result = blst_p2_uncompress(&mut sig_affine, sig_bytes.as_ptr());
                 if sig_affine_result != BLST_ERROR::BLST_SUCCESS {
@@ -573,17 +596,22 @@ impl ThresholdBlsEngine {
 
             // Multiply signature by Lagrange coefficient: lambda_i * sigma_i
             let mut lambda_scalar = blst_scalar::default();
+            // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from lambda_bytes (a [u8; 32]).
             unsafe {
                 blst_scalar_from_bendian(&mut lambda_scalar, lambda_bytes.as_ptr());
             }
 
             let mut scaled_sig = blst_p2::default();
+            // SAFETY: blst_p2_mult reads caller-owned sig_point and lambda_scalar.b (a [u8; 32] inside
+            // blst_scalar, with bit-length 256 passed explicitly) and writes to caller-owned scaled_sig.
             unsafe {
                 blst_p2_mult(&mut scaled_sig, &sig_point, lambda_scalar.b.as_ptr(), 256);
             }
 
             // Add to result
             let mut new_result = blst_p2::default();
+            // SAFETY: blst_p2_add_or_double reads caller-owned result and scaled_sig and writes to
+            // caller-owned new_result.
             unsafe {
                 blst_p2_add_or_double(&mut new_result, &result, &scaled_sig);
             }
@@ -592,11 +620,14 @@ impl ThresholdBlsEngine {
 
         // Convert result back to affine and serialize
         let mut result_affine = blst_p2_affine::default();
+        // SAFETY: blst_p2_to_affine reads caller-owned result and writes to caller-owned result_affine.
         unsafe {
             blst_p2_to_affine(&mut result_affine, &result);
         }
 
         let mut result_bytes = [0u8; 96];
+        // SAFETY: blst_p2_affine_compress writes exactly 96 bytes to result_bytes (a [u8; 96]) from
+        // caller-owned result_affine.
         unsafe {
             blst_p2_affine_compress(result_bytes.as_mut_ptr(), &result_affine);
         }

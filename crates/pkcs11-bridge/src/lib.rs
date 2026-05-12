@@ -299,6 +299,8 @@ extern "C" fn c_get_function_list(pp_function_list: CK_FUNCTION_LIST_PTR_PTR) ->
         return CKR_ARGUMENTS_BAD;
     }
 
+    // SAFETY: PKCS#11 spec contract — caller provides a valid, writable pp_function_list pointer;
+    // null check above ensures non-null. FUNCTION_LIST is a 'static mut whose address is always valid.
     unsafe {
         *pp_function_list = std::ptr::addr_of_mut!(FUNCTION_LIST);
     }
@@ -340,6 +342,8 @@ extern "C" fn c_get_info(p_info: CK_INFO_PTR) -> CK_RV {
         library_version: CK_VERSION { major: 1, minor: 0 },
     };
 
+    // SAFETY: PKCS#11 spec contract — caller provides a valid, writable p_info pointer to a
+    // CK_INFO struct; null check above ensures non-null.
     unsafe {
         *p_info = info;
     }
@@ -372,6 +376,8 @@ extern "C" fn c_get_slot_list(
 
     if p_slot_list.is_null() {
         // Just return the count
+        // SAFETY: PKCS#11 spec contract — caller provides a valid, writable pul_count pointer;
+        // null check above ensures non-null.
         unsafe {
             *pul_count = slot_count as CK_ULONG;
         }
@@ -379,8 +385,10 @@ extern "C" fn c_get_slot_list(
     }
 
     // Check if buffer is large enough
+    // SAFETY: PKCS#11 spec contract — caller provides a valid pul_count pointer; null-checked above.
     let provided_count = unsafe { *pul_count };
     if (provided_count as usize) < slot_count {
+        // SAFETY: PKCS#11 spec contract — caller provides a valid, writable pul_count pointer (null-checked above).
         unsafe {
             *pul_count = slot_count as CK_ULONG;
         }
@@ -388,6 +396,8 @@ extern "C" fn c_get_slot_list(
     }
 
     // Fill in slot IDs (0, 1, 2, ...)
+    // SAFETY: PKCS#11 spec contract — caller provides a writable p_slot_list buffer of at least
+    // provided_count CK_SLOT_IDs; we verified slot_count <= provided_count above and p_slot_list is non-null.
     unsafe {
         for i in 0..slot_count {
             *p_slot_list.add(i) = i as CK_SLOT_ID;
@@ -427,6 +437,8 @@ extern "C" fn c_get_slot_info(slot_id: CK_SLOT_ID, p_info: CK_SLOT_INFO_PTR) -> 
         firmware_version: CK_VERSION { major: 1, minor: 0 },
     };
 
+    // SAFETY: PKCS#11 spec contract — caller provides a valid, writable p_info pointer to a
+    // CK_SLOT_INFO struct; null check above ensures non-null.
     unsafe {
         *p_info = info;
     }
@@ -475,6 +487,8 @@ extern "C" fn c_get_token_info(slot_id: CK_SLOT_ID, p_info: CK_TOKEN_INFO_PTR) -
         utc_time: padded_char_string(""),
     };
 
+    // SAFETY: PKCS#11 spec contract — caller provides a valid, writable p_info pointer to a
+    // CK_TOKEN_INFO struct; null check above ensures non-null.
     unsafe {
         *p_info = info;
     }
@@ -522,6 +536,7 @@ extern "C" fn c_get_mechanism_list(
 
     if p_mechanism_list.is_null() {
         // Just return the count
+        // SAFETY: PKCS#11 spec contract — caller provides a valid, writable pul_count pointer; null-checked above.
         unsafe {
             *pul_count = MECHANISMS.len() as CK_ULONG;
         }
@@ -529,8 +544,10 @@ extern "C" fn c_get_mechanism_list(
     }
 
     // Check if buffer is large enough
+    // SAFETY: PKCS#11 spec contract — caller provides a valid pul_count pointer; null-checked above.
     let provided_count = unsafe { *pul_count };
     if (provided_count as usize) < MECHANISMS.len() {
+        // SAFETY: PKCS#11 spec contract — caller provides a valid, writable pul_count pointer (null-checked above).
         unsafe {
             *pul_count = MECHANISMS.len() as CK_ULONG;
         }
@@ -538,6 +555,8 @@ extern "C" fn c_get_mechanism_list(
     }
 
     // Copy mechanisms to output
+    // SAFETY: PKCS#11 spec contract — caller provides a writable p_mechanism_list buffer of at least
+    // provided_count entries; we verified MECHANISMS.len() <= provided_count and p_mechanism_list is non-null.
     unsafe {
         for (i, mech) in MECHANISMS.iter().enumerate() {
             *p_mechanism_list.add(i) = *mech;
@@ -613,6 +632,8 @@ extern "C" fn c_get_mechanism_info(
         _ => return CKR_MECHANISM_INVALID,
     };
 
+    // SAFETY: PKCS#11 spec contract — caller provides a valid, writable p_info pointer to a
+    // CK_MECHANISM_INFO struct; null check above ensures non-null.
     unsafe {
         *p_info = info;
     }
@@ -661,6 +682,8 @@ extern "C" fn c_open_session(
     // Store session
     STATE.sessions().insert(handle, session);
 
+    // SAFETY: PKCS#11 spec contract — caller provides a valid, writable ph_session pointer to a
+    // CK_SESSION_HANDLE; null check above ensures non-null.
     unsafe {
         *ph_session = handle;
     }
@@ -716,6 +739,8 @@ extern "C" fn c_get_session_info(
 
     let info = session.get_info();
 
+    // SAFETY: PKCS#11 spec contract — caller provides a valid, writable p_info pointer to a
+    // CK_SESSION_INFO struct; null check above ensures non-null.
     unsafe {
         *p_info = info;
     }
@@ -738,6 +763,9 @@ extern "C" fn c_login(
     let pin = if p_pin.is_null() || ul_pin_len == 0 {
         &[]
     } else {
+        // SAFETY: PKCS#11 spec contract — caller upholds pointer validity, alignment, and lifetime
+        // of p_pin for ul_pin_len bytes. Null check and length check above ensure p_pin is non-null
+        // and length is non-zero. The slice is only used within this function's scope.
         unsafe { std::slice::from_raw_parts(p_pin, ul_pin_len as usize) }
     };
 
@@ -833,6 +861,8 @@ mod tests {
         assert_eq!(rv, CKR_OK);
         assert!(!func_list.is_null());
 
+        // SAFETY: func_list was just populated by c_get_function_list with the address of
+        // FUNCTION_LIST, a valid 'static mut; non-null check above ensures dereference is safe.
         unsafe {
             let fl = &*func_list;
             assert_eq!(fl.version.major, 2);
@@ -852,6 +882,8 @@ mod tests {
     fn test_get_info() {
         ensure_initialized();
 
+        // SAFETY: CK_INFO is a plain-old-data struct of fixed-size primitives and byte arrays;
+        // all-zero is a valid bit pattern for it.
         let mut info: CK_INFO = unsafe { std::mem::zeroed() };
         let rv = c_get_info(&mut info);
         assert_eq!(rv, CKR_OK);
@@ -892,6 +924,8 @@ mod tests {
         assert_ne!(session, 0);
 
         // Get session info
+        // SAFETY: CK_SESSION_INFO is a plain-old-data struct of fixed-size primitives;
+        // all-zero is a valid bit pattern for it.
         let mut info: CK_SESSION_INFO = unsafe { std::mem::zeroed() };
         let rv = c_get_session_info(session, &mut info);
         assert_eq!(rv, CKR_OK);

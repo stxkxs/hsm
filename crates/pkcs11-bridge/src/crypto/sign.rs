@@ -51,6 +51,8 @@ pub fn sign_init(
     }
 
     // Get mechanism type
+    // SAFETY: PKCS#11 spec contract — caller upholds pointer validity, alignment, and lifetime
+    // of p_mechanism for the duration of this call. Null check above ensures p_mechanism is non-null.
     let mechanism = unsafe { (*p_mechanism).mechanism };
 
     // Validate mechanism is a signing mechanism
@@ -123,6 +125,8 @@ pub fn sign(
 
     // If p_signature is null, just return the required length
     if p_signature.is_null() {
+        // SAFETY: PKCS#11 spec contract — caller provides a valid, writable pul_signature_len pointer;
+        // null check above (pul_signature_len.is_null()) ensures non-null.
         unsafe {
             *pul_signature_len = sig_len as CK_ULONG;
         }
@@ -130,8 +134,10 @@ pub fn sign(
     }
 
     // Check buffer size
+    // SAFETY: PKCS#11 spec contract — caller provides a valid pul_signature_len pointer; null-checked above.
     let provided_len = unsafe { *pul_signature_len };
     if provided_len < sig_len as CK_ULONG {
+        // SAFETY: PKCS#11 spec contract — caller provides a valid, writable pul_signature_len pointer (null-checked above).
         unsafe {
             *pul_signature_len = sig_len as CK_ULONG;
         }
@@ -139,6 +145,9 @@ pub fn sign(
     }
 
     // Read input data
+    // SAFETY: PKCS#11 spec contract — caller upholds pointer validity, alignment, and lifetime
+    // of p_data for ul_data_len bytes. Null check above ensures p_data is non-null; the slice is
+    // only used within this function's scope.
     let data = unsafe { std::slice::from_raw_parts(p_data, ul_data_len as usize) };
 
     // Get namespace for HSM call
@@ -162,6 +171,9 @@ pub fn sign(
     match result {
         Ok(signature) => {
             // Copy signature to output buffer
+            // SAFETY: PKCS#11 spec contract — caller provides a writable p_signature buffer of at
+            // least provided_len bytes. We verified signature.len() == sig_len <= provided_len above
+            // (sig_len bound), and p_signature is non-null. pul_signature_len is non-null (checked above).
             unsafe {
                 std::ptr::copy_nonoverlapping(signature.as_ptr(), p_signature, signature.len());
                 *pul_signature_len = signature.len() as CK_ULONG;

@@ -497,6 +497,9 @@ impl KeyRefreshProtocol {
             } else {
                 // For non-zero coefficients, compute commitment = coeff * G1
                 // We need to use the low-level blst API to multiply the generator by a scalar
+                // SAFETY: blst_p1_generator returns a valid static G1 generator pointer; blst_p1_mult
+                // reads coeff_bytes (a Vec<u8> with explicit bit-length argument) and writes to caller-owned
+                // result; blst_p1_compress writes exactly 48 bytes to compressed (a [u8; 48]).
                 unsafe {
                     let generator = blst::blst_p1_generator();
                     let mut result = blst_p1::default();
@@ -586,6 +589,8 @@ impl KeyRefreshProtocol {
 
         let mut x_scalar = blst_scalar::default();
         let mut x_fr = blst_fr::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from x_bytes (a [u8; 32]) and writes
+        // to caller-owned x_scalar; blst_fr_from_scalar reads x_scalar and writes to caller-owned x_fr.
         unsafe {
             blst_scalar_from_bendian(&mut x_scalar, x_bytes.as_ptr());
             blst_fr_from_scalar(&mut x_fr, &x_scalar);
@@ -598,6 +603,8 @@ impl KeyRefreshProtocol {
         let last_coef = coefficients.last().unwrap();
         let mut last_bytes = [0u8; 32];
         last_bytes.copy_from_slice(last_coef);
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from last_bytes (a [u8; 32]) and writes
+        // to caller-owned coef_scalar; blst_fr_from_scalar reads coef_scalar and writes to caller-owned result_fr.
         unsafe {
             blst_scalar_from_bendian(&mut coef_scalar, last_bytes.as_ptr());
             blst_fr_from_scalar(&mut result_fr, &coef_scalar);
@@ -606,6 +613,8 @@ impl KeyRefreshProtocol {
         // Horner's method: work from highest to lowest coefficient
         for coeff_bytes in coefficients.iter().rev().skip(1) {
             let mut temp = blst_fr::default();
+            // SAFETY: blst_fr_mul reads valid caller-owned result_fr and x_fr and writes the product
+            // to caller-owned temp.
             unsafe {
                 blst_fr_mul(&mut temp, &result_fr, &x_fr);
             }
@@ -614,6 +623,8 @@ impl KeyRefreshProtocol {
             coef_bytes_arr.copy_from_slice(coeff_bytes);
             let mut coef_scalar_inner = blst_scalar::default();
             let mut coef_fr = blst_fr::default();
+            // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from coef_bytes_arr (a [u8; 32]);
+            // blst_fr_from_scalar and blst_fr_add operate on caller-owned struct references.
             unsafe {
                 blst_scalar_from_bendian(&mut coef_scalar_inner, coef_bytes_arr.as_ptr());
                 blst_fr_from_scalar(&mut coef_fr, &coef_scalar_inner);
@@ -623,11 +634,14 @@ impl KeyRefreshProtocol {
 
         // Convert result back to bytes
         let mut result_scalar = blst_scalar::default();
+        // SAFETY: blst_scalar_from_fr reads caller-owned result_fr and writes to caller-owned result_scalar.
         unsafe {
             blst_scalar_from_fr(&mut result_scalar, &result_fr);
         }
 
         let mut result_bytes = [0u8; 32];
+        // SAFETY: blst_bendian_from_scalar writes exactly 32 bytes to result_bytes (a [u8; 32]) from
+        // caller-owned result_scalar.
         unsafe {
             blst_bendian_from_scalar(result_bytes.as_mut_ptr(), &result_scalar);
         }
@@ -744,6 +758,8 @@ impl KeyRefreshProtocol {
         let mut b_fr = blst_fr::default();
         let mut sum_fr = blst_fr::default();
 
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from a_bytes/b_bytes (both [u8; 32]);
+        // blst_fr_from_scalar and blst_fr_add operate on caller-owned struct references.
         unsafe {
             blst_scalar_from_bendian(&mut a_scalar, a_bytes.as_ptr());
             blst_scalar_from_bendian(&mut b_scalar, b_bytes.as_ptr());
@@ -754,6 +770,8 @@ impl KeyRefreshProtocol {
 
         let mut sum_scalar = blst_scalar::default();
         let mut sum_bytes = [0u8; 32];
+        // SAFETY: blst_scalar_from_fr reads caller-owned sum_fr; blst_bendian_from_scalar writes exactly
+        // 32 bytes to sum_bytes (a [u8; 32]).
         unsafe {
             blst_scalar_from_fr(&mut sum_scalar, &sum_fr);
             blst_bendian_from_scalar(sum_bytes.as_mut_ptr(), &sum_scalar);

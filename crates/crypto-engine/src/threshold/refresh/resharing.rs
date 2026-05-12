@@ -426,6 +426,9 @@ fn generate_bls_commitments(coefficients: &[Vec<u8>]) -> Result<Vec<Vec<u8>>, Th
             commitments.push(identity_bytes);
         } else {
             // Compute commitment = coeff * G1
+            // SAFETY: blst_p1_generator returns a valid static G1 generator pointer; blst_p1_mult
+            // reads coeff_bytes (bit-length passed explicitly) and writes to caller-owned result;
+            // blst_p1_compress writes exactly 48 bytes to compressed (a [u8; 48]).
             unsafe {
                 let generator = blst::blst_p1_generator();
                 let mut result = blst_p1::default();
@@ -520,6 +523,8 @@ fn evaluate_bls_polynomial(coefficients: &[Vec<u8>], x: u16) -> Result<Vec<u8>, 
 
     let mut x_scalar = blst_scalar::default();
     let mut x_fr = blst_fr::default();
+    // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from x_bytes (a [u8; 32]);
+    // blst_fr_from_scalar operates on caller-owned struct references.
     unsafe {
         blst_scalar_from_bendian(&mut x_scalar, x_bytes.as_ptr());
         blst_fr_from_scalar(&mut x_fr, &x_scalar);
@@ -531,6 +536,8 @@ fn evaluate_bls_polynomial(coefficients: &[Vec<u8>], x: u16) -> Result<Vec<u8>, 
     let last_coef = coefficients.last().unwrap();
     let mut last_bytes = [0u8; 32];
     last_bytes.copy_from_slice(last_coef);
+    // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from last_bytes (a [u8; 32]);
+    // blst_fr_from_scalar operates on caller-owned struct references.
     unsafe {
         blst_scalar_from_bendian(&mut coef_scalar, last_bytes.as_ptr());
         blst_fr_from_scalar(&mut result_fr, &coef_scalar);
@@ -538,6 +545,7 @@ fn evaluate_bls_polynomial(coefficients: &[Vec<u8>], x: u16) -> Result<Vec<u8>, 
 
     for coeff_bytes in coefficients.iter().rev().skip(1) {
         let mut temp = blst_fr::default();
+        // SAFETY: blst_fr_mul reads caller-owned result_fr and x_fr and writes to caller-owned temp.
         unsafe {
             blst_fr_mul(&mut temp, &result_fr, &x_fr);
         }
@@ -546,6 +554,8 @@ fn evaluate_bls_polynomial(coefficients: &[Vec<u8>], x: u16) -> Result<Vec<u8>, 
         coef_bytes_arr.copy_from_slice(coeff_bytes);
         let mut coef_scalar_inner = blst_scalar::default();
         let mut coef_fr = blst_fr::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from coef_bytes_arr (a [u8; 32]);
+        // blst_fr_from_scalar and blst_fr_add operate on caller-owned struct references.
         unsafe {
             blst_scalar_from_bendian(&mut coef_scalar_inner, coef_bytes_arr.as_ptr());
             blst_fr_from_scalar(&mut coef_fr, &coef_scalar_inner);
@@ -555,6 +565,8 @@ fn evaluate_bls_polynomial(coefficients: &[Vec<u8>], x: u16) -> Result<Vec<u8>, 
 
     let mut result_scalar = blst_scalar::default();
     let mut result_bytes = [0u8; 32];
+    // SAFETY: blst_scalar_from_fr reads caller-owned result_fr; blst_bendian_from_scalar writes
+    // exactly 32 bytes to result_bytes (a [u8; 32]).
     unsafe {
         blst_scalar_from_fr(&mut result_scalar, &result_fr);
         blst_bendian_from_scalar(result_bytes.as_mut_ptr(), &result_scalar);
@@ -651,6 +663,8 @@ fn lagrange_interpolate_bls(
         share_bytes_arr.copy_from_slice(share_bytes);
         let mut share_scalar = blst_scalar::default();
         let mut share_fr = blst_fr::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from share_bytes_arr (a [u8; 32]);
+        // blst_fr_from_scalar operates on caller-owned struct references.
         unsafe {
             blst_scalar_from_bendian(&mut share_scalar, share_bytes_arr.as_ptr());
             blst_fr_from_scalar(&mut share_fr, &share_scalar);
@@ -668,6 +682,8 @@ fn lagrange_interpolate_bls(
         let mut numerator = blst_fr::default();
         let mut denominator = blst_fr::default();
         let mut one_scalar = blst_scalar::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from one_bytes (a [u8; 32]);
+        // blst_fr_from_scalar operates on caller-owned struct references.
         unsafe {
             blst_scalar_from_bendian(&mut one_scalar, one_bytes.as_ptr());
             blst_fr_from_scalar(&mut numerator, &one_scalar);
@@ -683,6 +699,8 @@ fn lagrange_interpolate_bls(
                 xj_bytes[24..32].copy_from_slice(&x_j.to_be_bytes());
                 let mut xj_scalar = blst_scalar::default();
                 let mut xj_fr = blst_fr::default();
+                // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from xj_bytes (a [u8; 32]);
+                // blst_fr_from_scalar and blst_fr_mul operate on caller-owned struct references.
                 unsafe {
                     blst_scalar_from_bendian(&mut xj_scalar, xj_bytes.as_ptr());
                     blst_fr_from_scalar(&mut xj_fr, &xj_scalar);
@@ -694,12 +712,15 @@ fn lagrange_interpolate_bls(
                 xi_bytes[24..32].copy_from_slice(&x_i.to_be_bytes());
                 let mut xi_scalar = blst_scalar::default();
                 let mut xi_fr = blst_fr::default();
+                // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from xi_bytes (a [u8; 32]);
+                // blst_fr_from_scalar operates on caller-owned struct references.
                 unsafe {
                     blst_scalar_from_bendian(&mut xi_scalar, xi_bytes.as_ptr());
                     blst_fr_from_scalar(&mut xi_fr, &xi_scalar);
                 }
 
                 let mut diff = blst_fr::default();
+                // SAFETY: blst_fr_sub and blst_fr_mul operate on caller-owned blst_fr struct references.
                 unsafe {
                     blst_fr_sub(&mut diff, &xj_fr, &xi_fr);
                     blst_fr_mul(&mut denominator, &denominator, &diff);
@@ -710,6 +731,7 @@ fn lagrange_interpolate_bls(
         // lambda = numerator / denominator
         let mut denom_inv = blst_fr::default();
         let mut lambda = blst_fr::default();
+        // SAFETY: blst_fr_inverse and blst_fr_mul operate on caller-owned blst_fr struct references.
         unsafe {
             blst_fr_inverse(&mut denom_inv, &denominator);
             blst_fr_mul(&mut lambda, &numerator, &denom_inv);
@@ -717,6 +739,7 @@ fn lagrange_interpolate_bls(
 
         // result += share * lambda
         let mut term = blst_fr::default();
+        // SAFETY: blst_fr_mul and blst_fr_add operate on caller-owned blst_fr struct references.
         unsafe {
             blst_fr_mul(&mut term, &share_fr, &lambda);
             blst_fr_add(&mut result_fr, &result_fr, &term);
@@ -726,6 +749,8 @@ fn lagrange_interpolate_bls(
     // Convert result to bytes
     let mut result_scalar = blst_scalar::default();
     let mut result_bytes = [0u8; 32];
+    // SAFETY: blst_scalar_from_fr reads caller-owned result_fr; blst_bendian_from_scalar writes
+    // exactly 32 bytes to result_bytes (a [u8; 32]).
     unsafe {
         blst_scalar_from_fr(&mut result_scalar, &result_fr);
         blst_bendian_from_scalar(result_bytes.as_mut_ptr(), &result_scalar);

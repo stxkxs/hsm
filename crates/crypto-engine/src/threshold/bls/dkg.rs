@@ -483,21 +483,29 @@ impl BlsDkg {
     /// Multiply a scalar by the G1 generator point.
     fn scalar_mult_g1(&self, scalar: &[u8; 32]) -> Result<[u8; 48], ThresholdError> {
         let mut scalar_repr = blst_scalar::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from scalar (a [u8; 32]) and writes
+        // to caller-owned scalar_repr.
         unsafe {
             blst_scalar_from_bendian(&mut scalar_repr, scalar.as_ptr());
         }
 
         // Get the generator point
+        // SAFETY: blst_p1_generator returns a valid static G1 generator pointer with 'static lifetime.
         let generator_ptr = unsafe { blst_p1_generator() };
+        // SAFETY: generator_ptr points to a valid static blst_p1 owned by blst; the dereference copies
+        // the struct by value into a local.
         let generator = unsafe { *generator_ptr };
 
         let mut result = blst_p1::default();
+        // SAFETY: blst_p1_mult reads caller-owned generator and scalar_repr.b (a [u8; 32] inside
+        // blst_scalar, bit-length 256 passed explicitly) and writes to caller-owned result.
         unsafe {
             blst_p1_mult(&mut result, &generator, scalar_repr.b.as_ptr(), 256);
         }
 
         // Compress the result
         let mut compressed = [0u8; 48];
+        // SAFETY: blst_p1_compress writes exactly 48 bytes to compressed (a [u8; 48]) from caller-owned result.
         unsafe {
             blst_p1_compress(compressed.as_mut_ptr(), &result);
         }
@@ -526,6 +534,8 @@ impl BlsDkg {
 
         let mut x_scalar = blst_scalar::default();
         let mut x_fr = blst_fr::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from x_bytes (a [u8; 32]);
+        // blst_fr_from_scalar operates on caller-owned struct references.
         unsafe {
             blst_scalar_from_bendian(&mut x_scalar, x_bytes.as_ptr());
             blst_fr_from_scalar(&mut x_fr, &x_scalar);
@@ -534,6 +544,8 @@ impl BlsDkg {
         // Initialize result with highest coefficient (Horner's method)
         let mut result_fr = blst_fr::default();
         let mut coef_scalar = blst_scalar::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from the last coefficient (a [u8; 32]);
+        // blst_fr_from_scalar operates on caller-owned struct references.
         unsafe {
             blst_scalar_from_bendian(&mut coef_scalar, coefficients.last().unwrap().as_ptr());
             blst_fr_from_scalar(&mut result_fr, &coef_scalar);
@@ -543,12 +555,15 @@ impl BlsDkg {
         for coef in coefficients.iter().rev().skip(1) {
             // result = result * x + coef
             let mut temp = blst_fr::default();
+            // SAFETY: blst_fr_mul reads caller-owned result_fr and x_fr and writes to caller-owned temp.
             unsafe {
                 blst_fr_mul(&mut temp, &result_fr, &x_fr);
             }
 
             let mut coef_scalar_inner = blst_scalar::default();
             let mut coef_fr = blst_fr::default();
+            // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from coef (a [u8; 32]);
+            // blst_fr_from_scalar and blst_fr_add operate on caller-owned struct references.
             unsafe {
                 blst_scalar_from_bendian(&mut coef_scalar_inner, coef.as_ptr());
                 blst_fr_from_scalar(&mut coef_fr, &coef_scalar_inner);
@@ -558,11 +573,13 @@ impl BlsDkg {
 
         // Convert result back to bytes
         let mut result_scalar = blst_scalar::default();
+        // SAFETY: blst_scalar_from_fr reads caller-owned result_fr and writes to caller-owned result_scalar.
         unsafe {
             blst_scalar_from_fr(&mut result_scalar, &result_fr);
         }
 
         let mut result_bytes = [0u8; 32];
+        // SAFETY: blst_bendian_from_scalar writes exactly 32 bytes to result_bytes (a [u8; 32]).
         unsafe {
             blst_bendian_from_scalar(result_bytes.as_mut_ptr(), &result_scalar);
         }
@@ -597,6 +614,9 @@ impl BlsDkg {
             // Decompress commitment
             let mut c_affine = blst_p1_affine::default();
             let mut c_point = blst_p1::default();
+            // SAFETY: blst_p1_uncompress reads exactly 48 bytes from commitment (a [u8; 48]) and writes
+            // to caller-owned c_affine; blst_p1_from_affine reads caller-owned c_affine and writes to
+            // caller-owned c_point.
             unsafe {
                 let result = blst_p1_uncompress(&mut c_affine, commitment.as_ptr());
                 if result != BLST_ERROR::BLST_SUCCESS {
@@ -607,11 +627,14 @@ impl BlsDkg {
 
             // Multiply commitment by x^i: C_i * x^i
             let mut x_power_scalar = blst_scalar::default();
+            // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from x_power (a [u8; 32]).
             unsafe {
                 blst_scalar_from_bendian(&mut x_power_scalar, x_power.as_ptr());
             }
 
             let mut scaled_c = blst_p1::default();
+            // SAFETY: blst_p1_mult reads caller-owned c_point and x_power_scalar.b (a [u8; 32] inside
+            // blst_scalar, bit-length 256 passed explicitly) and writes to caller-owned scaled_c.
             unsafe {
                 blst_p1_mult(&mut scaled_c, &c_point, x_power_scalar.b.as_ptr(), 256);
             }
@@ -622,6 +645,7 @@ impl BlsDkg {
                 is_first = false;
             } else {
                 let mut new_sum = blst_p1::default();
+                // SAFETY: blst_p1_add_or_double reads caller-owned sum and scaled_c and writes to caller-owned new_sum.
                 unsafe {
                     blst_p1_add_or_double(&mut new_sum, &sum, &scaled_c);
                 }
@@ -634,6 +658,7 @@ impl BlsDkg {
 
         // Compress the sum (right-hand side)
         let mut rhs = [0u8; 48];
+        // SAFETY: blst_p1_compress writes exactly 48 bytes to rhs (a [u8; 48]) from caller-owned sum.
         unsafe {
             blst_p1_compress(rhs.as_mut_ptr(), &sum);
         }
@@ -650,6 +675,8 @@ impl BlsDkg {
     ) -> Result<[u8; 32], ThresholdError> {
         let mut scalar_fr = blst_fr::default();
         let mut scalar_repr = blst_scalar::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from scalar (a [u8; 32]);
+        // blst_fr_from_scalar operates on caller-owned struct references.
         unsafe {
             blst_scalar_from_bendian(&mut scalar_repr, scalar.as_ptr());
             blst_fr_from_scalar(&mut scalar_fr, &scalar_repr);
@@ -662,6 +689,8 @@ impl BlsDkg {
 
         let mut mult_scalar = blst_scalar::default();
         let mut mult_fr = blst_fr::default();
+        // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from mult_bytes (a [u8; 32]);
+        // blst_fr_from_scalar operates on caller-owned struct references.
         unsafe {
             blst_scalar_from_bendian(&mut mult_scalar, mult_bytes.as_ptr());
             blst_fr_from_scalar(&mut mult_fr, &mult_scalar);
@@ -669,17 +698,20 @@ impl BlsDkg {
 
         // Multiply
         let mut result_fr = blst_fr::default();
+        // SAFETY: blst_fr_mul reads caller-owned scalar_fr and mult_fr and writes to caller-owned result_fr.
         unsafe {
             blst_fr_mul(&mut result_fr, &scalar_fr, &mult_fr);
         }
 
         // Convert back to bytes
         let mut result_scalar = blst_scalar::default();
+        // SAFETY: blst_scalar_from_fr reads caller-owned result_fr and writes to caller-owned result_scalar.
         unsafe {
             blst_scalar_from_fr(&mut result_scalar, &result_fr);
         }
 
         let mut result_bytes = [0u8; 32];
+        // SAFETY: blst_bendian_from_scalar writes exactly 32 bytes to result_bytes (a [u8; 32]).
         unsafe {
             blst_bendian_from_scalar(result_bytes.as_mut_ptr(), &result_scalar);
         }
@@ -695,6 +727,8 @@ impl BlsDkg {
         for share in self.received_shares.values() {
             let mut share_scalar = blst_scalar::default();
             let mut share_fr = blst_fr::default();
+            // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from share (a [u8; 32]);
+            // blst_fr_from_scalar operates on caller-owned struct references.
             unsafe {
                 blst_scalar_from_bendian(&mut share_scalar, share.as_ptr());
                 blst_fr_from_scalar(&mut share_fr, &share_scalar);
@@ -705,6 +739,7 @@ impl BlsDkg {
                 is_first = false;
             } else {
                 let mut new_sum = blst_fr::default();
+                // SAFETY: blst_fr_add reads caller-owned sum_fr and share_fr and writes to caller-owned new_sum.
                 unsafe {
                     blst_fr_add(&mut new_sum, &sum_fr, &share_fr);
                 }
@@ -714,11 +749,13 @@ impl BlsDkg {
 
         // Convert back to bytes
         let mut result_scalar = blst_scalar::default();
+        // SAFETY: blst_scalar_from_fr reads caller-owned sum_fr and writes to caller-owned result_scalar.
         unsafe {
             blst_scalar_from_fr(&mut result_scalar, &sum_fr);
         }
 
         let mut result_bytes = [0u8; 32];
+        // SAFETY: blst_bendian_from_scalar writes exactly 32 bytes to result_bytes (a [u8; 32]).
         unsafe {
             blst_bendian_from_scalar(result_bytes.as_mut_ptr(), &result_scalar);
         }
@@ -738,6 +775,8 @@ impl BlsDkg {
             // Decompress
             let mut c_affine = blst_p1_affine::default();
             let mut c_point = blst_p1::default();
+            // SAFETY: blst_p1_uncompress reads exactly 48 bytes from c0 (a [u8; 48]) and writes to
+            // caller-owned c_affine; blst_p1_from_affine reads caller-owned c_affine and writes to caller-owned c_point.
             unsafe {
                 let result = blst_p1_uncompress(&mut c_affine, c0.as_ptr());
                 if result != BLST_ERROR::BLST_SUCCESS {
@@ -754,6 +793,7 @@ impl BlsDkg {
                 is_first = false;
             } else {
                 let mut new_sum = blst_p1::default();
+                // SAFETY: blst_p1_add_or_double reads caller-owned sum and c_point and writes to caller-owned new_sum.
                 unsafe {
                     blst_p1_add_or_double(&mut new_sum, &sum, &c_point);
                 }
@@ -763,6 +803,7 @@ impl BlsDkg {
 
         // Compress the result
         let mut compressed = [0u8; 48];
+        // SAFETY: blst_p1_compress writes exactly 48 bytes to compressed (a [u8; 48]) from caller-owned sum.
         unsafe {
             blst_p1_compress(compressed.as_mut_ptr(), &sum);
         }
