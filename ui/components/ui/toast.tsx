@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,9 @@ interface ToastProps extends Toast {
   onClose: (id: string) => void;
 }
 
+// Spring that settles fast — toasts are background ack, not the main event.
+const toastSpring = { type: "spring" as const, stiffness: 420, damping: 32 };
+
 const ToastItem = ({
   id,
   title,
@@ -24,9 +28,16 @@ const ToastItem = ({
   onClose,
 }: ToastProps) => {
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: 24, scale: 0.96 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: 24, scale: 0.96, transition: { duration: 0.15 } }}
+      transition={toastSpring}
+      role={variant === "destructive" ? "alert" : "status"}
+      aria-live={variant === "destructive" ? "assertive" : "polite"}
       className={cn(
-        "pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-lg border p-4 shadow-lg transition-all toast-enter",
+        "pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-lg border p-4 shadow-lg",
         {
           "bg-background text-foreground border-border": variant === "default",
           "bg-destructive text-destructive-foreground border-destructive":
@@ -45,11 +56,12 @@ const ToastItem = ({
       <button
         onClick={() => onClose(id)}
         className="absolute right-2 top-2 rounded-md p-1 opacity-70 hover:opacity-100 transition-opacity"
+        aria-label="Dismiss notification"
       >
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </button>
-    </div>
+    </motion.div>
   );
 };
 
@@ -61,9 +73,11 @@ interface ToasterProps {
 export function Toaster({ toasts, onClose }: ToasterProps) {
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 w-full max-w-sm pointer-events-none">
-      {toasts.map((toast) => (
-        <ToastItem key={toast.id} {...toast} onClose={onClose} />
-      ))}
+      <AnimatePresence initial={false}>
+        {toasts.map((toast) => (
+          <ToastItem key={toast.id} {...toast} onClose={onClose} />
+        ))}
+      </AnimatePresence>
     </div>
   );
 }

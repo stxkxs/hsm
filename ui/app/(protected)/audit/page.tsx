@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
 import { RefreshCw, Download, Filter } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { PageContainer } from "@/components/layout/page-container";
@@ -178,20 +179,34 @@ export default function AuditPage() {
             </Button>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table
+              role="region"
+              aria-label="Audit log events, sorted by most recent"
+            >
               <TableHeader>
                 <TableRow>
-                  <TableHead>Timestamp</TableHead>
-                  <TableHead>Operation</TableHead>
-                  <TableHead>Actor</TableHead>
-                  <TableHead>Resource</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Hash</TableHead>
+                  <TableHead scope="col">Timestamp</TableHead>
+                  <TableHead scope="col">Operation</TableHead>
+                  <TableHead scope="col">Actor</TableHead>
+                  <TableHead scope="col">Resource</TableHead>
+                  <TableHead scope="col">Status</TableHead>
+                  <TableHead scope="col">Hash</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {entries.map((entry) => (
-                  <TableRow key={entry.id}>
+                {entries.map((entry, idx) => (
+                  <motion.tr
+                    key={entry.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    // Stagger only the first viewport's worth — long lists shouldn't pay the price.
+                    transition={{
+                      duration: 0.18,
+                      delay: idx < 20 ? idx * 0.015 : 0,
+                      ease: "easeOut",
+                    }}
+                    className="border-b transition-colors hover:bg-muted/50"
+                  >
                     <TableCell className="text-muted-foreground whitespace-nowrap">
                       {formatDate(entry.timestamp)}
                     </TableCell>
@@ -215,7 +230,7 @@ export default function AuditPage() {
                         {truncateMiddle(entry.hash, 12)}
                       </code>
                     </TableCell>
-                  </TableRow>
+                  </motion.tr>
                 ))}
               </TableBody>
             </Table>

@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { Copy, Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,10 @@ interface OperationResultProps {
   success?: boolean;
   error?: string;
 }
+
+// Spring tuned to feel responsive without bouncing — signals resolution, not playfulness.
+const resultSpring = { type: "spring" as const, stiffness: 380, damping: 30 };
+const iconSpring = { type: "spring" as const, stiffness: 600, damping: 22 };
 
 export function OperationResult({
   title,
@@ -29,31 +34,60 @@ export function OperationResult({
 
   if (error) {
     return (
-      <Card className="border-destructive">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-destructive">
-            <X className="h-5 w-5" />
-            {title} Failed
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-destructive">{error}</p>
-        </CardContent>
-      </Card>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={resultSpring}
+      >
+        <Card className="border-destructive" role="status" aria-live="polite">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <motion.span
+                initial={{ scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={iconSpring}
+                className="inline-flex"
+              >
+                <X className="h-5 w-5" />
+              </motion.span>
+              {title} Failed
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-destructive">{error}</p>
+          </CardContent>
+        </Card>
+      </motion.div>
     );
   }
 
   if (!data) return null;
 
   return (
-    <Card className={success === false ? "border-destructive" : "border-success"}>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={resultSpring}
+    >
+      <Card
+        className={success === false ? "border-destructive" : "border-success"}
+        role="status"
+        aria-live="polite"
+      >
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          {success !== false ? (
-            <Check className="h-5 w-5 text-success" />
-          ) : (
-            <X className="h-5 w-5 text-destructive" />
-          )}
+          <motion.span
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={iconSpring}
+            className="inline-flex"
+          >
+            {success !== false ? (
+              <Check className="h-5 w-5 text-success" />
+            ) : (
+              <X className="h-5 w-5 text-destructive" />
+            )}
+          </motion.span>
           {title}
           {typeof success === "boolean" && (
             <Badge variant={success ? "success" : "destructive"}>
@@ -104,6 +138,7 @@ export function OperationResult({
           </div>
         ))}
       </CardContent>
-    </Card>
+      </Card>
+    </motion.div>
   );
 }
