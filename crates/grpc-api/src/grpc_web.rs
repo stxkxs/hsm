@@ -23,7 +23,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use grpc_api::grpc_web::{GrpcWebConfig, create_grpc_web_layer};
+//! use hsm_grpc_api::grpc_web::{GrpcWebConfig, create_grpc_web_layer};
 //! use tonic::transport::Server;
 //!
 //! #[tokio::main]
@@ -42,7 +42,7 @@
 //! }
 //! ```
 
-use http::header::{AUTHORIZATION, CONTENT_TYPE};
+use http::header::{HeaderName, AUTHORIZATION, CONTENT_TYPE};
 use http::Method;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -132,17 +132,17 @@ pub fn create_cors_layer(config: &GrpcWebConfig) -> CorsLayer {
         .allow_headers([
             CONTENT_TYPE,
             AUTHORIZATION,
-            "x-grpc-web".parse().unwrap(),
-            "x-user-agent".parse().unwrap(),
+            HeaderName::from_static("x-grpc-web"),
+            HeaderName::from_static("x-user-agent"),
         ])
         .max_age(std::time::Duration::from_secs(config.max_age_seconds));
 
     if config.expose_grpc_headers {
         cors = cors.expose_headers([
-            "grpc-status".parse().unwrap(),
-            "grpc-message".parse().unwrap(),
-            "grpc-encoding".parse().unwrap(),
-            "grpc-accept-encoding".parse().unwrap(),
+            HeaderName::from_static("grpc-status"),
+            HeaderName::from_static("grpc-message"),
+            HeaderName::from_static("grpc-encoding"),
+            HeaderName::from_static("grpc-accept-encoding"),
         ]);
     }
 
