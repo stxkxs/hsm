@@ -47,7 +47,7 @@
 //! ## Basic Setup
 //!
 //! ```no_run
-//! use metrics::{MetricsCollector, MetricsExporter};
+//! use hsm_metrics::{MetricsCollector, MetricsExporter};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -69,7 +69,7 @@
 //! ## Custom Port
 //!
 //! ```no_run
-//! use metrics::{MetricsCollector, MetricsExporter};
+//! use hsm_metrics::{MetricsCollector, MetricsExporter};
 //! use std::net::SocketAddr;
 //!
 //! #[tokio::main]
@@ -88,7 +88,7 @@
 //! ## Background Server
 //!
 //! ```no_run
-//! use metrics::{MetricsCollector, MetricsExporter};
+//! use hsm_metrics::{MetricsCollector, MetricsExporter};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {

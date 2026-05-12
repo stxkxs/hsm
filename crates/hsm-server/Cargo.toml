@@ -16,8 +16,8 @@ hsm-crypto-engine = { path = "../crypto-engine" }
 hsm-key-manager = { path = "../key-manager" }
 hsm-auth = { path = "../auth" }
 hsm-rest-api = { path = "../rest-api" }
-hsm-metrics = { path = "../metrics", package = "metrics" }
-audit = { path = "../audit" }
+hsm-metrics = { path = "../metrics" }
+hsm-audit = { path = "../audit" }
 hsm-storage = { path = "../storage" }
 hsm-config = { path = "../config" }
 

@@ -1,4 +1,4 @@
-use audit::{AuditConfig, AuditLogger, EventType, StorageConfig};
+use hsm_audit::{AuditConfig, AuditLogger, EventType, StorageConfig};
 use std::time::Instant;
 use tempfile::TempDir;
 
@@ -511,7 +511,7 @@ fn test_large_event_metadata() {
     let count = 100;
 
     for i in 1..=count {
-        let builder = audit::AuditEvent::builder()
+        let builder = hsm_audit::AuditEvent::builder()
             .event_type(EventType::Sign)
             .operation(format!("op_{}", i))
             .namespace("default")

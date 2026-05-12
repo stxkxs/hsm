@@ -42,7 +42,7 @@ use tracing::info;
 /// # Examples
 ///
 /// ```no_run
-/// use grpc_api::{config::ServerConfig, server::create_server};
+/// use hsm_grpc_api::{config::ServerConfig, server::create_server};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let config = ServerConfig::default();
@@ -158,8 +158,8 @@ fn create_tls_config(config: &TlsConfig) -> Result<ServerTlsConfig> {
 /// # Examples
 ///
 /// ```no_run
-/// use grpc_api::server::{create_server, shutdown_signal};
-/// use grpc_api::config::ServerConfig;
+/// use hsm_grpc_api::server::{create_server, shutdown_signal};
+/// use hsm_grpc_api::config::ServerConfig;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -230,8 +230,8 @@ pub async fn shutdown_signal() {
 /// # Examples
 ///
 /// ```no_run
-/// use grpc_api::cache::ResponseCache;
-/// use grpc_api::server::cache_cleanup_task;
+/// use hsm_grpc_api::cache::ResponseCache;
+/// use hsm_grpc_api::server::cache_cleanup_task;
 /// use std::time::Duration;
 /// use tokio::sync::watch;
 ///
@@ -298,7 +298,7 @@ pub async fn cache_cleanup_task(
 /// # Examples
 ///
 /// ```no_run
-/// use grpc_api::server::health::HealthService;
+/// use hsm_grpc_api::server::health::HealthService;
 /// use tonic_health::pb::health_server::HealthServer;
 ///
 /// #[tokio::main]

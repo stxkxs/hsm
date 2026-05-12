@@ -71,7 +71,7 @@
 //! ### Server Setup
 //!
 //! ```rust,ignore
-//! use hsm_kmip::{KmipServer, KmipServerConfig, HsmClient};
+//! use hsm_kmip_server::{KmipServer, KmipServerConfig, HsmClient};
 //! use std::sync::Arc;
 //!
 //! #[tokio::main]

@@ -1,8 +1,8 @@
-use audit::{
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use hsm_audit::{
     AsyncAuditConfig, AsyncAuditLogger, AuditConfig, AuditLogger, EnhancedAuditStorage,
     EnhancedStorageConfig, EventType, StorageConfig, TamperDetector,
 };
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use tempfile::TempDir;
 
 // Synchronous logging benchmarks
@@ -216,7 +216,7 @@ fn bench_enhanced_storage(c: &mut Criterion) {
 
                 // Write 1000 events
                 for i in 1..=1000 {
-                    let event = audit::AuditEvent::builder()
+                    let event = hsm_audit::AuditEvent::builder()
                         .sequence(i)
                         .event_type(EventType::Sign)
                         .operation("test_op")

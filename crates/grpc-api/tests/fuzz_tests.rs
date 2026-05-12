@@ -1,4 +1,4 @@
-use grpc_api::validation::*;
+use hsm_grpc_api::validation::*;
 use proptest::prelude::*;
 
 proptest! {
@@ -122,7 +122,7 @@ mod quickcheck_tests {
 #[cfg(test)]
 mod cache_fuzz {
     use super::*;
-    use grpc_api::cache::*;
+    use hsm_grpc_api::cache::*;
     use std::time::Duration;
 
     proptest! {
@@ -165,7 +165,7 @@ mod cache_fuzz {
 #[cfg(test)]
 mod circuit_breaker_fuzz {
     use super::*;
-    use grpc_api::circuit_breaker::*;
+    use hsm_grpc_api::circuit_breaker::*;
     use std::time::Duration;
 
     proptest! {
@@ -212,7 +212,7 @@ mod circuit_breaker_fuzz {
 #[cfg(test)]
 mod error_fuzz {
     use super::*;
-    use grpc_api::ApiError;
+    use hsm_grpc_api::ApiError;
     use tonic::Status;
 
     proptest! {

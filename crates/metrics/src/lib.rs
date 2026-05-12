@@ -28,7 +28,7 @@
 //! ## Quick Start
 //!
 //! ```no_run
-//! use metrics::{MetricsCollector, MetricsExporter, OperationStatus};
+//! use hsm_metrics::{MetricsCollector, MetricsExporter, OperationStatus};
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -50,7 +50,7 @@
 //! ### Operation Timing with RAII Guard
 //!
 //! ```rust,ignore
-//! use metrics::{MetricsCollector, OperationTimer};
+//! use hsm_metrics::{MetricsCollector, OperationTimer};
 //!
 //! fn sign_message(collector: &MetricsCollector, message: &[u8]) -> Result<Vec<u8>, Error> {
 //!     // Timer automatically records duration when dropped
@@ -65,7 +65,7 @@
 //! ### Key State Tracking
 //!
 //! ```rust,ignore
-//! use metrics::{MetricsCollector, KeyState};
+//! use hsm_metrics::{MetricsCollector, KeyState};
 //!
 //! // Track key lifecycle
 //! collector.set_key_count("ed25519", "production", KeyState::Active, 150);
@@ -76,7 +76,7 @@
 //! ### Error Recording
 //!
 //! ```rust,ignore
-//! use metrics::MetricsCollector;
+//! use hsm_metrics::MetricsCollector;
 //!
 //! // Record errors for alerting
 //! collector.record_error("key_not_found", "sign");
@@ -89,7 +89,7 @@
 //! Prevent metric explosion from unbounded label values:
 //!
 //! ```rust,ignore
-//! use metrics::{MetricsCollector, CardinalityLimiter};
+//! use hsm_metrics::{MetricsCollector, CardinalityLimiter};
 //!
 //! // Limit namespace cardinality to prevent abuse
 //! let limiter = CardinalityLimiter::new()
@@ -105,7 +105,7 @@
 //! Monitor component health for orchestration systems:
 //!
 //! ```rust,ignore
-//! use metrics::{HealthChecker, HealthStatus, ComponentHealth};
+//! use hsm_metrics::{HealthChecker, HealthStatus, ComponentHealth};
 //!
 //! let health_checker = HealthChecker::new();
 //!

@@ -115,7 +115,7 @@ pub const MAX_METADATA_VALUE_SIZE: usize = 1024;
 /// # Examples
 ///
 /// ```
-/// use grpc_api::validation::validate_key_id;
+/// use hsm_grpc_api::validation::validate_key_id;
 ///
 /// // Valid key ID
 /// assert!(validate_key_id(b"my-key-123").is_ok());
@@ -173,7 +173,7 @@ pub fn validate_key_id(key_id: &[u8]) -> Result<(), Status> {
 /// # Examples
 ///
 /// ```
-/// use grpc_api::validation::validate_namespace;
+/// use hsm_grpc_api::validation::validate_namespace;
 ///
 /// // Valid namespaces
 /// assert!(validate_namespace("production").is_ok());
@@ -234,7 +234,7 @@ pub fn validate_namespace(namespace: &str) -> Result<(), Status> {
 /// # Examples
 ///
 /// ```
-/// use grpc_api::validation::validate_data_size;
+/// use hsm_grpc_api::validation::validate_data_size;
 ///
 /// // Valid message
 /// let message = b"Hello, world!";
@@ -282,7 +282,7 @@ pub fn validate_data_size(data: &[u8], operation: &str) -> Result<(), Status> {
 /// # Examples
 ///
 /// ```
-/// use grpc_api::validation::validate_algorithm;
+/// use hsm_grpc_api::validation::validate_algorithm;
 ///
 /// // Valid algorithms
 /// assert!(validate_algorithm("RSA_2048").is_ok());
@@ -328,7 +328,7 @@ pub fn validate_algorithm(algorithm: &str) -> Result<(), Status> {
 /// # Examples
 ///
 /// ```
-/// use grpc_api::validation::validate_batch_size;
+/// use hsm_grpc_api::validation::validate_batch_size;
 ///
 /// // Valid batch sizes
 /// assert!(validate_batch_size(10, "sign").is_ok());
@@ -384,7 +384,7 @@ pub fn validate_batch_size(size: usize, operation: &str) -> Result<(), Status> {
 /// # Examples
 ///
 /// ```
-/// use grpc_api::validation::validate_metadata;
+/// use hsm_grpc_api::validation::validate_metadata;
 /// use std::collections::HashMap;
 ///
 /// // Valid metadata

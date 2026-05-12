@@ -1,7 +1,7 @@
 //! Comprehensive tamper detection tests
 
-use audit::{AuditEvent, EventType, OperationResult, TamperDetector, Violation};
 use chrono::{Duration, Utc};
+use hsm_audit::{AuditEvent, EventType, OperationResult, TamperDetector, Violation};
 
 fn create_test_event(seq: u64, prev_hash: &str) -> AuditEvent {
     AuditEvent::builder()

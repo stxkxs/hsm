@@ -1,6 +1,6 @@
 //! Integration tests for the metrics crate
 
-use metrics::{
+use hsm_metrics::{
     CardinalityLimiter, ComponentHealth, ConnectivityCheck, HealthCheck, HealthChecker,
     HealthStatus, KeyState, MetricsCollector, MetricsExporter, OperationStatus, OperationTimer,
     PerformanceCheck, SamplingConfig,
@@ -169,7 +169,7 @@ fn test_component_health() {
 
 #[test]
 fn test_health_report() {
-    let mut report = metrics::HealthReport::new();
+    let mut report = hsm_metrics::HealthReport::new();
     assert_eq!(report.status, HealthStatus::Healthy);
     assert!(report.is_healthy());
 

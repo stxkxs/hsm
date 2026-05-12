@@ -1,6 +1,6 @@
 //! Integration tests for Shamir's Secret Sharing functionality.
 
-use backup::{
+use hsm_backup::{
     recover_master_key, split_master_key, BackupError, SerializableShare, ShamirConfig,
     ShamirSecretSharing,
 };

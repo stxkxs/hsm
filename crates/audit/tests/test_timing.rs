@@ -1,5 +1,5 @@
-use audit::{AuditEvent, EventType, OperationResult, TamperDetector};
 use chrono::Utc;
+use hsm_audit::{AuditEvent, EventType, OperationResult, TamperDetector};
 
 #[test]
 fn test_timing_breakdown() {

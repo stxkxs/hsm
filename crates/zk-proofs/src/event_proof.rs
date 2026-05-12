@@ -35,7 +35,7 @@ use ark_relations::{
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_snark::SNARK;
 use ark_std::rand::{CryptoRng, RngCore};
-use audit::{AuditEvent, EventType};
+use hsm_audit::{AuditEvent, EventType};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -226,8 +226,8 @@ impl EventExistenceCircuit {
 
         // Hash result (Success = 0, Failure = 1)
         let result_byte = match event.result {
-            audit::OperationResult::Success => 0u8,
-            audit::OperationResult::Failure { .. } => 1u8,
+            hsm_audit::OperationResult::Success => 0u8,
+            hsm_audit::OperationResult::Failure { .. } => 1u8,
         };
         hasher.update(&[result_byte]);
 
@@ -500,8 +500,8 @@ impl Default for EventProofSystem {
 
 /// Create a dummy audit event for testing/setup
 fn create_dummy_event() -> AuditEvent {
-    use audit::OperationResult;
     use chrono::Utc;
+    use hsm_audit::OperationResult;
 
     AuditEvent {
         timestamp: Utc::now(),
@@ -548,8 +548,8 @@ mod tests {
     use super::*;
     use ark_std::rand::rngs::StdRng;
     use ark_std::rand::SeedableRng;
-    use audit::{AuditEventBuilder, OperationResult};
     use chrono::Utc;
+    use hsm_audit::{AuditEventBuilder, OperationResult};
 
     fn create_test_event(sequence: u64) -> AuditEvent {
         AuditEvent {

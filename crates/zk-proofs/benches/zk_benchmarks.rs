@@ -17,9 +17,9 @@
 
 use ark_bn254::Fr;
 use ark_std::{rand::SeedableRng, test_rng};
-use audit::{AuditEventBuilder, EventType, OperationResult};
 use chrono::Utc;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use hsm_audit::{AuditEventBuilder, EventType, OperationResult};
 use zk_proofs::{
     event_proof::EventProofRequest,
     lasso::{LookupArgument, LookupTable},
@@ -28,10 +28,10 @@ use zk_proofs::{
 };
 
 /// Create a test audit event
-fn create_test_event(sequence: u64) -> audit::AuditEvent {
-    use audit::OperationResult;
+fn create_test_event(sequence: u64) -> hsm_audit::AuditEvent {
+    use hsm_audit::OperationResult;
 
-    audit::AuditEvent {
+    hsm_audit::AuditEvent {
         timestamp: Utc::now(),
         sequence,
         event_type: EventType::Sign,

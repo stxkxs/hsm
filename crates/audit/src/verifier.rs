@@ -48,7 +48,7 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use audit::{AuditVerifier, AuditEvent};
+//! use hsm_audit::{AuditVerifier, AuditEvent};
 //! use std::path::Path;
 //!
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -72,8 +72,8 @@
 //! ## Detailed Report Example
 //!
 //! ```rust
-//! # use audit::{AuditVerifier, HashChain};
-//! # use audit::event::{AuditEvent, EventType, OperationResult};
+//! # use hsm_audit::{AuditVerifier, HashChain};
+//! # use hsm_audit::event::{AuditEvent, EventType, OperationResult};
 //! # use chrono::Utc;
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! # let chain = HashChain::new();
@@ -111,8 +111,8 @@
 //! For large logs, you can verify specific ranges:
 //!
 //! ```rust
-//! # use audit::{AuditVerifier, HashChain};
-//! # use audit::event::{AuditEvent, EventType, OperationResult};
+//! # use hsm_audit::{AuditVerifier, HashChain};
+//! # use hsm_audit::event::{AuditEvent, EventType, OperationResult};
 //! # use chrono::Utc;
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! # let chain = HashChain::new();
@@ -144,8 +144,8 @@
 //! Verify events against a trusted Merkle root:
 //!
 //! ```rust
-//! # use audit::{AuditVerifier, MerkleTree};
-//! # use audit::event::{AuditEvent, EventType, OperationResult};
+//! # use hsm_audit::{AuditVerifier, MerkleTree};
+//! # use hsm_audit::event::{AuditEvent, EventType, OperationResult};
 //! # use chrono::Utc;
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! # let mut events = Vec::new();
@@ -262,8 +262,8 @@ impl VerificationResult {
 /// # Examples
 ///
 /// ```rust
-/// use audit::AuditVerifier;
-/// # use audit::event::{AuditEvent, EventType, OperationResult};
+/// use hsm_audit::AuditVerifier;
+/// # use hsm_audit::event::{AuditEvent, EventType, OperationResult};
 /// # use chrono::Utc;
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// # let mut events = Vec::new();
@@ -315,7 +315,7 @@ impl AuditVerifier {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use audit::AuditVerifier;
+    /// use hsm_audit::AuditVerifier;
     /// use std::path::Path;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {

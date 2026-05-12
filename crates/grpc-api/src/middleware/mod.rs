@@ -23,7 +23,7 @@
 //! Using the request logger:
 //!
 //! ```
-//! use grpc_api::middleware::logging::RequestLogger;
+//! use hsm_grpc_api::middleware::logging::RequestLogger;
 //!
 //! let logger = RequestLogger::new();
 //!
@@ -36,7 +36,7 @@
 //! Using the metrics collector:
 //!
 //! ```
-//! use grpc_api::middleware::metrics::MetricsCollector;
+//! use hsm_grpc_api::middleware::metrics::MetricsCollector;
 //!
 //! let metrics = MetricsCollector::new();
 //!
@@ -49,7 +49,7 @@
 //! Using the auth interceptor:
 //!
 //! ```
-//! use grpc_api::middleware::auth::AuthInterceptor;
+//! use hsm_grpc_api::middleware::auth::AuthInterceptor;
 //!
 //! // Create a stub interceptor for development/testing
 //! let auth = AuthInterceptor::new_stub();

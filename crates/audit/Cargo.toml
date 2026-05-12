@@ -1,5 +1,5 @@
 [package]
-name = "audit"
+name = "hsm-audit"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

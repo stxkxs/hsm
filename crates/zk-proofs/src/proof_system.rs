@@ -14,7 +14,7 @@ use crate::{
 };
 use ark_bn254::Fr;
 use ark_std::{rand::rngs::StdRng, rand::SeedableRng};
-// use audit::AuditEvent; // Not needed at module level
+// use hsm_audit::AuditEvent; // Not needed at module level
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -323,8 +323,8 @@ impl Default for BatchProver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use audit::{AuditEventBuilder, EventType, OperationResult};
     use chrono::Utc;
+    use hsm_audit::{AuditEventBuilder, EventType, OperationResult};
     use sha2::{Digest, Sha256};
 
     /// Compute Merkle root from leaf hashes (for test consistency)
@@ -356,10 +356,10 @@ mod tests {
         current_level[0]
     }
 
-    fn create_test_event(seq: u64) -> audit::AuditEvent {
-        use audit::OperationResult;
+    fn create_test_event(seq: u64) -> hsm_audit::AuditEvent {
+        use hsm_audit::OperationResult;
 
-        audit::AuditEvent {
+        hsm_audit::AuditEvent {
             timestamp: Utc::now(),
             sequence: seq,
             event_type: EventType::Sign,
@@ -421,7 +421,7 @@ mod tests {
     }
 
     /// Compute event hash (must match EventExistenceCircuit::compute_event_hash)
-    fn compute_event_hash(event: &audit::AuditEvent) -> [u8; 32] {
+    fn compute_event_hash(event: &hsm_audit::AuditEvent) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(&event.sequence.to_le_bytes());
         let event_type_str = format!("{:?}", event.event_type);
@@ -434,8 +434,8 @@ mod tests {
             hasher.update(key_id.as_bytes());
         }
         let result_byte = match event.result {
-            audit::OperationResult::Success => 0u8,
-            audit::OperationResult::Failure { .. } => 1u8,
+            hsm_audit::OperationResult::Success => 0u8,
+            hsm_audit::OperationResult::Failure { .. } => 1u8,
         };
         hasher.update(&[result_byte]);
         hasher.update(event.prev_hash.as_bytes());

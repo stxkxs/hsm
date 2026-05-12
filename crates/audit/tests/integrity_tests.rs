@@ -1,4 +1,6 @@
-use audit::{AuditConfig, AuditLogger, AuditVerifier, EventType, OperationResult, StorageConfig};
+use hsm_audit::{
+    AuditConfig, AuditLogger, AuditVerifier, EventType, OperationResult, StorageConfig,
+};
 use tempfile::TempDir;
 
 #[test]

@@ -1,9 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use grpc_api::*;
+use hsm_grpc_api::*;
 use std::time::Duration;
 
 fn benchmark_validation(c: &mut Criterion) {
-    use grpc_api::validation::*;
+    use hsm_grpc_api::validation::*;
 
     let mut group = c.benchmark_group("validation");
 
@@ -34,7 +34,7 @@ fn benchmark_validation(c: &mut Criterion) {
 }
 
 fn benchmark_cache(c: &mut Criterion) {
-    use grpc_api::cache::*;
+    use hsm_grpc_api::cache::*;
 
     let mut group = c.benchmark_group("cache");
 
@@ -86,7 +86,7 @@ fn benchmark_cache(c: &mut Criterion) {
 }
 
 fn benchmark_circuit_breaker(c: &mut Criterion) {
-    use grpc_api::circuit_breaker::*;
+    use hsm_grpc_api::circuit_breaker::*;
 
     let mut group = c.benchmark_group("circuit_breaker");
 
@@ -171,7 +171,7 @@ fn benchmark_error_conversion(c: &mut Criterion) {
 }
 
 fn benchmark_batch_operations(c: &mut Criterion) {
-    use grpc_api::validation::*;
+    use hsm_grpc_api::validation::*;
 
     let mut group = c.benchmark_group("batch_operations");
 
@@ -188,7 +188,7 @@ fn benchmark_batch_operations(c: &mut Criterion) {
 }
 
 fn benchmark_metadata_validation(c: &mut Criterion) {
-    use grpc_api::validation::*;
+    use hsm_grpc_api::validation::*;
     use std::collections::HashMap;
 
     let mut group = c.benchmark_group("metadata");

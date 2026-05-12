@@ -1,5 +1,5 @@
 [package]
-name = "grpc-api"
+name = "hsm-grpc-api"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

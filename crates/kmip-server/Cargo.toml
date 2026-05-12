@@ -1,5 +1,5 @@
 [package]
-name = "hsm-kmip"
+name = "hsm-kmip-server"
 version.workspace = true
 edition.workspace = true
 

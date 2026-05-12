@@ -1,6 +1,6 @@
 //! Property-based tests for backup module using proptest.
 
-use backup::*;
+use hsm_backup::*;
 use proptest::prelude::*;
 
 // Property: Export then import should recover original data

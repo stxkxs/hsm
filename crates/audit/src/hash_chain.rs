@@ -47,8 +47,8 @@
 //! ## Usage Example
 //!
 //! ```rust
-//! use audit::HashChain;
-//! use audit::event::{AuditEvent, EventType, OperationResult};
+//! use hsm_audit::HashChain;
+//! use hsm_audit::event::{AuditEvent, EventType, OperationResult};
 //! use chrono::Utc;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -96,8 +96,8 @@
 //! ## Verification Workflow
 //!
 //! ```rust
-//! # use audit::{HashChain, HashChainError};
-//! # use audit::event::{AuditEvent, EventType, OperationResult};
+//! # use hsm_audit::{HashChain, HashChainError};
+//! # use hsm_audit::event::{AuditEvent, EventType, OperationResult};
 //! # use chrono::Utc;
 //! # fn main() -> Result<(), HashChainError> {
 //! # let chain = HashChain::new();
@@ -179,8 +179,8 @@ pub enum HashChainError {
 /// # Examples
 ///
 /// ```rust
-/// use audit::HashChain;
-/// use audit::event::{AuditEvent, EventType, OperationResult};
+/// use hsm_audit::HashChain;
+/// use hsm_audit::event::{AuditEvent, EventType, OperationResult};
 /// use chrono::Utc;
 ///
 /// let chain = HashChain::new();
@@ -205,7 +205,7 @@ impl HashChain {
     /// # Examples
     ///
     /// ```rust
-    /// use audit::HashChain;
+    /// use hsm_audit::HashChain;
     ///
     /// let chain = HashChain::new();
     /// assert_eq!(chain.current_sequence(), 0);
@@ -251,8 +251,8 @@ impl HashChain {
     /// # Examples
     ///
     /// ```rust
-    /// use audit::{HashChain, HashChainError};
-    /// use audit::event::{AuditEvent, EventType, OperationResult};
+    /// use hsm_audit::{HashChain, HashChainError};
+    /// use hsm_audit::event::{AuditEvent, EventType, OperationResult};
     /// use chrono::Utc;
     ///
     /// # fn main() -> Result<(), HashChainError> {
@@ -322,8 +322,8 @@ impl HashChain {
     /// # Examples
     ///
     /// ```rust
-    /// # use audit::{HashChain, HashChainError};
-    /// # use audit::event::{AuditEvent, EventType, OperationResult};
+    /// # use hsm_audit::{HashChain, HashChainError};
+    /// # use hsm_audit::event::{AuditEvent, EventType, OperationResult};
     /// # use chrono::Utc;
     /// # fn main() -> Result<(), HashChainError> {
     /// # let chain = HashChain::new();

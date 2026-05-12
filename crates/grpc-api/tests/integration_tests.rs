@@ -1,4 +1,4 @@
-use grpc_api::*;
+use hsm_grpc_api::*;
 
 #[cfg(test)]
 mod config_tests {
@@ -40,7 +40,7 @@ mod config_tests {
 #[cfg(test)]
 mod validation_tests {
 
-    use grpc_api::validation::*;
+    use hsm_grpc_api::validation::*;
 
     #[test]
     fn test_key_id_validation() {

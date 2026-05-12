@@ -1,5 +1,5 @@
 [package]
-name = "backup"
+name = "hsm-backup"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

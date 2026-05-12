@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use hsm_kmip::operations;
-use hsm_kmip::{
+use hsm_kmip_server::operations;
+use hsm_kmip_server::{
     Attribute, CryptoParams, CryptographicAlgorithm, CryptographicUsageMask, EncryptResult,
     HsmClient, KeyInfo, KeyState, KmipError, ObjectType, Operation, RevocationReason, ServerInfo,
     Tag, Ttlv, TtlvDecoder, TtlvEncoder, TtlvError, TtlvType, TtlvValue,
@@ -662,7 +662,7 @@ async fn get_key_after_create() {
         .get(Tag::KEY_FORMAT_TYPE)
         .and_then(|t| t.value.as_enumeration())
         .unwrap();
-    assert_eq!(key_format, hsm_kmip::KeyFormatType::Raw as u32);
+    assert_eq!(key_format, hsm_kmip_server::KeyFormatType::Raw as u32);
 
     let key_value = key_block.get(Tag::KEY_VALUE).unwrap();
     let key_material = key_value
@@ -978,7 +978,7 @@ fn ttlv_encoded_size_matches_actual() {
 
     for item in &items {
         let encoded = TtlvEncoder::encode(item);
-        let predicted = hsm_kmip::ttlv::encoded_size(item);
+        let predicted = hsm_kmip_server::ttlv::encoded_size(item);
         assert_eq!(
             encoded.len(),
             predicted,
@@ -994,38 +994,38 @@ fn ttlv_encoded_size_matches_actual() {
 
 #[test]
 fn kmip_error_to_kmip_error_conversions() {
-    let cases: Vec<(KmipError, hsm_kmip::ResultReason)> = vec![
+    let cases: Vec<(KmipError, hsm_kmip_server::ResultReason)> = vec![
         (
             KmipError::ItemNotFound("k".into()),
-            hsm_kmip::ResultReason::ItemNotFound,
+            hsm_kmip_server::ResultReason::ItemNotFound,
         ),
         (
             KmipError::OperationNotSupported(Operation::Archive),
-            hsm_kmip::ResultReason::OperationNotSupported,
+            hsm_kmip_server::ResultReason::OperationNotSupported,
         ),
         (
             KmipError::PermissionDenied("no".into()),
-            hsm_kmip::ResultReason::PermissionDenied,
+            hsm_kmip_server::ResultReason::PermissionDenied,
         ),
         (
             KmipError::CryptographicFailure("bad".into()),
-            hsm_kmip::ResultReason::CryptographicFailure,
+            hsm_kmip_server::ResultReason::CryptographicFailure,
         ),
         (
             KmipError::InvalidState("wrong".into()),
-            hsm_kmip::ResultReason::WrongKeyLifecycleState,
+            hsm_kmip_server::ResultReason::WrongKeyLifecycleState,
         ),
         (
             KmipError::InvalidMessage("malformed".into()),
-            hsm_kmip::ResultReason::InvalidMessage,
+            hsm_kmip_server::ResultReason::InvalidMessage,
         ),
         (
             KmipError::InvalidAttribute("bad attr".into()),
-            hsm_kmip::ResultReason::InvalidAttribute,
+            hsm_kmip_server::ResultReason::InvalidAttribute,
         ),
         (
             KmipError::MissingData("missing".into()),
-            hsm_kmip::ResultReason::MissingData,
+            hsm_kmip_server::ResultReason::MissingData,
         ),
     ];
 
@@ -1099,7 +1099,7 @@ async fn query_supported_operations() {
             Ttlv::enumeration(Tag::OPERATION, Operation::Query as u32),
             Ttlv::enumeration(
                 Tag::QUERY_FUNCTION,
-                hsm_kmip::QueryFunction::QueryOperations as u32,
+                hsm_kmip_server::QueryFunction::QueryOperations as u32,
             ),
         ],
     );
@@ -1238,7 +1238,10 @@ fn ttlv_roundtrip_full_response_message() {
                 Tag::RESPONSE_BATCH_ITEM,
                 vec![
                     Ttlv::enumeration(Tag::OPERATION, Operation::Create as u32),
-                    Ttlv::enumeration(Tag::RESULT_STATUS, hsm_kmip::ResultStatus::Success as u32),
+                    Ttlv::enumeration(
+                        Tag::RESULT_STATUS,
+                        hsm_kmip_server::ResultStatus::Success as u32,
+                    ),
                     Ttlv::structure(
                         Tag::RESPONSE_PAYLOAD,
                         vec![

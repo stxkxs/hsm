@@ -1,6 +1,6 @@
 //! Integration tests for export and import functionality.
 
-use backup::{BackupError, KeyExporter, KeyImporter};
+use hsm_backup::{BackupError, KeyExporter, KeyImporter};
 
 #[test]
 fn test_export_import_roundtrip() {
@@ -237,7 +237,7 @@ fn test_serialization_deserialization() {
     let json = exporter.serialize_backup(&backup).unwrap();
 
     // Deserialize and verify
-    let deserialized: backup::EncryptedBackup = serde_json::from_slice(&json).unwrap();
+    let deserialized: hsm_backup::EncryptedBackup = serde_json::from_slice(&json).unwrap();
 
     assert_eq!(deserialized.version, backup.version);
     assert_eq!(deserialized.encrypted_data, backup.encrypted_data);

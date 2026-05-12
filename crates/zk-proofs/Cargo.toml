@@ -1,5 +1,5 @@
 [package]
-name = "zk-proofs"
+name = "hsm-zk-proofs"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -41,7 +41,7 @@ rayon = "1.10"  # Parallel proof generation
 chrono = "0.4"  # Time handling
 
 # Audit integration
-audit = { path = "../audit" }
+hsm-audit = { path = "../audit" }
 
 [dev-dependencies]
 criterion = "0.8"

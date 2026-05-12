@@ -141,7 +141,7 @@
 //! ## Basic Server Setup
 //!
 //! ```no_run
-//! use grpc_api::{config::ServerConfig, server::create_server};
+//! use hsm_grpc_api::{config::ServerConfig, server::create_server};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -163,7 +163,7 @@
 //! ## Server with TLS
 //!
 //! ```no_run
-//! use grpc_api::config::{ServerConfig, TlsConfig};
+//! use hsm_grpc_api::config::{ServerConfig, TlsConfig};
 //!
 //! # #[tokio::main]
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -183,7 +183,7 @@
 //! ## Server with mTLS (Mutual Authentication)
 //!
 //! ```no_run
-//! use grpc_api::config::{ServerConfig, TlsConfig};
+//! use hsm_grpc_api::config::{ServerConfig, TlsConfig};
 //!
 //! # #[tokio::main]
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -203,7 +203,7 @@
 //! ## Using Circuit Breaker
 //!
 //! ```no_run
-//! use grpc_api::{CircuitBreaker, CircuitBreakerConfig};
+//! use hsm_grpc_api::{CircuitBreaker, CircuitBreakerConfig};
 //! use std::time::Duration;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -229,7 +229,7 @@
 //! ## Input Validation
 //!
 //! ```no_run
-//! use grpc_api::validation::{validate_key_id, validate_namespace, validate_data_size};
+//! use hsm_grpc_api::validation::{validate_key_id, validate_namespace, validate_data_size};
 //!
 //! # fn main() -> Result<(), tonic::Status> {
 //! // Validate key ID (max 256 bytes)
@@ -248,7 +248,7 @@
 //! ## Response Caching
 //!
 //! ```no_run
-//! use grpc_api::{ResponseCache, CacheKey};
+//! use hsm_grpc_api::{ResponseCache, CacheKey};
 //!
 //! # fn main() {
 //! // Create cache with default capacity

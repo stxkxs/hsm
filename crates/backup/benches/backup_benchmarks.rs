@@ -1,5 +1,5 @@
-use backup::*;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use hsm_backup::*;
 
 fn benchmark_export(c: &mut Criterion) {
     let mut group = c.benchmark_group("export");

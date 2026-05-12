@@ -16,7 +16,7 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use audit::{AuditLogger, AuditConfig, EventType};
+//! use hsm_audit::{AuditLogger, AuditConfig, EventType};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a logger

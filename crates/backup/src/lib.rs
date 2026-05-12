@@ -50,7 +50,7 @@
 //! ### Create and Restore a Backup
 //!
 //! ```rust
-//! use backup::{SimpleBackupManager, BackupManager};
+//! use hsm_backup::{SimpleBackupManager, BackupManager};
 //!
 //! // Create a backup manager and add keys
 //! let mut manager = SimpleBackupManager::new();
@@ -72,7 +72,7 @@
 //! Split the master key into 5 shares, requiring any 3 to recover:
 //!
 //! ```rust
-//! use backup::{SimpleBackupManager, BackupManager};
+//! use hsm_backup::{SimpleBackupManager, BackupManager};
 //!
 //! let mut manager = SimpleBackupManager::new();
 //!

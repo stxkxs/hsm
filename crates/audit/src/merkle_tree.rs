@@ -66,7 +66,7 @@
 //! ## Usage Example
 //!
 //! ```rust
-//! use audit::MerkleTree;
+//! use hsm_audit::MerkleTree;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create tree from event hashes
@@ -98,7 +98,7 @@
 //! ## Incremental Updates
 //!
 //! ```rust
-//! use audit::MerkleTree;
+//! use hsm_audit::MerkleTree;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut tree = MerkleTree::new();
@@ -118,7 +118,7 @@
 //! ## Proof Verification Workflow
 //!
 //! ```rust
-//! # use audit::{MerkleTree, MerkleProof};
+//! # use hsm_audit::{MerkleTree, MerkleProof};
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! # let tree = MerkleTree::from_hashes(vec!["h1".into(), "h2".into(), "h3".into()]);
 //! // Auditor generates proof for a specific event
@@ -224,7 +224,7 @@ impl MerkleNode {
 /// # Examples
 ///
 /// ```rust
-/// use audit::MerkleTree;
+/// use hsm_audit::MerkleTree;
 ///
 /// let hashes = vec!["h1".to_string(), "h2".to_string(), "h3".to_string()];
 /// let tree = MerkleTree::from_hashes(hashes);
@@ -372,7 +372,7 @@ impl MerkleTree {
     /// # Examples
     ///
     /// ```rust
-    /// # use audit::MerkleTree;
+    /// # use hsm_audit::MerkleTree;
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let tree = MerkleTree::from_hashes(vec![
     ///     "h1".to_string(),
@@ -538,7 +538,7 @@ impl MerkleProof {
     /// # Examples
     ///
     /// ```rust
-    /// # use audit::MerkleTree;
+    /// # use hsm_audit::MerkleTree;
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let tree = MerkleTree::from_hashes(vec![
     ///     "event1".to_string(),

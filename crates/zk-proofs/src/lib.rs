@@ -34,7 +34,7 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use zk_proofs::{ProofSystem, MerkleProofRequest};
+//! use hsm_zk_proofs::{ProofSystem, MerkleProofRequest};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Initialize proof system
