@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "type-check": "tsc --noEmit",
     "cy:open": "cypress open",
     "cy:run": "cypress run",
@@ -15,7 +15,7 @@
     "test:e2e:open": "start-server-and-test dev http://localhost:3000 cy:open"
   },
   "dependencies": {
-    "@hookform/resolvers": "^3.9.0",
+    "@hookform/resolvers": "^5.0.0",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dropdown-menu": "^2.1.14",
     "@radix-ui/react-label": "^2.1.7",
@@ -28,28 +28,28 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.19.1",
-    "lucide-react": "^0.562.0",
-    "next": "^15.5.18",
+    "lucide-react": "^1.0.0",
+    "next": "^16.0.0",
     "next-themes": "^0.4.6",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-hook-form": "^7.58.1",
-    "recharts": "^2.15.0",
+    "recharts": "^3.0.0",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.24.0"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "cypress": "^13.6.0",
+    "cypress": "^15.0.0",
     "eslint": "^9.29.0",
-    "eslint-config-next": "^15.5.14",
+    "eslint-config-next": "^16.0.0",
     "postcss": "^8.5.14",
-    "start-server-and-test": "^2.0.3",
+    "start-server-and-test": "^3.0.0",
     "tailwindcss": "^4.1.10",
-    "typescript": "^5.8.3"
+    "typescript": "^6.0.0"
   },
   "overrides": {
     "eslint": {
@@ -73,7 +73,7 @@
     "@typescript-eslint/typescript-estree": {
       "minimatch": "9.0.9"
     },
-    "qs": "6.14.2",
+    "qs": "6.15.2",
     "flatted": "3.4.2",
     "tinyglobby": {
       "picomatch": "4.0.4"

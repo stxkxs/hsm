@@ -41,7 +41,7 @@ tokio-rustls = "0.26"
 # Blockchain
 bip32 = "0.5"
 bip39 = { version = "2.1", features = ["rand"] }
-alloy-primitives = "0.8"
+alloy-primitives = "1"
 alloy-rlp = "0.3"
 bitcoin = { version = "0.32", features = ["std", "secp-recovery"] }
 k256 = { version = "0.13", features = ["ecdsa", "schnorr"] }
@@ -79,7 +79,6 @@ sha3 = "0.10"
 # TLS
 rustls = "0.23"
 rustls-pki-types = "1.10"
-webpki = "0.22"
 x509-parser = "0.18"
 
 # Security
@@ -100,7 +99,7 @@ postcard = { version = "1.0", features = ["alloc"] }
 
 # Configuration
 config = "0.15"
-toml = "0.9"
+toml = "1"
 
 # Error handling
 thiserror = "2.0"
@@ -116,7 +115,7 @@ uuid = { version = "1.19", features = ["v4", "serde"] }
 parking_lot = "0.12"
 bytes = "1.11"
 dashmap = "6.1"
-lru = "0.16"
+lru = "0.18"
 tempfile = "3.19"
 async-trait = "0.1"
 
@@ -145,9 +144,3 @@ opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 2
-
-# Security patches for transitive dependencies
-[patch.crates-io]
-# Patch ark-relations to remove tracing-subscriber 0.2.x dependency
-# which has RUSTSEC-2025-0055 (ANSI escape sequence injection in logs)
-ark-relations = { path = "patches/ark-relations" }

@@ -8,7 +8,7 @@ description = "WebAssembly policy engine for HSM transaction authorization"
 
 [dependencies]
 # WASM runtime
-wasmtime = "43"
+wasmtime = "45"
 
 # Serialization
 serde.workspace = true
@@ -32,7 +32,7 @@ parking_lot.workspace = true
 dashmap.workspace = true
 
 # LRU cache for compiled modules
-lru = "0.16"
+lru = "0.18"
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }

@@ -40,8 +40,6 @@ impl StreamingBackupHeader {
 pub struct StreamingBackupWriter<W: AsyncWrite + Unpin> {
     writer: W,
     keys_written: usize,
-    #[allow(dead_code)]
-    header: StreamingBackupHeader,
 }
 
 impl<W: AsyncWrite + Unpin> StreamingBackupWriter<W> {
@@ -61,7 +59,6 @@ impl<W: AsyncWrite + Unpin> StreamingBackupWriter<W> {
         Ok(Self {
             writer,
             keys_written: 0,
-            header,
         })
     }
 

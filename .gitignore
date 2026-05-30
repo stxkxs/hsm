@@ -30,3 +30,7 @@ test-data/keys/
 dist/
 build/
 .claude/worktrees/
+
+# Node (UI + SDKs)
+node_modules/
+.next/

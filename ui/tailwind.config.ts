@@ -1,4 +1,6 @@
-module.exports = {
+import tailwindcssAnimate from "tailwindcss-animate";
+
+const config = {
   content: [
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
@@ -109,5 +111,7 @@ module.exports = {
     },
   },
   darkMode: "class",
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindcssAnimate],
 };
+
+export default config;

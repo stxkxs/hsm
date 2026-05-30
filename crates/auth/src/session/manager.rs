@@ -8,8 +8,6 @@ use crate::mtls::ClientIdentity;
 use crate::rbac::Permission;
 use chrono::{Duration, Utc};
 use dashmap::DashMap;
-use parking_lot::RwLock;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Session manager for tracking active client sessions with lock-free concurrency.
@@ -177,9 +175,6 @@ pub struct SessionManager {
     templates: Arc<DashMap<TemplateId, SessionTemplate>>,
     /// Rate limiters per session (only created for rate-limited sessions)
     rate_limiters: Arc<DashMap<SessionId, Arc<RateLimiterState>>>,
-    /// Legacy sessions for backward compatibility
-    #[allow(dead_code)]
-    legacy_sessions: Arc<RwLock<HashMap<SessionId, Session>>>,
     default_ttl: i64,
 }
 
@@ -190,7 +185,6 @@ impl SessionManager {
             sessions: Arc::new(DashMap::new()),
             templates: Arc::new(DashMap::new()),
             rate_limiters: Arc::new(DashMap::new()),
-            legacy_sessions: Arc::new(RwLock::new(HashMap::new())),
             default_ttl: default_ttl_seconds,
         }
     }

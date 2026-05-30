@@ -39,7 +39,7 @@
 //! └──────────┬──────────┘
 //!            ▼
 //! ┌─────────────────────┐
-//! │ 4. Authentication   │  ◄─── Session validation (TODO)
+//! │ 4. Authentication   │  ◄─── Session validation
 //! └──────────┬──────────┘
 //!            ▼
 //! ┌─────────────────────┐

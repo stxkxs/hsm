@@ -175,7 +175,6 @@ pub struct HdKeyInfo {
 
 /// Complete key structure
 #[derive(Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct Key {
     pub id: KeyId,
     pub key_type: KeyType,
