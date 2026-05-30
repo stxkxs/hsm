@@ -121,8 +121,11 @@ impl AsyncFileStorage {
         // Write to temporary files first (atomic write pattern)
         let key_path = self.get_key_file_path(namespace, key_id);
         let meta_path = self.get_meta_file_path(namespace, key_id);
-        let temp_key_path = key_path.with_extension("tmp");
-        let temp_meta_path = meta_path.with_extension("tmp");
+        // Distinct temp names per file. Using a bare "tmp" extension would map both
+        // key-<id>.enc and key-<id>.meta to the same key-<id>.tmp, so the first rename
+        // below consumes it and the second fails with ENOENT.
+        let temp_key_path = key_path.with_extension(format!("{KEY_FILE_EXT}.tmp"));
+        let temp_meta_path = meta_path.with_extension(format!("{META_FILE_EXT}.tmp"));
 
         // Write encrypted key to temporary file
         let mut key_file = OpenOptions::new()
@@ -399,7 +402,6 @@ mod tests {
     use tempfile::TempDir;
 
     #[tokio::test]
-    #[ignore = "pre-existing bug: store_key returns ENOENT after create_namespace succeeds"]
     async fn test_store_and_load_key() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().to_path_buf();
@@ -424,7 +426,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "pre-existing bug: store_key returns ENOENT after create_namespace succeeds"]
     async fn test_secure_delete() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().to_path_buf();
@@ -448,7 +449,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "pre-existing bug: store_key returns ENOENT after create_namespace succeeds"]
     async fn test_batch_operations() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().to_path_buf();
@@ -481,7 +481,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "pre-existing bug: store_key returns ENOENT after create_namespace succeeds"]
     async fn test_list_keys() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().to_path_buf();
@@ -512,7 +511,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "pre-existing bug: store_key returns ENOENT after create_namespace succeeds"]
     async fn test_atomic_write() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().to_path_buf();

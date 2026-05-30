@@ -188,7 +188,7 @@ export function randomBytes(length: number): Uint8Array {
 /**
  * Concatenate multiple byte arrays
  */
-export function concatBytes(...arrays: Uint8Array[]): Uint8Array {
+export function concatBytes(...arrays: Uint8Array[]): Uint8Array<ArrayBuffer> {
   const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
   const result = new Uint8Array(totalLength);
   let offset = 0;

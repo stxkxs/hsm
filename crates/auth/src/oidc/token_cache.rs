@@ -30,9 +30,6 @@ pub struct Jwks {
 struct CachedJwks {
     /// The JWKS
     jwks: Jwks,
-    /// Fetch timestamp
-    #[allow(dead_code)]
-    fetched_at: DateTime<Utc>,
     /// Expiration
     expires_at: DateTime<Utc>,
 }
@@ -149,7 +146,6 @@ impl JwksCache {
             uri.to_string(),
             CachedJwks {
                 jwks: jwks.clone(),
-                fetched_at: now,
                 expires_at: now + self.default_ttl,
             },
         );
@@ -230,7 +226,6 @@ mod tests {
             "test".to_string(),
             CachedJwks {
                 jwks: Jwks { keys: vec![] },
-                fetched_at: Utc::now(),
                 expires_at: Utc::now() + Duration::hours(1),
             },
         );

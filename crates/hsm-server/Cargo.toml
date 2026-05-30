@@ -41,7 +41,7 @@ prometheus = { workspace = true }
 
 # Configuration
 config = "0.15"
-toml = "0.9"
+toml = "1"
 
 # Logging
 tracing = "0.1"

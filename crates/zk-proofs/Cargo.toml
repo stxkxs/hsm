@@ -13,22 +13,25 @@ serde_json = "1.0"
 sha2 = "0.10"
 hex = "0.4"
 
-# ZK proof libraries - using arkworks ecosystem for flexibility
-# Note: ark-relations is patched at workspace level to remove tracing-subscriber
-# dependency (RUSTSEC-2025-0055 - ANSI escape injection vulnerability)
-ark-ff = "0.5"
-ark-ec = "0.5"
-ark-std = "0.5"
-ark-poly = "0.5"
-ark-serialize = "0.5"
-ark-relations = "0.5"  # R1CS constraints (patched at workspace level)
-ark-bn254 = "0.5"  # BN254 curve for efficient pairings
-ark-groth16 = "0.5"  # Groth16 SNARK
-ark-snark = "0.5"  # SNARK trait
-ark-crypto-primitives = "0.5"
+# ZK proof libraries - arkworks ecosystem (0.6).
+# 0.6 uses the gr1cs (generalized R1CS) constraint API — R1CS constraints are
+# enforced via ConstraintSystemRef::enforce_r1cs_constraint (see merkle_proof.rs /
+# event_proof.rs). It also pulls tracing-subscriber 0.3 (optional, off by default)
+# rather than the vulnerable 0.2.x, so the former local ark-relations patch for
+# RUSTSEC-2025-0055 is no longer needed and has been removed.
+ark-ff = "0.6"
+ark-ec = "0.6"
+ark-std = "0.6"
+ark-poly = "0.6"
+ark-serialize = "0.6"
+ark-relations = "0.6"  # gr1cs constraint system
+ark-bn254 = "0.6"  # BN254 curve for efficient pairings
+ark-groth16 = "0.6"  # Groth16 SNARK
+ark-snark = "0.6"  # SNARK trait
+ark-crypto-primitives = "0.6"
 
 # Polynomial commitments for Lasso-style lookups
-ark-poly-commit = "0.5"
+ark-poly-commit = "0.6"
 
 # Cryptographic primitives
 blake2 = "0.10"  # Fast hash function

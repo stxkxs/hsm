@@ -1,7 +1,7 @@
 # hsm
 
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![Rust Version](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust Version](https://img.shields.io/badge/rust-1.93%2B-orange.svg)](https://www.rust-lang.org)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 [![Coverage](https://img.shields.io/badge/coverage-78%25-green.svg)]()
 
@@ -24,7 +24,7 @@ This HSM provides cryptographic key management and operations as a service, with
 
 ### Prerequisites
 
-- Rust 1.75 or later
+- Rust 1.93 or later
 - Protocol Buffers compiler (`protoc`)
 - OpenSSL development libraries
 
@@ -202,7 +202,7 @@ hsm_audit_integrity_violations_total
 
 ## Architecture
 
-The HSM is built as a modular monolith with 21 independent crates organized into functional groups:
+The HSM is built as a modular monolith with 23 independent crates organized into functional groups:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -580,7 +580,9 @@ hsm/
 │   ├── hardware-backend/   # Hardware HSM support
 │   ├── pkcs11-bridge/      # PKCS#11 interface
 │   ├── secrets/            # Secret management
-│   └── kmip-server/        # KMIP protocol support
+│   ├── kmip-server/        # KMIP protocol support
+│   ├── cluster/            # Raft-based high availability
+│   └── bridge-monitor/     # Cross-chain bridge monitoring
 ├── docs/
 │   ├── architecture/       # Design documents
 │   └── phases/             # Implementation plans
@@ -686,6 +688,12 @@ cargo fuzz run fuzz_ed25519_sign
 - **Issue**: Potential bias in polynomial coefficients during secret splitting
 - **Mitigation**: No upstream fix available. Consider additional randomness sources for critical key splits
 - **Reference**: https://rustsec.org/advisories/RUSTSEC-2024-0398
+
+The two advisories above carry security-relevant mitigations. The full, canonical list of
+accepted transitive advisories (all unmaintained-crate warnings with no upstream fix and no
+runtime exposure — e.g. `paste`, `fxhash`, `derivative`, `serde_cbor`) is tracked with
+per-entry rationale in [`.cargo/audit.toml`](.cargo/audit.toml). `cargo audit --deny warnings`
+passes against that ignore list.
 
 ### Best Practices
 

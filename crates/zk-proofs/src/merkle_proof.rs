@@ -24,8 +24,8 @@ use ark_groth16::{
     prepare_verifying_key, Groth16, PreparedVerifyingKey, Proof, ProvingKey, VerifyingKey,
 };
 use ark_relations::{
+    gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable},
     lc,
-    r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable},
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_snark::SNARK;
@@ -211,10 +211,10 @@ impl ConstraintSynthesizer<Fr> for MerkleProofCircuit {
         // Constraint: merkle_root_var == computed_root_var
         // Using: merkle_root - computed_root = 0
         // Which is: (merkle_root - computed_root) * 1 = 0
-        cs.enforce_constraint(
-            lc!() + merkle_root_var - computed_root_var,
-            lc!() + Variable::One,
-            lc!(),
+        cs.enforce_r1cs_constraint(
+            || lc!() + merkle_root_var - computed_root_var,
+            || lc!() + Variable::One,
+            || lc!(),
         )?;
 
         Ok(())

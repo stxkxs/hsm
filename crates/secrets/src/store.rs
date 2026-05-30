@@ -65,6 +65,8 @@ pub trait SecretStore: Send + Sync {
 pub struct SecretsManager {
     store: Arc<dyn SecretStore>,
     lease_manager: LeaseManager,
+    /// Key ID reserved for envelope-encrypting stored secret material through a
+    /// single configured KEK.
     #[allow(dead_code)]
     encryption_key_id: String,
 }

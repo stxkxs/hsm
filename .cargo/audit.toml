@@ -40,6 +40,31 @@ ignore = [
     # (grpc-api dev-dep only). The HSM does not install a custom rand logger, so this is
     # inert. quickcheck 1.x is not yet updated to rand 0.11+.
     "RUSTSEC-2026-0097",
+
+    # paste - unmaintained proc-macro (RUSTSEC-2024-0436). Pulled in transitively via
+    # alloy-primitives (blockchain), pqcrypto-mldsa (crypto-engine ML-DSA), and ark-ff. No
+    # upstream fix: even alloy-primitives 1.x and the latest pqcrypto-mldsa still depend on
+    # paste ^1.0. It is a compile-time-only proc-macro, so there is no runtime exposure.
+    "RUSTSEC-2024-0436",
+
+    # fxhash - unmaintained (RUSTSEC-2025-0057), pulled in via sled 0.34 (storage/cluster/
+    # validator). Sled 0.34.x has not moved off fxhash; the only drop is on the unstable
+    # sled 1.0-alpha track, which is not an acceptable bump for the slashing DB. Affects only
+    # sled-backed components, not the default hsm-server binary.
+    "RUSTSEC-2025-0057",
+
+    # derivative - unmaintained proc-macro (RUSTSEC-2024-0388), pulled in via the arkworks
+    # stack (ark-crypto-primitives / ark-poly-commit) used only by hsm-zk-proofs. No upstream
+    # fix: even arkworks 0.6 still depends on derivative ^2.0. Not present in the default
+    # hsm-server binary; compile-time-only proc-macro with no runtime exposure.
+    "RUSTSEC-2024-0388",
+
+    # serde_cbor - unmaintained (RUSTSEC-2021-0127), pulled in via aws-nitro-enclaves-cose,
+    # which is compiled only when the optional `aws-nitro` feature of hsm-hardware-backend is
+    # enabled (not in the default hsm-server binary). aws-nitro-enclaves-cose is at its latest
+    # 0.5.2 and still depends on serde_cbor ^0.11; no upstream fix. Also noted in
+    # crates/hardware-backend/Cargo.toml.
+    "RUSTSEC-2021-0127",
 ]
 
 # Severity threshold for errors (we want to be notified of medium+ vulnerabilities)

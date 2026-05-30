@@ -29,8 +29,8 @@ use ark_groth16::{
     prepare_verifying_key, Groth16, PreparedVerifyingKey, Proof, ProvingKey, VerifyingKey,
 };
 use ark_relations::{
+    gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable},
     lc,
-    r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable},
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_snark::SNARK;
@@ -302,31 +302,31 @@ impl ConstraintSynthesizer<Fr> for EventExistenceCircuit {
 
         // Constraint 1: Event sequence matches public input
         // sequence_var - event_sequence_witness = 0
-        cs.enforce_constraint(
-            lc!() + sequence_var - event_sequence_witness,
-            lc!() + Variable::One,
-            lc!(),
+        cs.enforce_r1cs_constraint(
+            || lc!() + sequence_var - event_sequence_witness,
+            || lc!() + Variable::One,
+            || lc!(),
         )?;
 
         // Constraint 2: Event type matches public input
-        cs.enforce_constraint(
-            lc!() + event_type_var - event_type_witness,
-            lc!() + Variable::One,
-            lc!(),
+        cs.enforce_r1cs_constraint(
+            || lc!() + event_type_var - event_type_witness,
+            || lc!() + Variable::One,
+            || lc!(),
         )?;
 
         // Constraint 3: Timestamp matches public input
-        cs.enforce_constraint(
-            lc!() + timestamp_var - event_timestamp_witness,
-            lc!() + Variable::One,
-            lc!(),
+        cs.enforce_r1cs_constraint(
+            || lc!() + timestamp_var - event_timestamp_witness,
+            || lc!() + Variable::One,
+            || lc!(),
         )?;
 
         // Constraint 4: Merkle root matches computed root from path
-        cs.enforce_constraint(
-            lc!() + merkle_root_var - computed_root_witness,
-            lc!() + Variable::One,
-            lc!(),
+        cs.enforce_r1cs_constraint(
+            || lc!() + merkle_root_var - computed_root_witness,
+            || lc!() + Variable::One,
+            || lc!(),
         )?;
 
         Ok(())

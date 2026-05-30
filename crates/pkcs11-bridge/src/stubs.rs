@@ -7,12 +7,6 @@
 
 use crate::ffi::*;
 
-// Signature: (CK_VOID_PTR) -> CK_RV
-#[allow(dead_code)]
-extern "C" fn stub_void_ptr(_: CK_VOID_PTR) -> CK_RV {
-    CKR_FUNCTION_NOT_SUPPORTED
-}
-
 // Signature: (CK_SESSION_HANDLE) -> CK_RV
 extern "C" fn stub_session(_: CK_SESSION_HANDLE) -> CK_RV {
     CKR_FUNCTION_NOT_SUPPORTED
@@ -158,17 +152,6 @@ extern "C" fn stub_set_operation_state(
     _: CK_ULONG,
     _: CK_OBJECT_HANDLE,
     _: CK_OBJECT_HANDLE,
-) -> CK_RV {
-    CKR_FUNCTION_NOT_SUPPORTED
-}
-
-// Signature: (CK_SESSION_HANDLE, CK_USER_TYPE, CK_UTF8CHAR_PTR, CK_ULONG) -> CK_RV
-#[allow(dead_code)]
-extern "C" fn stub_login(
-    _: CK_SESSION_HANDLE,
-    _: CK_USER_TYPE,
-    _: CK_UTF8CHAR_PTR,
-    _: CK_ULONG,
 ) -> CK_RV {
     CKR_FUNCTION_NOT_SUPPORTED
 }

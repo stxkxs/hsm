@@ -8,7 +8,7 @@ Production-grade software HSM in Rust for Kubernetes. 23 crates in `crates/`, on
 
 ## Build requirements
 
-System dependencies: `protobuf-compiler`, `libz3-dev`, `libclang-dev`. MSRV is Rust 1.91 (pinned in `rust-toolchain.toml`).
+System dependencies: `protobuf-compiler`, `libz3-dev`, `libclang-dev`. MSRV is Rust 1.93 (pinned in `rust-toolchain.toml`; required by wasmtime 45).
 
 ## Commands
 

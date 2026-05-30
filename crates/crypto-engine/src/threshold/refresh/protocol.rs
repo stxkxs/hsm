@@ -149,7 +149,6 @@ pub struct KeyRefreshProtocol {
     /// This participant's ID.
     participant_id: ParticipantId,
     /// This participant's polynomial coefficients (generated in Round 1).
-    #[allow(dead_code)]
     my_coefficients: Vec<Vec<u8>>,
 }
 

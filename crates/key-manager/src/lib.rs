@@ -259,6 +259,9 @@ pub trait KeyManager: Send + Sync {
 /// Default implementation of KeyManager
 pub struct DefaultKeyManager {
     store: KeyStore,
+    /// Crypto engine retained for dependency injection. Key operations currently
+    /// call the crypto-engine functions directly; this handle lets an alternative
+    /// engine be supplied via `with_crypto_engine`.
     #[allow(dead_code)]
     crypto_engine: Arc<dyn CryptoEngine>,
 }
