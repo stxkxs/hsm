@@ -58,7 +58,12 @@ jobs:
           --ignore RUSTSEC-2021-0145 \
           --ignore RUSTSEC-2024-0375 \
           --ignore RUSTSEC-2024-0384 \
-          --ignore RUSTSEC-2026-0097
+          --ignore RUSTSEC-2026-0097 \
+          --ignore RUSTSEC-2026-0161 \
+          --ignore RUSTSEC-2026-0162 \
+          --ignore RUSTSEC-2026-0163 \
+          --ignore RUSTSEC-2026-0166 \
+          --ignore RUSTSEC-2026-0173
         # Ignored advisories (unmaintained transitive deps with no fix available):
         # RUSTSEC-2024-0436: paste - via ark-ff/pqcrypto-mldsa
         # RUSTSEC-2024-0388: derivative - via ark-ff
@@ -70,6 +75,8 @@ jobs:
         # RUSTSEC-2024-0375 / RUSTSEC-2021-0145: atty unmaintained / unaligned read - via clap 2 -> dudect-bencher (dev-dep only)
         # RUSTSEC-2024-0384: instant unmaintained - via parking_lot 0.11 -> sled (storage/cluster/validator)
         # RUSTSEC-2026-0097: rand 0.10 unsound with custom global logger - via quickcheck (grpc-api dev-dep only, HSM doesn't install a custom rand logger)
+        # RUSTSEC-2026-0161/0162/0163/0166: pqcrypto-mlkem/traits/internals/mldsa unmaintained - upstream PQClean project archived; back the PQC ML-KEM/ML-DSA support in crypto-engine, no drop-in replacement available
+        # RUSTSEC-2026-0173: proc-macro-error2 unmaintained - transitive build-time proc-macro dependency
 
   msrv:
     runs-on: ubuntu-latest
