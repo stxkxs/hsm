@@ -22,7 +22,6 @@ WORKDIR /build
 
 # Copy workspace manifests first for layer caching
 COPY Cargo.toml Cargo.lock ./
-COPY patches/ patches/
 
 # Copy all crate manifests (for dependency resolution)
 COPY crates/crypto-engine/Cargo.toml crates/crypto-engine/Cargo.toml
