@@ -191,21 +191,62 @@ struct MerkleNode {
     hash: String,
 }
 
+/// RFC 6962 domain-separation prefix for leaf nodes.
+const LEAF_PREFIX: u8 = 0x00;
+/// RFC 6962 domain-separation prefix for internal nodes.
+const NODE_PREFIX: u8 = 0x01;
+
+/// Hash a raw leaf value using RFC 6962 domain separation.
+///
+/// `leaf_digest = SHA256(0x00 || leaf_value_bytes)`
+///
+/// The `0x00` prefix ensures a leaf hash can never collide with an internal
+/// node hash (which is prefixed with `0x01`). Without this separation an
+/// attacker could present an internal-node hash as if it were a leaf, forging
+/// a second pre-image inclusion proof for an event that was never logged.
+fn hash_leaf(leaf_value: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update([LEAF_PREFIX]);
+    hasher.update(leaf_value.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// Combine two child node hashes using RFC 6962 domain separation.
+///
+/// `node = SHA256(0x01 || left_digest_bytes || right_digest_bytes)`
+///
+/// The child digests are interpreted as raw bytes (decoded from hex) so that
+/// the construction matches the canonical RFC 6962 binary layout. If a child
+/// digest is not valid hex (should never happen for internally produced
+/// hashes), its UTF-8 bytes are used as a fallback so verification of
+/// externally supplied proofs remains deterministic.
+fn hash_node(left: &str, right: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update([NODE_PREFIX]);
+    match (hex::decode(left), hex::decode(right)) {
+        (Ok(l), Ok(r)) => {
+            hasher.update(&l);
+            hasher.update(&r);
+        }
+        _ => {
+            hasher.update(left.as_bytes());
+            hasher.update(right.as_bytes());
+        }
+    }
+    hex::encode(hasher.finalize())
+}
+
 impl MerkleNode {
-    fn new(hash: String) -> Self {
-        Self { hash }
+    /// Create a leaf node from a raw leaf value (applies the leaf prefix).
+    fn leaf(leaf_value: &str) -> Self {
+        Self {
+            hash: hash_leaf(leaf_value),
+        }
     }
 
     fn with_children(left: MerkleNode, right: MerkleNode) -> Self {
-        let hash = Self::combine_hashes(&left.hash, &right.hash);
+        let hash = hash_node(&left.hash, &right.hash);
         Self { hash }
-    }
-
-    fn combine_hashes(left: &str, right: &str) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(left.as_bytes());
-        hasher.update(right.as_bytes());
-        hex::encode(hasher.finalize())
     }
 }
 
@@ -306,7 +347,7 @@ impl MerkleTree {
         let mut nodes: Vec<MerkleNode> = self
             .leaves
             .iter()
-            .map(|hash| MerkleNode::new(hash.clone()))
+            .map(|leaf_value| MerkleNode::leaf(leaf_value))
             .collect();
 
         // Build tree bottom-up
@@ -398,10 +439,14 @@ impl MerkleTree {
 
         let mut proof = Vec::new();
         let mut current_index = *index;
-        let mut level_size = self.leaves.len();
 
-        // Build proof by traversing from leaf to root
-        let mut level_nodes: Vec<String> = self.leaves.clone();
+        // Build proof by traversing from leaf to root. The proof operates on
+        // domain-separated leaf digests (SHA256(0x00 || leaf_value)), so the
+        // sibling hashes recorded here are leaf/internal-node *digests*, never
+        // raw leaf values. This prevents an internal-node hash from being
+        // replayed as a leaf during verification.
+        let mut level_nodes: Vec<String> = self.leaves.iter().map(|v| hash_leaf(v)).collect();
+        let mut level_size = level_nodes.len();
 
         while level_size > 1 {
             let sibling_index = if current_index % 2 == 0 {
@@ -426,9 +471,9 @@ impl MerkleTree {
             let mut next_level = Vec::new();
             for chunk in level_nodes.chunks(2) {
                 if chunk.len() == 2 {
-                    next_level.push(MerkleNode::combine_hashes(&chunk[0], &chunk[1]));
+                    next_level.push(hash_node(&chunk[0], &chunk[1]));
                 } else {
-                    next_level.push(MerkleNode::combine_hashes(&chunk[0], &chunk[0]));
+                    next_level.push(hash_node(&chunk[0], &chunk[0]));
                 }
             }
 
@@ -558,13 +603,18 @@ impl MerkleProof {
     /// # }
     /// ```
     pub fn verify(&self, root_hash: &str) -> bool {
-        let mut current = self.leaf_hash.clone();
+        // Start from the domain-separated leaf digest (0x00 prefix). Sibling
+        // elements are combined with the internal-node hash (0x01 prefix).
+        // Because the prefixes differ, a proof whose recorded `leaf_hash` is
+        // actually an internal-node digest cannot be coerced into matching the
+        // root: it will be re-hashed as a leaf (0x00) and diverge.
+        let mut current = hash_leaf(&self.leaf_hash);
 
         for element in &self.elements {
             current = if element.is_left {
-                MerkleNode::combine_hashes(&element.hash, &current)
+                hash_node(&element.hash, &current)
             } else {
-                MerkleNode::combine_hashes(&current, &element.hash)
+                hash_node(&current, &element.hash)
             };
         }
 
@@ -597,7 +647,9 @@ mod tests {
         tree.update(&hash);
 
         assert_eq!(tree.len(), 1);
-        assert_eq!(tree.get_root().unwrap(), hash);
+        // With RFC 6962 domain separation the single-leaf root is the leaf
+        // digest SHA256(0x00 || leaf_value), not the raw leaf value itself.
+        assert_eq!(tree.get_root().unwrap(), hash_leaf(&hash));
         assert!(tree.verify_inclusion(&hash));
     }
 
@@ -691,6 +743,61 @@ mod tests {
         // Verify against wrong root should fail
         let wrong_root = hash_string("wrong");
         assert!(!proof.verify(&wrong_root));
+    }
+
+    #[test]
+    fn test_second_preimage_internal_node_as_leaf_rejected() {
+        // Build a 4-leaf tree.
+        let leaves: Vec<String> = (1..=4)
+            .map(|i| hash_string(&format!("data{}", i)))
+            .collect();
+        let tree = MerkleTree::from_hashes(leaves.clone());
+        let root = tree.get_root().unwrap();
+
+        // Compute the internal node digest covering leaves 0 and 1. Pre-domain
+        // separation, an attacker could present this internal-node hash as a
+        // single "leaf" and use the right subtree's internal node as the only
+        // proof element to reconstruct the root, forging inclusion of an event
+        // that was never logged. Reproduce that forgery attempt here.
+        let l0 = hash_leaf(&leaves[0]);
+        let l1 = hash_leaf(&leaves[1]);
+        let l2 = hash_leaf(&leaves[2]);
+        let l3 = hash_leaf(&leaves[3]);
+        let left_internal = hash_node(&l0, &l1); // node over leaves 0,1
+        let right_internal = hash_node(&l2, &l3); // node over leaves 2,3
+
+        // Sanity: the honest root is hash_node(left_internal, right_internal).
+        assert_eq!(root, hash_node(&left_internal, &right_internal));
+
+        // Forged proof: claim `left_internal` is itself a leaf, with
+        // `right_internal` as the sibling. Under domain separation, verify()
+        // re-hashes the claimed leaf as SHA256(0x00 || left_internal), which
+        // differs from `left_internal`, so the recomputed root will not match.
+        let forged = MerkleProof {
+            leaf_hash: left_internal.clone(),
+            elements: vec![ProofElement {
+                hash: right_internal.clone(),
+                is_left: false,
+            }],
+        };
+        assert!(
+            !forged.verify(&root),
+            "internal node hash must not be accepted as a leaf"
+        );
+
+        // The same forgery framed as a left sibling must also be rejected.
+        let forged_left = MerkleProof {
+            leaf_hash: right_internal,
+            elements: vec![ProofElement {
+                hash: left_internal,
+                is_left: true,
+            }],
+        };
+        assert!(!forged_left.verify(&root));
+
+        // Meanwhile, a genuine proof for a real leaf still verifies.
+        let honest = tree.generate_proof(&leaves[2]).unwrap();
+        assert!(honest.verify(&root));
     }
 
     #[test]

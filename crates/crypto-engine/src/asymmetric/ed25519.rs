@@ -515,7 +515,7 @@ mod tests {
     #[test]
     fn test_batch_verify_all_one_invalid() {
         let (sk1, pk1) = Ed25519Engine::generate_keypair().unwrap();
-        let (sk2, pk2) = Ed25519Engine::generate_keypair().unwrap();
+        let (_sk2, pk2) = Ed25519Engine::generate_keypair().unwrap();
 
         let msg1 = b"message one";
         let msg2 = b"message two";

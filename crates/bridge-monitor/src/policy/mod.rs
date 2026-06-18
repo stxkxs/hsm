@@ -324,16 +324,32 @@ impl PolicyEnforcer {
                 }
             }
             Severity::High => match anomaly_type {
-                AnomalyType::LargeWithdrawal => Ok(PolicyAction::RequireApproval {
-                    required_approvers: self.config.required_approvers,
-                    reason: detection.description.clone(),
-                }),
+                AnomalyType::LargeWithdrawal => {
+                    // A large withdrawal can be delayed instead of requiring a
+                    // manual approval when a time lock is configured, giving
+                    // operators a window to react before funds move.
+                    if self.config.time_lock_secs > 0 {
+                        Ok(PolicyAction::TimeLock {
+                            delay_secs: self.config.time_lock_secs,
+                            reason: format!(
+                                "Large withdrawal of {} held for review (correlation {})",
+                                event.amount(),
+                                event.id
+                            ),
+                        })
+                    } else {
+                        Ok(PolicyAction::RequireApproval {
+                            required_approvers: self.config.required_approvers,
+                            reason: format!("{} (correlation {})", detection.description, event.id),
+                        })
+                    }
+                }
                 AnomalyType::BlacklistedAddress => Ok(PolicyAction::Block {
                     reason: "Blacklisted address".to_string(),
                 }),
                 _ => Ok(PolicyAction::RequireApproval {
                     required_approvers: self.config.required_approvers,
-                    reason: detection.description.clone(),
+                    reason: format!("{} (correlation {})", detection.description, event.id),
                 }),
             },
             Severity::Medium => Ok(PolicyAction::AlertOnly {
@@ -344,8 +360,11 @@ impl PolicyEnforcer {
         }
     }
 
-    /// Execute a policy action
-    pub async fn execute(&self, action: PolicyAction) -> Result<()> {
+    /// Execute a policy action for a correlated event.
+    ///
+    /// A [`PolicyAction::TimeLock`] enqueues the event into the time-lock
+    /// queue; it is later released by [`PolicyEnforcer::release_expired`].
+    pub async fn execute(&self, event: &CorrelatedEvent, action: PolicyAction) -> Result<()> {
         match action {
             PolicyAction::Allow => {
                 tracing::debug!("Transaction allowed");
@@ -361,7 +380,7 @@ impl PolicyEnforcer {
                 );
             }
             PolicyAction::TimeLock { delay_secs, reason } => {
-                tracing::info!("Time locked for {} seconds: {}", delay_secs, reason);
+                self.time_lock(event, delay_secs, reason);
             }
             PolicyAction::Block { reason } => {
                 tracing::warn!("Transaction blocked: {}", reason);
@@ -383,6 +402,69 @@ impl PolicyEnforcer {
         }
 
         Ok(())
+    }
+
+    /// Enqueue a correlated event into the time-lock queue.
+    ///
+    /// The entry is released once `delay_secs` have elapsed, observable via
+    /// [`PolicyEnforcer::release_expired`]. Keyed by correlation ID so the
+    /// most recent lock for an event wins.
+    pub fn time_lock(&self, event: &CorrelatedEvent, delay_secs: u64, reason: String) {
+        let release_at = Instant::now() + Duration::from_secs(delay_secs);
+        tracing::info!(
+            "Time locking correlation {} for {} seconds: {}",
+            event.id,
+            delay_secs,
+            reason
+        );
+        self.time_locked.insert(
+            event.id.clone(),
+            TimeLockEntry {
+                event: event.clone(),
+                release_at,
+                reason,
+            },
+        );
+    }
+
+    /// Check whether a correlation is currently time-locked (not yet released).
+    pub fn is_time_locked(&self, correlation_id: &str) -> bool {
+        self.time_locked
+            .get(correlation_id)
+            .map(|e| Instant::now() < e.release_at)
+            .unwrap_or(false)
+    }
+
+    /// Number of transactions currently held in the time-lock queue.
+    pub fn pending_time_locked(&self) -> usize {
+        self.time_locked.len()
+    }
+
+    /// Release every time-locked entry whose `release_at` is at or before `now`.
+    ///
+    /// Released entries are removed from the queue and returned so callers can
+    /// resume processing of the previously delayed transactions. `now` is
+    /// passed explicitly so callers (and tests) control the clock.
+    pub fn release_expired(&self, now: Instant) -> Vec<CorrelatedEvent> {
+        let ready: Vec<String> = self
+            .time_locked
+            .iter()
+            .filter(|entry| now >= entry.release_at)
+            .map(|entry| entry.key().clone())
+            .collect();
+
+        let mut released = Vec::with_capacity(ready.len());
+        for id in ready {
+            if let Some((_, entry)) = self.time_locked.remove(&id) {
+                tracing::info!(
+                    "Releasing time-locked correlation {}: {}",
+                    entry.event.id,
+                    entry.reason
+                );
+                released.push(entry.event);
+            }
+        }
+        released
     }
 
     /// Request approval for an event
@@ -575,6 +657,72 @@ mod tests {
 
         enforcer.unpause();
         assert!(!enforcer.is_paused());
+    }
+
+    #[tokio::test]
+    async fn test_time_lock_release() {
+        let enforcer = PolicyEnforcer::new(test_config());
+        let event = test_event("50000");
+
+        // Lock the event for 60 seconds.
+        enforcer
+            .execute(
+                &event,
+                PolicyAction::TimeLock {
+                    delay_secs: 60,
+                    reason: "test lock".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(enforcer.pending_time_locked(), 1);
+        assert!(enforcer.is_time_locked(&event.id));
+
+        // Before release_at: nothing is released and the entry remains.
+        let released = enforcer.release_expired(Instant::now());
+        assert!(released.is_empty());
+        assert_eq!(enforcer.pending_time_locked(), 1);
+
+        // At/after release_at: the entry is released and removed.
+        let after = Instant::now() + Duration::from_secs(61);
+        let released = enforcer.release_expired(after);
+        assert_eq!(released.len(), 1);
+        assert_eq!(released[0].id, event.id);
+        assert_eq!(enforcer.pending_time_locked(), 0);
+        assert!(!enforcer.is_time_locked(&event.id));
+    }
+
+    #[tokio::test]
+    async fn test_time_lock_secs_config_changes_behavior() {
+        // A High-severity large withdrawal with a configured time lock is
+        // delayed (TimeLock); with no time lock it requires approval. This
+        // proves PolicyConfig::time_lock_secs actually drives the decision.
+        let detection = DetectionResult::anomaly(
+            AnomalyType::LargeWithdrawal,
+            Severity::High,
+            0.9,
+            "Large withdrawal".to_string(),
+        );
+        let event = test_event("50000");
+
+        let mut cfg = test_config();
+        cfg.time_lock_secs = 0;
+        let enforcer = PolicyEnforcer::new(cfg);
+        let action = enforcer.evaluate(&event, &detection).await.unwrap();
+        assert!(matches!(action, PolicyAction::RequireApproval { .. }));
+
+        let mut cfg = test_config();
+        cfg.time_lock_secs = 120;
+        let enforcer = PolicyEnforcer::new(cfg);
+        let action = enforcer.evaluate(&event, &detection).await.unwrap();
+        assert!(matches!(
+            action,
+            PolicyAction::TimeLock {
+                delay_secs: 120,
+                ..
+            }
+        ));
     }
 
     #[test]

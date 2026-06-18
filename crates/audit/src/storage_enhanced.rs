@@ -579,7 +579,7 @@ mod tests {
         // Note: with max_files=10 (default), older events are deleted during rotation
         // So we won't have all 100 events, only the most recent ones that fit in max_files
         let all_events = storage.read_all_events().unwrap();
-        assert!(all_events.len() > 0);
+        assert!(!all_events.is_empty());
         assert!(all_events.len() <= 100);
 
         // Verify the events we have are sequential and valid

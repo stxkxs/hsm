@@ -3,8 +3,9 @@
 //! Measures performance of SMT solver-based verification for different
 //! cryptographic operations.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use hsm_verification::*;
+use std::hint::black_box;
 
 fn bench_ed25519_verification(c: &mut Criterion) {
     c.bench_function("ed25519_signature_soundness", |b| {
@@ -90,7 +91,11 @@ fn bench_smt_encoder_operations(c: &mut Criterion) {
             let b = encoder.bv_from_u64(black_box(67890));
             let m = encoder.bv_from_u64(black_box(100000));
 
-            black_box(encoder.mod_add(&a, &b, &m))
+            // Result borrows `ctx`; keep it inside the closure scope and only
+            // hand a reference to `black_box` so nothing referencing `ctx`
+            // escapes the closure.
+            let result = encoder.mod_add(&a, &b, &m);
+            black_box(&result);
         })
     });
 
@@ -104,7 +109,8 @@ fn bench_smt_encoder_operations(c: &mut Criterion) {
             let b = encoder.bv_from_u64(black_box(456));
             let m = encoder.bv_from_u64(black_box(1000));
 
-            black_box(encoder.mod_mul(&a, &b, &m))
+            let result = encoder.mod_mul(&a, &b, &m);
+            black_box(&result);
         })
     });
 
@@ -117,13 +123,17 @@ fn bench_smt_encoder_operations(c: &mut Criterion) {
             let a = encoder.bv_from_u64(black_box(42));
             let b = encoder.bv_from_u64(black_box(42));
 
-            black_box(encoder.ct_eq(&a, &b))
+            let result = encoder.ct_eq(&a, &b);
+            black_box(&result);
         })
     });
 }
 
 fn bench_bounded_checker(c: &mut Criterion) {
     use hsm_verification::bounded_check::BoundedChecker;
+    // `_eq` is a method on the `z3::ast::Ast` trait (mirrors the idiom used in
+    // `crates/verification/src/bounded_check.rs`), so it must be in scope here.
+    use z3::ast::Ast;
     use z3::{Config, Context};
 
     c.bench_function("bounded_checker_tautology_check", |b| {

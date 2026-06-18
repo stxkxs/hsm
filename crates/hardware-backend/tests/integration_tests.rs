@@ -3,9 +3,13 @@
 //! These tests verify that all backends correctly implement the HardwareBackend trait
 //! and that sealed keys can be properly sealed and unsealed.
 
-use hsm_hardware_backend::{
-    AttestationReport, BackendType, HardwareBackend, PlaintextKey, TeeMeasurements,
-};
+use hsm_hardware_backend::{BackendType, PlaintextKey};
+
+#[cfg(feature = "intel-sgx")]
+use hsm_hardware_backend::{AttestationReport, TeeMeasurements};
+
+#[cfg(any(feature = "aws-nitro", feature = "intel-sgx", feature = "amd-sev"))]
+use hsm_hardware_backend::HardwareBackend;
 
 #[cfg(feature = "aws-nitro")]
 use hsm_hardware_backend::{NitroConfig, NitroEnclaveBackend};
@@ -276,6 +280,7 @@ proptest! {
 #[tokio::test]
 async fn test_attestation_verification() {
     // Create a mock attestation report
+    #[cfg(feature = "intel-sgx")]
     let report = AttestationReport {
         backend_type: BackendType::IntelSgx,
         document: vec![1, 2, 3, 4],
@@ -290,6 +295,7 @@ async fn test_attestation_verification() {
         nonce: Some(b"nonce".to_vec()),
     };
 
+    #[cfg(feature = "intel-sgx")]
     let expected_measurements = TeeMeasurements {
         code_hash: vec![0x42; 32],
         data_hash: vec![0x43; 32],
@@ -304,6 +310,7 @@ async fn test_attestation_verification() {
     }
 
     // Test with wrong measurements
+    #[cfg(feature = "intel-sgx")]
     let wrong_measurements = TeeMeasurements {
         code_hash: vec![0xFF; 32],
         data_hash: vec![0xFF; 32],

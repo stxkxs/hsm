@@ -8,9 +8,7 @@ use bigdecimal::BigDecimal;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
 use std::time::Duration;
 
 /// EVM chain watcher

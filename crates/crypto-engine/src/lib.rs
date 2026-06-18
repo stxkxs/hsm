@@ -494,6 +494,9 @@ impl CryptoEngine for DefaultCryptoEngine {
             SignAlgorithm::RsaPkcs1v15Sha256 => {
                 asymmetric::rsa::RsaEngine::verify_pkcs1v15_sha256(public_key, data, signature)
             }
+            SignAlgorithm::RsaPssSha256 => {
+                asymmetric::rsa::RsaEngine::verify_pss_sha256(public_key, data, signature)
+            }
             _ => Err(CryptoError::InvalidAlgorithm(format!(
                 "{:?} not yet implemented",
                 algorithm
@@ -557,5 +560,46 @@ impl CryptoEngine for DefaultCryptoEngine {
 
     fn hash(&self, data: &[u8], algorithm: HashAlgorithm) -> Result<Vec<u8>> {
         hash::digest::hash(data, algorithm)
+    }
+}
+
+#[cfg(test)]
+mod dispatcher_tests {
+    use super::*;
+
+    /// Regression for the missing `RsaPssSha256` arm in `DefaultCryptoEngine::verify`.
+    ///
+    /// Before the fix, `sign` dispatched RSA-PSS correctly but `verify` fell through
+    /// to the catch-all and returned `InvalidAlgorithm`, so a freshly produced PSS
+    /// signature could never be verified through the engine. This drives the full
+    /// sign -> verify round-trip through the dispatcher (not the RsaEngine directly).
+    #[test]
+    fn test_rsa_pss_sha256_sign_verify_through_dispatcher() {
+        let engine = DefaultCryptoEngine;
+        let (private_key, public_key) = asymmetric::rsa::RsaEngine::generate_keypair(2048).unwrap();
+        let message = b"round-trip RSA-PSS through DefaultCryptoEngine";
+
+        let signature = engine
+            .sign(&private_key, message, SignAlgorithm::RsaPssSha256)
+            .expect("PSS sign via dispatcher");
+
+        let valid = engine
+            .verify(
+                &public_key,
+                message,
+                &signature,
+                SignAlgorithm::RsaPssSha256,
+            )
+            .expect("PSS verify via dispatcher must not return InvalidAlgorithm");
+        assert!(valid, "valid PSS signature must verify through dispatcher");
+
+        // Tampered message must fail verification (and still not be InvalidAlgorithm).
+        let bad = engine.verify(
+            &public_key,
+            b"tampered",
+            &signature,
+            SignAlgorithm::RsaPssSha256,
+        );
+        assert!(matches!(bad, Err(CryptoError::SignatureVerificationFailed)));
     }
 }

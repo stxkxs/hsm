@@ -81,12 +81,27 @@ impl SelfTestRunner {
     /// Create a new self-test runner with all required tests
     pub fn new() -> Self {
         let tests = vec![
-            // AES-256-GCM encryption
+            // AES-256-GCM encryption.
+            //
+            // NIST GCM test vector (the canonical AES-256-GCM "Test Case 13/14"
+            // set): key = 32 zero bytes, IV = 96-bit zero, empty AAD, plaintext
+            // = 16 zero bytes. The expected value is the 16-byte ciphertext
+            // followed by the 16-byte authentication tag, as produced by
+            // `aes_gcm::Aes256Gcm::encrypt` (ciphertext || tag):
+            //   ciphertext = cea7403d4d606b6e074ec5d3baf39d18
+            //   tag        = d0d1c8a799996bf0265b98b5d48ab919
+            // (The empty-plaintext variant of this key/IV yields tag
+            // ae9b1771dba9cf62b39be017940330b4; with a 16-byte zero plaintext the
+            // tag is the value below.)
             KnownAnswerTest {
                 name: "AES-256-GCM Encrypt",
                 algorithm: "AES-256-GCM",
                 input: &[0u8; 16],
-                expected: &[], // Will be computed
+                expected: &[
+                    0xce, 0xa7, 0x40, 0x3d, 0x4d, 0x60, 0x6b, 0x6e, 0x07, 0x4e, 0xc5, 0xd3, 0xba,
+                    0xf3, 0x9d, 0x18, 0xd0, 0xd1, 0xc8, 0xa7, 0x99, 0x99, 0x6b, 0xf0, 0x26, 0x5b,
+                    0x98, 0xb5, 0xd4, 0x8a, 0xb9, 0x19,
+                ],
                 test_fn: test_aes_256_gcm,
             },
             // SHA-256
@@ -128,17 +143,31 @@ impl SelfTestRunner {
                 ],
                 test_fn: test_sha512,
             },
-            // HMAC-SHA256
+            // HMAC-SHA256 — RFC 4231 Test Case 2.
+            //   key  = "Jefe"
+            //   data = "what do ya want for nothing?"
+            //   HMAC-SHA-256 =
+            //     5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843
             KnownAnswerTest {
                 name: "HMAC-SHA256",
                 algorithm: "HMAC-SHA256",
-                input: b"test message",
-                expected: &[], // Computed from test key
+                input: b"what do ya want for nothing?",
+                expected: &[
+                    0x5b, 0xdc, 0xc1, 0x46, 0xbf, 0x60, 0x75, 0x4e, 0x6a, 0x04, 0x24, 0x26, 0x08,
+                    0x95, 0x75, 0xc7, 0x5a, 0x00, 0x3f, 0x08, 0x9d, 0x27, 0x39, 0x83, 0x9d, 0xec,
+                    0x58, 0xb9, 0x64, 0xec, 0x38, 0x43,
+                ],
                 test_fn: test_hmac_sha256,
             },
         ];
 
-        // Threshold cryptography KATs
+        // Threshold cryptography KATs.
+        //
+        // The FROST-Ed25519 KAT exercises the real operational signing path.
+        // The Threshold-ECDSA-P256 entry is a "disabled-state" KAT: the signing
+        // path fails closed (NotImplemented), so the KAT verifies it stays
+        // disabled and the scheme is labelled "not operational" rather than
+        // being reported as a passing crypto KAT.
         let threshold_tests = vec![
             ThresholdKat {
                 name: "FROST-Ed25519-KAT",
@@ -147,7 +176,7 @@ impl SelfTestRunner {
             },
             ThresholdKat {
                 name: "Threshold-ECDSA-P256-KAT",
-                scheme: "Threshold-ECDSA-P256",
+                scheme: "Threshold-ECDSA-P256 (not operational: signing disabled)",
                 test_fn: test_threshold_ecdsa_p256_kat,
             },
         ];
@@ -468,9 +497,10 @@ fn test_hmac_sha256(input: &[u8]) -> Result<Vec<u8>, String> {
 
     type HmacSha256 = Hmac<Sha256>;
 
-    let key = [0u8; 32];
+    // RFC 4231 Test Case 2 key.
+    let key = b"Jefe";
     let mut mac =
-        HmacSha256::new_from_slice(&key).map_err(|e| format!("Failed to create HMAC: {}", e))?;
+        HmacSha256::new_from_slice(key).map_err(|e| format!("Failed to create HMAC: {}", e))?;
 
     mac.update(input);
     let result = mac.finalize();
@@ -478,7 +508,7 @@ fn test_hmac_sha256(input: &[u8]) -> Result<Vec<u8>, String> {
 
     // Verify
     let mut verify_mac =
-        HmacSha256::new_from_slice(&key).map_err(|e| format!("Failed to create HMAC: {}", e))?;
+        HmacSha256::new_from_slice(key).map_err(|e| format!("Failed to create HMAC: {}", e))?;
     verify_mac.update(input);
     verify_mac
         .verify_slice(&result_bytes)
@@ -489,151 +519,121 @@ fn test_hmac_sha256(input: &[u8]) -> Result<Vec<u8>, String> {
 
 // ============ Threshold Cryptography KAT Functions ============
 
-/// Known Answer Test for FROST Ed25519
+/// Known Answer Test for FROST Ed25519.
 ///
-/// This test verifies that the FROST Ed25519 threshold signature scheme
-/// produces consistent results. Since FROST uses randomness in signing,
-/// we verify the signature is valid rather than matching a specific value.
-///
-/// Test vector: 2-of-3 threshold signing with deterministic seed
+/// This runs the REAL FROST-Ed25519 threshold path end-to-end: trusted-dealer
+/// keygen for a 2-of-3 scheme, a full two-round threshold signing over a fixed
+/// message, aggregation, and verification of the aggregated signature against
+/// the real group public key (both via FROST's verifier and standard Ed25519
+/// verification). FROST signing is randomized, so we cannot match a fixed
+/// signature byte string; instead the KAT asserts that the produced signature
+/// actually verifies — and that a tampered message is rejected — which proves
+/// the algorithm is operational rather than merely that the primitives link.
 fn test_frost_ed25519_kat() -> Result<(), String> {
-    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-    use sha2::{Digest, Sha512};
+    use crate::threshold::frost::FrostEngine;
+    use crate::threshold::types::ThresholdConfig;
 
-    // Known test data for FROST Ed25519
-    // These are deterministic values derived from a fixed seed for the KAT
     const KAT_MESSAGE: &[u8] = b"FIPS 186-5 FROST Ed25519 KAT message";
 
-    // Simulated group public key (32 bytes, Ed25519 public key format)
-    // In a real implementation, this would be derived from the threshold key generation
-    // For the KAT, we use a deterministic derivation
-    let seed = Sha512::digest(b"FROST-Ed25519-KAT-SEED-v1");
+    let config = ThresholdConfig::new(2, 3).map_err(|e| format!("config: {e}"))?;
+    let (group_key, shares) =
+        FrostEngine::trusted_dealer_keygen(config).map_err(|e| format!("keygen: {e}"))?;
 
-    // Derive a deterministic test public key from the seed
-    // This is for KAT purposes only - actual FROST uses proper key generation
-    let pk_bytes: [u8; 32] = {
-        let mut hasher = Sha512::new();
-        hasher.update(seed);
-        hasher.update(b"group_public_key");
-        let hash = hasher.finalize();
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&hash[..32]);
+    // Round 1: participants 1 and 2 generate nonces + commitments.
+    let (nonce0, commit0) =
+        FrostEngine::generate_nonces(&shares[0]).map_err(|e| format!("nonces[0]: {e}"))?;
+    let (nonce1, commit1) =
+        FrostEngine::generate_nonces(&shares[1]).map_err(|e| format!("nonces[1]: {e}"))?;
+    let commitments = vec![commit0, commit1];
 
-        // Clamp the scalar to ensure it's a valid Ed25519 scalar
-        // This follows the Ed25519 key derivation rules
-        bytes[0] &= 248;
-        bytes[31] &= 127;
-        bytes[31] |= 64;
-        bytes
-    };
+    // Round 2: each participant produces a signature share.
+    let share0 =
+        FrostEngine::sign_share(&shares[0], &nonce0, KAT_MESSAGE, &commitments, &group_key)
+            .map_err(|e| format!("sign_share[0]: {e}"))?;
+    let share1 =
+        FrostEngine::sign_share(&shares[1], &nonce1, KAT_MESSAGE, &commitments, &group_key)
+            .map_err(|e| format!("sign_share[1]: {e}"))?;
 
-    // Verify the KAT public key has expected properties:
-    // 1. It should be 32 bytes
-    if pk_bytes.len() != 32 {
-        return Err("KAT public key has incorrect length".to_string());
+    // Aggregate into a single Ed25519 signature.
+    let signature =
+        FrostEngine::aggregate_signatures(KAT_MESSAGE, &commitments, &[share0, share1], &group_key)
+            .map_err(|e| format!("aggregate: {e}"))?;
+
+    // The aggregated signature MUST verify against the real group key.
+    if !FrostEngine::verify(&group_key, KAT_MESSAGE, &signature)
+        .map_err(|e| format!("verify: {e}"))?
+    {
+        return Err("FROST aggregated signature failed verification".to_string());
     }
 
-    // 2. The message should hash correctly (verify hashing is working)
-    let message_hash = Sha512::digest(KAT_MESSAGE);
-    if message_hash.len() != 64 {
-        return Err("SHA-512 hash has incorrect length".to_string());
+    // It must also verify as a standard Ed25519 signature.
+    if !FrostEngine::verify_with_ed25519(&group_key.bytes, KAT_MESSAGE, &signature.bytes)
+        .map_err(|e| format!("ed25519 verify: {e}"))?
+    {
+        return Err("FROST signature failed standard Ed25519 verification".to_string());
     }
 
-    // 3. Verify that the signature verification infrastructure is working
-    // by testing that invalid signatures are rejected
-    let invalid_sig = Signature::from_bytes(&[0u8; 64]);
-    if let Ok(vk) = VerifyingKey::from_bytes(&pk_bytes) {
-        // An all-zeros signature should never verify
-        if vk.verify(KAT_MESSAGE, &invalid_sig).is_ok() {
-            return Err("Invalid signature incorrectly verified".to_string());
-        }
+    // NEGATIVE check: the signature must NOT verify against a different message.
+    match FrostEngine::verify(&group_key, b"tampered message", &signature) {
+        Ok(false) | Err(_) => {}
+        Ok(true) => return Err("FROST signature verified against a tampered message".to_string()),
     }
-    // Note: pk_bytes may not be a valid public key point, which is expected
-    // for this KAT - we're testing the verification infrastructure
 
-    // KAT passes if:
-    // - Public key derivation is deterministic (32 bytes)
-    // - Hashing infrastructure works (SHA-512 produces 64 bytes)
-    // - Signature verification correctly rejects invalid signatures
     Ok(())
 }
 
-/// Known Answer Test for Threshold ECDSA P-256
+/// Known Answer Test for Threshold ECDSA P-256.
 ///
-/// This test verifies that the threshold ECDSA P-256 signature scheme
-/// produces valid signatures that verify correctly.
-///
-/// Test vector: 2-of-3 threshold signing with deterministic seed
+/// HONEST self-test: the threshold-ECDSA signing path is intentionally disabled
+/// (fails closed with [`ThresholdError::NotImplemented`]) because the protocol
+/// does not compute the modular inverse of the nonce and would otherwise emit
+/// signatures that never verify. A "passing KAT" for a broken algorithm would
+/// be false compliance, so this KAT instead asserts that the signing path is
+/// correctly DISABLED: it drives keygen + nonce generation and then requires
+/// that `presign` (and `sign_share`) return `NotImplemented`. The scheme is
+/// reported as not operational; it is NOT presented as a passing crypto KAT.
 fn test_threshold_ecdsa_p256_kat() -> Result<(), String> {
-    use p256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
-    use p256::elliptic_curve::ff::PrimeField;
-    use p256::{EncodedPoint, ProjectivePoint, Scalar};
-    use sha2::{Digest, Sha256};
+    use crate::threshold::ecdsa::ThresholdEcdsaEngine;
+    use crate::threshold::types::{EcdsaCurve, ThresholdConfig, ThresholdError};
 
-    // Known test data for Threshold ECDSA P-256
-    const KAT_MESSAGE: &[u8] = b"FIPS 186-5 Threshold ECDSA P-256 KAT message";
+    let config = ThresholdConfig::new(2, 3).map_err(|e| format!("config: {e}"))?;
+    let (group_key, shares) = ThresholdEcdsaEngine::trusted_dealer_keygen(config, EcdsaCurve::P256)
+        .map_err(|e| format!("keygen: {e}"))?;
 
-    // Derive deterministic test values from a seed
-    let seed = Sha256::digest(b"Threshold-ECDSA-P256-KAT-SEED-v1");
-
-    // 1. Verify that message hashing works correctly
-    let message_hash = Sha256::digest(KAT_MESSAGE);
-    if message_hash.len() != 32 {
-        return Err("SHA-256 hash has incorrect length".to_string());
+    // P-256 must be reported as FIPS-approved at the curve level even though
+    // the threshold *signing* protocol is not operational.
+    if !group_key.is_fips_approved() {
+        return Err("P-256 threshold group key unexpectedly not FIPS approved".to_string());
     }
 
-    // 2. Verify that the P-256 curve operations are available
-    // Test scalar field arithmetic
-    let scalar_bytes: [u8; 32] = {
-        let mut hasher = Sha256::new();
-        hasher.update(seed);
-        hasher.update(b"scalar_test");
-        let hash = hasher.finalize();
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&hash[..32]);
-        bytes
-    };
+    // Round 1 succeeds (nonce generation is sound).
+    let (nonce0, commit0) =
+        ThresholdEcdsaEngine::generate_nonces(&shares[0]).map_err(|e| format!("nonces[0]: {e}"))?;
+    let (_nonce1, commit1) =
+        ThresholdEcdsaEngine::generate_nonces(&shares[1]).map_err(|e| format!("nonces[1]: {e}"))?;
+    let commitments = vec![commit0, commit1];
+    let participants = vec![shares[0].participant_id, shares[1].participant_id];
 
-    // Verify scalar can be created (may need to reduce if >= field order)
-    let scalar_opt = Scalar::from_repr(scalar_bytes.into());
-    if scalar_opt.is_none().into() {
-        // This is expected for some seeds - the scalar is >= the field order
-        // Try with a reduced value
-        let mut reduced = scalar_bytes;
-        reduced[0] = 0; // Ensure it's below the field order
-        let _ = Scalar::from_repr(reduced.into());
-    }
-
-    // 3. Test point encoding/decoding
-    // Create a test point by multiplying generator by a scalar
-    let test_scalar = Scalar::ONE; // Use identity for deterministic test
-    let test_point = ProjectivePoint::GENERATOR * test_scalar;
-    let encoded = EncodedPoint::from(test_point.to_affine());
-
-    // Verify the encoded point has correct length (33 bytes compressed or 65 uncompressed)
-    if encoded.len() != 33 && encoded.len() != 65 {
-        return Err("P-256 point encoding has incorrect length".to_string());
-    }
-
-    // 4. Verify signature verification rejects invalid signatures
-    // Create an invalid signature (all zeros is not a valid ECDSA signature)
-    let invalid_sig_bytes: [u8; 64] = [0u8; 64];
-    if let Ok(invalid_sig) = Signature::from_slice(&invalid_sig_bytes) {
-        // If we can construct a verifying key from the generator point
-        let vk_point = ProjectivePoint::GENERATOR.to_affine();
-        if let Ok(vk) = VerifyingKey::from_affine(vk_point) {
-            // The all-zeros signature should not verify
-            if vk.verify(KAT_MESSAGE, &invalid_sig).is_ok() {
-                return Err("Invalid ECDSA signature incorrectly verified".to_string());
-            }
+    // The signing path MUST fail closed: presign returns NotImplemented.
+    match ThresholdEcdsaEngine::presign(&shares[0], &nonce0, &commitments, &participants) {
+        Err(ThresholdError::NotImplemented(_)) => {}
+        Err(e) => {
+            return Err(format!(
+                "threshold ECDSA presign expected NotImplemented, got error: {e}"
+            ))
+        }
+        Ok(_) => {
+            return Err(
+                "threshold ECDSA presign UNEXPECTEDLY succeeded; broken signing path is enabled"
+                    .to_string(),
+            )
         }
     }
 
-    // KAT passes if:
-    // - SHA-256 hashing produces correct length output
-    // - P-256 scalar field operations are available
-    // - P-256 point encoding/decoding works
-    // - Signature verification correctly rejects invalid signatures
+    // The KAT is honest: it confirms the broken algorithm is disabled rather
+    // than claiming a passing signing KAT. Returning Ok here means "the disabled
+    // state is correct", which the runner surfaces with the 'not operational'
+    // label below.
     Ok(())
 }
 
@@ -673,14 +673,31 @@ mod tests {
 
     #[test]
     fn test_aes_gcm_kat() {
+        // NIST GCM vector: key/IV all zero, empty AAD, 16 zero-byte plaintext.
+        // Result is ciphertext || tag.
         let result = test_aes_256_gcm(&[0u8; 16]).unwrap();
-        assert!(!result.is_empty());
+        assert_eq!(
+            result,
+            vec![
+                0xce, 0xa7, 0x40, 0x3d, 0x4d, 0x60, 0x6b, 0x6e, 0x07, 0x4e, 0xc5, 0xd3, 0xba, 0xf3,
+                0x9d, 0x18, 0xd0, 0xd1, 0xc8, 0xa7, 0x99, 0x99, 0x6b, 0xf0, 0x26, 0x5b, 0x98, 0xb5,
+                0xd4, 0x8a, 0xb9, 0x19,
+            ]
+        );
     }
 
     #[test]
     fn test_hmac_kat() {
-        let result = test_hmac_sha256(b"test message").unwrap();
-        assert_eq!(result.len(), 32);
+        // RFC 4231 Test Case 2: key = "Jefe", data = "what do ya want for nothing?".
+        let result = test_hmac_sha256(b"what do ya want for nothing?").unwrap();
+        assert_eq!(
+            result,
+            vec![
+                0x5b, 0xdc, 0xc1, 0x46, 0xbf, 0x60, 0x75, 0x4e, 0x6a, 0x04, 0x24, 0x26, 0x08, 0x95,
+                0x75, 0xc7, 0x5a, 0x00, 0x3f, 0x08, 0x9d, 0x27, 0x39, 0x83, 0x9d, 0xec, 0x58, 0xb9,
+                0x64, 0xec, 0x38, 0x43,
+            ]
+        );
     }
 
     // ============ Threshold KAT Tests ============
@@ -693,12 +710,68 @@ mod tests {
 
     #[test]
     fn test_threshold_ecdsa_p256_kat_passes() {
+        // "Passes" here means the disabled-state check succeeded: the signing
+        // path is correctly fail-closed. It is NOT a passing crypto signing KAT.
         let result = test_threshold_ecdsa_p256_kat();
         assert!(
             result.is_ok(),
-            "Threshold ECDSA P-256 KAT failed: {:?}",
+            "Threshold ECDSA P-256 disabled-state KAT failed: {:?}",
             result
         );
+    }
+
+    /// The threshold-ECDSA KAT must FAIL if the signing path ever starts
+    /// returning a signature instead of `NotImplemented`, so it can never be
+    /// used to report a passing KAT for the broken algorithm. We assert the
+    /// honest property directly: presign is fail-closed.
+    #[test]
+    fn test_threshold_ecdsa_p256_signing_is_disabled() {
+        use crate::threshold::ecdsa::ThresholdEcdsaEngine;
+        use crate::threshold::types::{EcdsaCurve, ThresholdConfig, ThresholdError};
+
+        let config = ThresholdConfig::new(2, 3).unwrap();
+        let (_group_key, shares) =
+            ThresholdEcdsaEngine::trusted_dealer_keygen(config, EcdsaCurve::P256).unwrap();
+
+        let (nonce0, commit0) = ThresholdEcdsaEngine::generate_nonces(&shares[0]).unwrap();
+        let (_n1, commit1) = ThresholdEcdsaEngine::generate_nonces(&shares[1]).unwrap();
+        let commitments = vec![commit0, commit1];
+        let participants = vec![shares[0].participant_id, shares[1].participant_id];
+
+        let result =
+            ThresholdEcdsaEngine::presign(&shares[0], &nonce0, &commitments, &participants);
+        assert!(
+            matches!(result, Err(ThresholdError::NotImplemented(_))),
+            "threshold ECDSA presign must fail closed with NotImplemented, got: {result:?}"
+        );
+    }
+
+    /// The FROST KAT must reject a tampered signature — proving the verifier in
+    /// the KAT is real, not a no-op. We tamper one byte of a real signature and
+    /// require verification to fail.
+    #[test]
+    fn test_frost_ed25519_kat_rejects_tampered_signature() {
+        use crate::threshold::frost::FrostEngine;
+        use crate::threshold::types::ThresholdConfig;
+
+        let config = ThresholdConfig::new(2, 3).unwrap();
+        let (group_key, shares) = FrostEngine::trusted_dealer_keygen(config).unwrap();
+        let msg = b"frost negative test";
+
+        let (n0, c0) = FrostEngine::generate_nonces(&shares[0]).unwrap();
+        let (n1, c1) = FrostEngine::generate_nonces(&shares[1]).unwrap();
+        let commitments = vec![c0, c1];
+        let s0 = FrostEngine::sign_share(&shares[0], &n0, msg, &commitments, &group_key).unwrap();
+        let s1 = FrostEngine::sign_share(&shares[1], &n1, msg, &commitments, &group_key).unwrap();
+        let mut sig =
+            FrostEngine::aggregate_signatures(msg, &commitments, &[s0, s1], &group_key).unwrap();
+
+        assert!(FrostEngine::verify(&group_key, msg, &sig).unwrap());
+
+        // Flip a bit in the signature: it must no longer verify.
+        sig.bytes[0] ^= 0x01;
+        let verified = FrostEngine::verify(&group_key, msg, &sig).unwrap_or(false);
+        assert!(!verified, "tampered FROST signature unexpectedly verified");
     }
 
     #[test]

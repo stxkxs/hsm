@@ -50,6 +50,7 @@
 //! - **AuditVerifier**: Verifies the integrity of logged events
 
 pub mod async_logger;
+pub mod checkpoint;
 pub mod event;
 pub mod hash_chain;
 pub mod logger;
@@ -61,6 +62,7 @@ pub mod verifier;
 pub mod zk_integration;
 
 // Re-export main types for convenience
+pub use checkpoint::{Checkpoint, CheckpointError};
 pub use event::{AuditEvent, AuditEventBuilder, EventType, OperationResult};
 pub use hash_chain::{HashChain, HashChainError};
 pub use logger::{AuditConfig, AuditError, AuditLogger};
@@ -94,6 +96,7 @@ mod tests {
             },
             enabled: true,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();
@@ -157,6 +160,7 @@ mod tests {
             },
             enabled: true,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();
@@ -198,6 +202,7 @@ mod tests {
                 },
                 enabled: true,
                 rebuild_merkle_on_start: false,
+                checkpoint_key: None,
             };
 
             let logger = AuditLogger::new(config).unwrap();
@@ -226,6 +231,7 @@ mod tests {
                 },
                 enabled: true,
                 rebuild_merkle_on_start: true,
+                checkpoint_key: None,
             };
 
             let logger = AuditLogger::new(config).unwrap();
@@ -254,6 +260,7 @@ mod tests {
             },
             enabled: true,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();
@@ -290,6 +297,7 @@ mod tests {
             },
             enabled: true,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();

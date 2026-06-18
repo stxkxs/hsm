@@ -3,7 +3,7 @@
 //! Provides key types for StarkNet ECDSA operations.
 
 use crate::error::{BlockchainError, Result};
-use starknet_crypto::{get_public_key, sign, verify, Felt};
+use starknet_crypto::{get_public_key, rfc6979_generate_k, sign, verify, Felt};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A Stark curve private key.
@@ -85,28 +85,20 @@ impl StarkPrivateKey {
         ))
     }
 
-    /// Sign a message hash with a deterministic k (RFC 6979 style).
+    /// Sign a message hash with a deterministic nonce per RFC 6979,
+    /// specialised for the Stark curve.
     ///
-    /// This is safer as it doesn't require a random number generator at signing time.
+    /// This uses `starknet-crypto`'s `rfc6979_generate_k`, the same nonce
+    /// derivation used by starknet-rs / starknet.js, so signatures are
+    /// interoperable and reproducible. The previous implementation derived the
+    /// nonce as `SHA256(scalar || hash)` masked to 251 bits, which is neither
+    /// RFC 6979 nor curve-safe (LOW #27).
     pub fn sign_deterministic(&self, message_hash: &[u8; 32]) -> Result<super::StarkSignature> {
-        use sha2::{Digest, Sha256};
-
         let private_felt = Felt::from_bytes_be_slice(&self.scalar);
         let message_felt = Felt::from_bytes_be_slice(message_hash);
 
-        // Deterministic k generation (simplified RFC 6979)
-        let mut hasher = Sha256::new();
-        hasher.update(&self.scalar);
-        hasher.update(message_hash);
-        let mut k_bytes: [u8; 32] = hasher.finalize().into();
-        k_bytes[0] &= 0x07; // Ensure k < curve order
-
-        // Ensure k is not zero
-        if k_bytes.iter().all(|&b| b == 0) {
-            k_bytes[31] = 1;
-        }
-
-        let k = Felt::from_bytes_be_slice(&k_bytes);
+        // RFC 6979 deterministic nonce over the Stark curve.
+        let k = rfc6979_generate_k(&message_felt, &private_felt, None);
 
         let extended_sig = sign(&private_felt, &message_felt, &k)
             .map_err(|e| BlockchainError::SigningFailed(e.to_string()))?;
@@ -315,5 +307,56 @@ mod tests {
         let child2 = parent.derive_child(42).unwrap();
 
         assert_eq!(child1.to_bytes(), child2.to_bytes());
+    }
+
+    /// Deterministic-nonce KAT for the Stark-curve RFC 6979 signer.
+    ///
+    /// The signature (r, s) is the canonical output of `starknet-crypto`'s
+    /// `rfc6979_generate_k` + `sign` for a fixed private key and message hash
+    /// (matching starknet-rs / starknet.js). This pins the exact nonce
+    /// derivation so a regression to the old ad-hoc `SHA256(scalar || hash)`
+    /// scheme — which produced an entirely different signature — is caught
+    /// (LOW #27). The result is also checked to verify against the public key.
+    #[test]
+    fn test_sign_deterministic_rfc6979_kat() {
+        let sk = StarkPrivateKey::from_bytes(&[
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1u8,
+        ])
+        .unwrap();
+        let mut h = [0u8; 32];
+        h[31] = 0x09;
+        h[30] = 0x02;
+
+        let sig = sk.sign_deterministic(&h).unwrap();
+        let (r, s) = sig.to_hex();
+        assert_eq!(
+            r,
+            "0x0449cef352fbb21479b63383ac6e41ca540190fb1b00fc7d5551f25b3b9bda23"
+        );
+        assert_eq!(
+            s,
+            "0x073cc5b622e8adb809ddf1c6c904c28ac07d152170785164f927da7e170c9ad5"
+        );
+
+        // The deterministic signature must verify under the derived public key.
+        let pk = sk.public_key();
+        assert!(pk.verify(&h, &sig));
+
+        // The old ad-hoc nonce scheme (SHA256(scalar || hash), masked) produced
+        // a different r; ensure we are not reproducing it.
+        let old_r = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(sk.to_bytes());
+            hasher.update(h);
+            let mut k_bytes: [u8; 32] = hasher.finalize().into();
+            k_bytes[0] &= 0x07;
+            let k = starknet_crypto::Felt::from_bytes_be_slice(&k_bytes);
+            let ms = starknet_crypto::Felt::from_bytes_be_slice(&h);
+            let pf = starknet_crypto::Felt::from_bytes_be_slice(sk.to_bytes());
+            starknet_crypto::sign(&pf, &ms, &k).unwrap().r.to_bytes_be()
+        };
+        assert_ne!(hex::encode(old_r), r.trim_start_matches("0x"));
     }
 }

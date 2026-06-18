@@ -1,3 +1,6 @@
+// the perf_target! macro intentionally negates a comparison to warn when a target is missed
+#![allow(clippy::neg_cmp_op_on_partial_ord)]
+
 use hsm_audit::{AuditConfig, AuditLogger, EventType, StorageConfig};
 use std::time::Instant;
 use tempfile::TempDir;
@@ -21,6 +24,7 @@ fn test_throughput_1000_events() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -74,6 +78,7 @@ fn test_throughput_10000_events() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -126,6 +131,7 @@ fn test_verification_performance() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -177,6 +183,7 @@ fn test_merkle_proof_generation_performance() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -231,6 +238,7 @@ fn test_batch_write_performance() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -297,6 +305,7 @@ fn test_reload_performance() {
             },
             enabled: true,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();
@@ -328,6 +337,7 @@ fn test_reload_performance() {
             },
             enabled: true,
             rebuild_merkle_on_start: true,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();
@@ -362,6 +372,7 @@ fn test_mixed_operations_throughput() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -418,6 +429,7 @@ fn test_sequential_vs_batch_flush() {
             },
             enabled: true,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();
@@ -452,6 +464,7 @@ fn test_sequential_vs_batch_flush() {
             },
             enabled: true,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();
@@ -496,6 +509,7 @@ fn test_large_event_metadata() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();

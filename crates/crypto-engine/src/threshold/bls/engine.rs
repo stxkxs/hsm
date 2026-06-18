@@ -54,7 +54,8 @@ use zeroize::Zeroize;
 ///
 /// // Aggregate signature shares
 /// let participants = vec![shares[0].participant_id, shares[1].participant_id];
-/// let signature = ThresholdBlsEngine::aggregate(&[share1, share2], &participants).unwrap();
+/// let signature =
+///     ThresholdBlsEngine::aggregate(&[share1, share2], &participants, config.threshold).unwrap();
 ///
 /// // Verify
 /// assert!(ThresholdBlsEngine::verify(&group_key, message, &signature).unwrap());
@@ -172,6 +173,9 @@ impl ThresholdBlsEngine {
     ///
     /// * `signature_shares` - Signature shares from participants
     /// * `participants` - The participant IDs in the same order as shares
+    /// * `threshold` - The scheme threshold `t`; aggregation is rejected when
+    ///   fewer than `t` shares are provided. Pass `config.threshold` from the
+    ///   `ThresholdConfig`/`GroupPublicKey` used at key generation.
     ///
     /// # Returns
     ///
@@ -180,16 +184,21 @@ impl ThresholdBlsEngine {
     /// # Errors
     ///
     /// Returns error if:
-    /// - Fewer than 2 shares provided
+    /// - Fewer than `threshold` shares provided
     /// - Share deserialization fails
     /// - Lagrange coefficient computation fails
     pub fn aggregate(
         signature_shares: &[BlsSignatureShare],
         participants: &[ParticipantId],
+        threshold: u16,
     ) -> Result<BlsThresholdSignature, ThresholdError> {
-        if signature_shares.len() < 2 {
+        // A threshold of at least 2 is required for a meaningful threshold
+        // signature; reject degenerate configurations as well as any attempt
+        // to aggregate fewer than `t` shares.
+        let required = threshold.max(2);
+        if (signature_shares.len() as u64) < required as u64 {
             return Err(ThresholdError::InsufficientParticipants {
-                required: 2,
+                required,
                 provided: signature_shares.len() as u16,
             });
         }
@@ -700,8 +709,12 @@ mod tests {
         let participants = vec![shares[0].participant_id, shares[1].participant_id];
 
         // Aggregate signature shares
-        let signature =
-            ThresholdBlsEngine::aggregate(&[sig_share1, sig_share2], &participants).unwrap();
+        let signature = ThresholdBlsEngine::aggregate(
+            &[sig_share1, sig_share2],
+            &participants,
+            config.threshold,
+        )
+        .unwrap();
 
         // Verify the signature
         let valid = ThresholdBlsEngine::verify(&group_key, message, &signature).unwrap();
@@ -728,7 +741,8 @@ mod tests {
         }
 
         // Aggregate and verify
-        let signature = ThresholdBlsEngine::aggregate(&sig_shares, &participants).unwrap();
+        let signature =
+            ThresholdBlsEngine::aggregate(&sig_shares, &participants, config.threshold).unwrap();
         let valid = ThresholdBlsEngine::verify(&group_key, message, &signature).unwrap();
         assert!(valid);
     }
@@ -744,15 +758,23 @@ mod tests {
         let sig_share1 = ThresholdBlsEngine::sign_share(&shares[0], message).unwrap();
         let sig_share2 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
         let participants_12 = vec![shares[0].participant_id, shares[1].participant_id];
-        let signature_12 =
-            ThresholdBlsEngine::aggregate(&[sig_share1, sig_share2], &participants_12).unwrap();
+        let signature_12 = ThresholdBlsEngine::aggregate(
+            &[sig_share1, sig_share2],
+            &participants_12,
+            config.threshold,
+        )
+        .unwrap();
 
         // Sign with participants 2 and 3
         let sig_share2b = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
         let sig_share3 = ThresholdBlsEngine::sign_share(&shares[2], message).unwrap();
         let participants_23 = vec![shares[1].participant_id, shares[2].participant_id];
-        let signature_23 =
-            ThresholdBlsEngine::aggregate(&[sig_share2b, sig_share3], &participants_23).unwrap();
+        let signature_23 = ThresholdBlsEngine::aggregate(
+            &[sig_share2b, sig_share3],
+            &participants_23,
+            config.threshold,
+        )
+        .unwrap();
 
         // Both signatures should verify
         assert!(ThresholdBlsEngine::verify(&group_key, message, &signature_12).unwrap());
@@ -774,7 +796,7 @@ mod tests {
         let participants = vec![shares[0].participant_id];
 
         // Try to aggregate with only 1 share - should fail
-        let result = ThresholdBlsEngine::aggregate(&[sig_share1], &participants);
+        let result = ThresholdBlsEngine::aggregate(&[sig_share1], &participants, config.threshold);
         assert!(matches!(
             result,
             Err(ThresholdError::InsufficientParticipants { .. })
@@ -794,8 +816,12 @@ mod tests {
         let sig_share2 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
         let participants = vec![shares[0].participant_id, shares[1].participant_id];
 
-        let signature =
-            ThresholdBlsEngine::aggregate(&[sig_share1, sig_share2], &participants).unwrap();
+        let signature = ThresholdBlsEngine::aggregate(
+            &[sig_share1, sig_share2],
+            &participants,
+            config.threshold,
+        )
+        .unwrap();
 
         // Verify with wrong message should fail
         let result = ThresholdBlsEngine::verify(&group_key, wrong_message, &signature).unwrap();
@@ -814,13 +840,21 @@ mod tests {
         let sig_share1_1 = ThresholdBlsEngine::sign_share(&shares[0], message1).unwrap();
         let sig_share1_2 = ThresholdBlsEngine::sign_share(&shares[1], message1).unwrap();
         let participants = vec![shares[0].participant_id, shares[1].participant_id];
-        let signature1 =
-            ThresholdBlsEngine::aggregate(&[sig_share1_1, sig_share1_2], &participants).unwrap();
+        let signature1 = ThresholdBlsEngine::aggregate(
+            &[sig_share1_1, sig_share1_2],
+            &participants,
+            config.threshold,
+        )
+        .unwrap();
 
         let sig_share2_1 = ThresholdBlsEngine::sign_share(&shares[0], message2).unwrap();
         let sig_share2_2 = ThresholdBlsEngine::sign_share(&shares[1], message2).unwrap();
-        let signature2 =
-            ThresholdBlsEngine::aggregate(&[sig_share2_1, sig_share2_2], &participants).unwrap();
+        let signature2 = ThresholdBlsEngine::aggregate(
+            &[sig_share2_1, sig_share2_2],
+            &participants,
+            config.threshold,
+        )
+        .unwrap();
 
         // Aggregate the two signatures
         let aggregated =
@@ -917,7 +951,8 @@ mod tests {
         let participants: Vec<_> = shares.iter().map(|s| s.participant_id).collect();
 
         // Aggregate all 3 shares
-        let signature = ThresholdBlsEngine::aggregate(&sig_shares, &participants).unwrap();
+        let signature =
+            ThresholdBlsEngine::aggregate(&sig_shares, &participants, config.threshold).unwrap();
 
         // Should still verify
         assert!(ThresholdBlsEngine::verify(&group_key, message, &signature).unwrap());
@@ -936,8 +971,12 @@ mod tests {
         let sig_share3 = ThresholdBlsEngine::sign_share(&shares[2], message).unwrap();
 
         let participants = vec![shares[0].participant_id, shares[2].participant_id];
-        let signature =
-            ThresholdBlsEngine::aggregate(&[sig_share1, sig_share3], &participants).unwrap();
+        let signature = ThresholdBlsEngine::aggregate(
+            &[sig_share1, sig_share3],
+            &participants,
+            config.threshold,
+        )
+        .unwrap();
 
         // Should verify
         assert!(ThresholdBlsEngine::verify(&group_key, message, &signature).unwrap());
@@ -954,8 +993,12 @@ mod tests {
         let sig_share2 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
 
         let participants = vec![shares[0].participant_id, shares[1].participant_id];
-        let signature =
-            ThresholdBlsEngine::aggregate(&[sig_share1, sig_share2], &participants).unwrap();
+        let signature = ThresholdBlsEngine::aggregate(
+            &[sig_share1, sig_share2],
+            &participants,
+            config.threshold,
+        )
+        .unwrap();
 
         assert!(ThresholdBlsEngine::verify(&group_key, message, &signature).unwrap());
     }
@@ -972,9 +1015,59 @@ mod tests {
         let sig_share2 = ThresholdBlsEngine::sign_share(&shares[1], &message).unwrap();
 
         let participants = vec![shares[0].participant_id, shares[1].participant_id];
-        let signature =
-            ThresholdBlsEngine::aggregate(&[sig_share1, sig_share2], &participants).unwrap();
+        let signature = ThresholdBlsEngine::aggregate(
+            &[sig_share1, sig_share2],
+            &participants,
+            config.threshold,
+        )
+        .unwrap();
 
         assert!(ThresholdBlsEngine::verify(&group_key, &message, &signature).unwrap());
+    }
+
+    /// Aggregation with fewer than `t` shares must be rejected for a t > 2 scheme.
+    ///
+    /// This is a NEGATIVE test for finding #24: the previous implementation
+    /// hardcoded the minimum at 2, so a 3-of-5 scheme would happily aggregate
+    /// only 2 shares (producing a signature that does not verify against the
+    /// group key, since Lagrange interpolation over an insufficient subset is
+    /// wrong). It now must fail closed.
+    #[test]
+    fn test_aggregate_below_threshold_rejected_for_t_greater_than_2() {
+        let config = ThresholdConfig::new(3, 5).unwrap();
+        let (group_key, shares) = ThresholdBlsEngine::trusted_dealer_keygen(config).unwrap();
+
+        let message = b"below threshold must be rejected";
+
+        // Only 2 signature shares for a 3-of-5 scheme.
+        let sig_share1 = ThresholdBlsEngine::sign_share(&shares[0], message).unwrap();
+        let sig_share2 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
+        let participants = vec![shares[0].participant_id, shares[1].participant_id];
+
+        let result = ThresholdBlsEngine::aggregate(
+            &[sig_share1, sig_share2],
+            &participants,
+            config.threshold,
+        );
+
+        match result {
+            Err(ThresholdError::InsufficientParticipants { required, provided }) => {
+                assert_eq!(required, 3, "must require the scheme threshold t=3, not 2");
+                assert_eq!(provided, 2);
+            }
+            other => panic!("expected InsufficientParticipants {{ required: 3 }}, got {other:?}"),
+        }
+
+        // Exactly t=3 shares must succeed and verify.
+        let s1 = ThresholdBlsEngine::sign_share(&shares[0], message).unwrap();
+        let s2 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
+        let s3 = ThresholdBlsEngine::sign_share(&shares[2], message).unwrap();
+        let parts = vec![
+            shares[0].participant_id,
+            shares[1].participant_id,
+            shares[2].participant_id,
+        ];
+        let sig = ThresholdBlsEngine::aggregate(&[s1, s2, s3], &parts, config.threshold).unwrap();
+        assert!(ThresholdBlsEngine::verify(&group_key, message, &sig).unwrap());
     }
 }

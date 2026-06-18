@@ -122,6 +122,7 @@ fn test_session_hijacking_detection_ip_mismatch() {
 }
 
 #[test]
+#[allow(deprecated)] // exercises the deprecated validate_session path on purpose
 fn test_expired_session_rejected() {
     let session_manager = SessionManager::new(-1); // Expired immediately
     let identity = create_test_identity("client1", "default", vec![Role::User]);
@@ -135,6 +136,7 @@ fn test_expired_session_rejected() {
 }
 
 #[test]
+#[allow(deprecated)] // exercises the deprecated validate_session path on purpose
 fn test_deleted_session_rejected() {
     let session_manager = SessionManager::new(3600);
     let identity = create_test_identity("client1", "default", vec![Role::User]);
@@ -360,6 +362,7 @@ fn test_permission_flags_bitwise_operations() {
 }
 
 #[test]
+#[allow(deprecated)] // exercises the deprecated validate_session path on purpose
 fn test_concurrent_session_access_safe() {
     use std::sync::Arc;
     use std::thread;

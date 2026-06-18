@@ -151,8 +151,7 @@ impl EventCorrelator {
         if let Some(ref hash) = dest_event.message_hash {
             if let Some((_, pending)) = self.pending_by_hash.remove(hash) {
                 let correlated = self.create_correlated(pending.event, dest_event.clone());
-                self.completed
-                    .insert(correlated.id.clone(), correlated.clone());
+                self.record_completed(correlated.clone());
                 return Ok(Some(correlated));
             }
         }
@@ -167,8 +166,7 @@ impl EventCorrelator {
             {
                 let pending = pendings.remove(pos);
                 let correlated = self.create_correlated(pending.event, dest_event.clone());
-                self.completed
-                    .insert(correlated.id.clone(), correlated.clone());
+                self.record_completed(correlated.clone());
                 return Ok(Some(correlated));
             }
         }
@@ -182,6 +180,23 @@ impl EventCorrelator {
         );
 
         Ok(None)
+    }
+
+    /// Record a completed correlation, bounding the buffer to the configured
+    /// `buffer_size`. When the buffer is full the oldest entry (by
+    /// `created_at`) is evicted before the new one is inserted.
+    fn record_completed(&self, correlated: CorrelatedEvent) {
+        if self.config.buffer_size > 0 && self.completed.len() >= self.config.buffer_size {
+            if let Some(oldest) = self
+                .completed
+                .iter()
+                .min_by_key(|e| e.value().created_at)
+                .map(|e| e.key().clone())
+            {
+                self.completed.remove(&oldest);
+            }
+        }
+        self.completed.insert(correlated.id.clone(), correlated);
     }
 
     /// Create fuzzy key for matching
@@ -337,6 +352,33 @@ mod tests {
         let correlated = result.unwrap();
         assert_eq!(correlated.status, CorrelationStatus::Matched);
         assert!(correlated.amounts_match());
+    }
+
+    #[tokio::test]
+    async fn test_buffer_size_config_bounds_completed() {
+        // buffer_size = 1 means the completed buffer never holds more than one
+        // correlation; proves CorrelationConfig::buffer_size drives behavior.
+        let config = CorrelationConfig {
+            timeout_secs: 3600,
+            buffer_size: 1,
+            cleanup_interval_secs: 60,
+        };
+        let correlator = EventCorrelator::new(config);
+
+        for i in 0..3 {
+            let mut deposit = deposit_event();
+            deposit.message_hash = Some(format!("0xmsg{i}"));
+            deposit.to_address = format!("0xrecipient{i}");
+            correlator.process_event(&deposit).await.unwrap();
+
+            let mut withdrawal = withdrawal_event();
+            withdrawal.message_hash = Some(format!("0xmsg{i}"));
+            withdrawal.to_address = format!("0xrecipient{i}");
+            let result = correlator.process_event(&withdrawal).await.unwrap();
+            assert!(result.is_some());
+        }
+
+        assert_eq!(correlator.completed_count(), 1);
     }
 
     #[tokio::test]

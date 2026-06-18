@@ -22,6 +22,23 @@
 //! - **Proof Generation**: 10-40x faster than traditional SNARKs for lookup-heavy operations
 //! - **Proof Size**: Constant size (~1KB)
 //! - **Verification**: Sub-linear in table size
+//!
+//! ## ⚠️ SECURITY WARNING — NOT CRYPTOGRAPHICALLY SOUND ⚠️
+//!
+//! This module is a **research/benchmarking skeleton only**. The "sumcheck" used
+//! by [`LookupArgument::verify`] is a placeholder that merely checks
+//! `claimed_sum == 0`: there is **no** real sumcheck round-polynomial binding and
+//! **no** polynomial-commitment opening verification. A malicious prover can
+//! trivially construct a "proof" that verifies (the table commitment is public
+//! and recomputable, and `claimed_sum` is just set to zero), so this argument
+//! **provides no soundness guarantee whatsoever** and must never be used to make
+//! a security or authorization decision.
+//!
+//! To prevent accidental reliance, [`LookupArgument::verify`] **fails closed**:
+//! in the default build it returns [`LassoError::NotImplemented`] instead of a
+//! boolean. The unsound acceptance path is only compiled when the non-default
+//! `experimental-lasso` cargo feature is enabled, and is intended solely for
+//! local experimentation and benchmarking.
 
 use ark_ff::{Field, PrimeField};
 use ark_poly::{
@@ -54,6 +71,12 @@ pub enum LassoError {
 
     #[error("Serialization error: {0}")]
     SerializationError(String),
+
+    #[error(
+        "Lasso verification is not cryptographically sound and is disabled in production builds \
+         (enable the non-default `experimental-lasso` feature for research/benchmarking only)"
+    )]
+    NotImplemented,
 }
 
 pub type LassoResult<T> = Result<T, LassoError>;
@@ -230,10 +253,36 @@ impl<F: PrimeField> LookupArgument<F> {
         })
     }
 
-    /// Verify a Lasso proof
+    /// Verify a Lasso proof.
     ///
-    /// Verifies that the prover correctly performed lookups without learning
-    /// what was looked up.
+    /// # ⚠️ NOT CRYPTOGRAPHICALLY SOUND ⚠️
+    ///
+    /// This verifier is a placeholder and provides **no soundness guarantee**.
+    /// The underlying "sumcheck" only checks `claimed_sum == 0` and there is no
+    /// polynomial-commitment opening verification, so a malicious prover can
+    /// forge an accepting proof at will. It must never be used to make a
+    /// security or authorization decision.
+    ///
+    /// To prevent accidental reliance, this method **fails closed** in the
+    /// default build: it returns [`LassoError::NotImplemented`] rather than a
+    /// boolean. The unsound acceptance path is only compiled when the
+    /// non-default `experimental-lasso` cargo feature is enabled.
+    #[cfg(not(feature = "experimental-lasso"))]
+    pub fn verify(&self, _proof: &LassoProof<F>) -> LassoResult<bool> {
+        // Fail closed: the verifier is not sound, so production builds must not
+        // be able to obtain an "accepted" verdict from it.
+        Err(LassoError::NotImplemented)
+    }
+
+    /// Verify a Lasso proof (experimental, **UNSOUND** — research/benchmarking only).
+    ///
+    /// # ⚠️ NOT CRYPTOGRAPHICALLY SOUND ⚠️
+    ///
+    /// This path is only compiled under the non-default `experimental-lasso`
+    /// feature. It does **not** verify a real sumcheck or any polynomial
+    /// commitment openings, so forged proofs are accepted. Do not rely on its
+    /// boolean result for any security decision.
+    #[cfg(feature = "experimental-lasso")]
     pub fn verify(&self, proof: &LassoProof<F>) -> LassoResult<bool> {
         // Step 1: Verify table commitment matches our table
         let expected_table_commitment = self.polynomial_to_bytes(&self.table_polynomial);
@@ -241,14 +290,14 @@ impl<F: PrimeField> LookupArgument<F> {
             return Ok(false);
         }
 
-        // Step 2: Verify sumcheck proof
+        // Step 2: Verify sumcheck proof (PLACEHOLDER — unsound).
         let sumcheck_valid = self.verify_sumcheck(&proof.sumcheck_proof)?;
         if !sumcheck_valid {
             return Ok(false);
         }
 
-        // Step 3: Verify evaluation proofs (simplified)
-        // In production, verify polynomial commitment openings
+        // Step 3: Verify evaluation proofs (NOT IMPLEMENTED — unsound).
+        // A real implementation would verify polynomial commitment openings here.
 
         Ok(true)
     }
@@ -333,7 +382,7 @@ mod tests {
 
     #[test]
     fn test_lookup_table_creation() {
-        let values: Vec<Fr> = (0..16).map(|i| Fr::from(i)).collect();
+        let values: Vec<Fr> = (0u64..16).map(Fr::from).collect();
         let table = LookupTable::new("test_table".to_string(), values);
 
         assert_eq!(table.size, 16);
@@ -342,7 +391,7 @@ mod tests {
 
     #[test]
     fn test_lookup_out_of_bounds() {
-        let values: Vec<Fr> = (0..8).map(|i| Fr::from(i)).collect();
+        let values: Vec<Fr> = (0u64..8).map(Fr::from).collect();
         let table = LookupTable::new("test_table".to_string(), values);
 
         let result = table.lookup(100);
@@ -362,8 +411,13 @@ mod tests {
         assert!(proof.is_ok());
     }
 
+    /// In the default (production) build the Lasso verifier MUST fail closed:
+    /// it is not cryptographically sound, so it must refuse to ever return an
+    /// "accepted" verdict. Even an honestly generated proof gets an explicit
+    /// `NotImplemented` error rather than `Ok(true)`.
+    #[cfg(not(feature = "experimental-lasso"))]
     #[test]
-    fn test_lasso_proof_verification() {
+    fn test_lasso_verify_fails_closed_in_default_build() {
         let values: Vec<Fr> = (0..16).map(|i| Fr::from(i * 2)).collect();
         let table = LookupTable::new("doubles".to_string(), values);
         let lookup_arg = LookupArgument::new(table);
@@ -371,9 +425,83 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(1);
         let indices = vec![0, 5, 10, 15];
 
+        // Honest proof: still must NOT verify true in the default build.
         let proof = lookup_arg.prove(&indices, &mut rng).unwrap();
-        let valid = lookup_arg.verify(&proof).unwrap();
+        let result = lookup_arg.verify(&proof);
+        assert!(
+            matches!(result, Err(LassoError::NotImplemented)),
+            "default build must fail closed with NotImplemented, got {result:?}"
+        );
+    }
 
-        assert!(valid);
+    /// NEGATIVE TEST: a forged proof must NOT be accepted in the default build.
+    ///
+    /// The forged proof is constructed exactly the way an attacker would exploit
+    /// the placeholder verifier: a correct (public, recomputable) table
+    /// commitment, arbitrary query/result commitments, and a "sumcheck" whose
+    /// `claimed_sum` is zero. Under the old unsound logic this verified as
+    /// `true`. With the fail-closed gate, `verify` must reject it (return an
+    /// error / never `Ok(true)`).
+    #[cfg(not(feature = "experimental-lasso"))]
+    #[test]
+    fn test_lasso_forged_proof_rejected_in_default_build() {
+        let values: Vec<Fr> = (0..16).map(|i| Fr::from(i * 3)).collect();
+        let table = LookupTable::new("triples".to_string(), values);
+        let lookup_arg = LookupArgument::new(table);
+
+        // Forge a proof: correct table commitment + zero claimed_sum. This is the
+        // exact shape that the placeholder verifier would have accepted.
+        let forged = LassoProof::<Fr> {
+            table_commitment: lookup_arg.polynomial_to_bytes(&lookup_arg.table_polynomial),
+            query_commitment: vec![1, 2, 3],
+            result_commitment: vec![4, 5, 6],
+            sumcheck_proof: SumcheckProof {
+                round_polynomials: vec![],
+                claimed_sum: Fr::from(0u64),
+            },
+            evaluation_proofs: vec![],
+        };
+
+        let result = lookup_arg.verify(&forged);
+        assert!(
+            !matches!(result, Ok(true)),
+            "forged proof must not be accepted, got {result:?}"
+        );
+        assert!(
+            matches!(result, Err(LassoError::NotImplemented)),
+            "expected fail-closed NotImplemented for forged proof, got {result:?}"
+        );
+    }
+
+    /// Under the explicitly-enabled experimental feature, the verifier is
+    /// documented as UNSOUND. This test pins that known-unsound behavior so the
+    /// danger is visible and intentional: the same forged proof IS accepted,
+    /// which is precisely why the feature is non-default and gated.
+    #[cfg(feature = "experimental-lasso")]
+    #[test]
+    fn test_lasso_experimental_verify_is_unsound() {
+        let values: Vec<Fr> = (0..16).map(|i| Fr::from(i * 2)).collect();
+        let table = LookupTable::new("doubles".to_string(), values);
+        let lookup_arg = LookupArgument::new(table);
+
+        let mut rng = StdRng::seed_from_u64(1);
+        let indices = vec![0, 5, 10, 15];
+
+        // Honest proof verifies under the experimental feature.
+        let proof = lookup_arg.prove(&indices, &mut rng).unwrap();
+        assert!(lookup_arg.verify(&proof).unwrap());
+
+        // And so does a forged one — demonstrating the documented unsoundness.
+        let forged = LassoProof::<Fr> {
+            table_commitment: lookup_arg.polynomial_to_bytes(&lookup_arg.table_polynomial),
+            query_commitment: vec![1, 2, 3],
+            result_commitment: vec![4, 5, 6],
+            sumcheck_proof: SumcheckProof {
+                round_polynomials: vec![],
+                claimed_sum: Fr::from(0u64),
+            },
+            evaluation_proofs: vec![],
+        };
+        assert!(lookup_arg.verify(&forged).unwrap());
     }
 }

@@ -1,6 +1,5 @@
 //! Secure cluster transport
 
-use crate::config::{NodeId, TransportConfig};
 use crate::error::{ClusterError, Result};
 use aes_gcm::{
     aead::{Aead, KeyInit},

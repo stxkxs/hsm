@@ -25,6 +25,18 @@
 
 use crate::error::{BlockchainError, Result};
 use starknet_crypto::{pedersen_hash, Felt};
+use starknet_types_core::felt::NonZeroFelt;
+
+/// The StarkNet contract-address bound, `2^251 - 256`.
+///
+/// Computed contract addresses are reduced modulo this value
+/// (`normalize_address`), matching `starknet-rs` / `cairo-lang`.
+const ADDR_BOUND: NonZeroFelt = NonZeroFelt::from_raw([
+    576459263475590224,
+    18446744073709255680,
+    160989183,
+    18446743986131443745,
+]);
 
 /// Known account contract class hashes for common wallets.
 pub mod class_hashes {
@@ -122,23 +134,43 @@ impl StarknetAddress {
         class_hash: &Felt,
         constructor_calldata: &[Felt],
     ) -> Self {
-        // Compute constructor calldata hash using Pedersen
-        let calldata_hash = compute_hash_on_elements(constructor_calldata);
-
-        // Compute prefix felt
-        let prefix_felt = felt_from_short_string(Self::CONTRACT_ADDRESS_PREFIX);
-
         // Salt from public key
         let salt = Felt::from_bytes_be_slice(salt_key.to_bytes());
+        Self::compute_address_from_felts(deployer_address, &salt, class_hash, constructor_calldata)
+    }
 
-        // Compute address using nested Pedersen hashes
-        let h1 = pedersen_hash(&prefix_felt, deployer_address);
-        let h2 = pedersen_hash(&h1, &salt);
-        let h3 = pedersen_hash(&h2, class_hash);
-        let h4 = pedersen_hash(&h3, &calldata_hash);
+    /// Compute a contract address from raw field-element components.
+    ///
+    /// This is the canonical `calculate_contract_address` from `cairo-lang` /
+    /// `starknet-rs`:
+    ///
+    /// ```text
+    /// normalize_address(
+    ///   hash_on_elements([PREFIX, deployer, salt, class_hash, hash_on_elements(calldata)])
+    /// )
+    /// ```
+    ///
+    /// The outer `compute_hash_on_elements` applies the trailing length
+    /// finalization over the five top-level elements (previously omitted), and
+    /// `normalize_address` reduces modulo `2^251 - 256` (previously omitted) —
+    /// without both, the address does not match any StarkNet tooling (HIGH #7).
+    pub(crate) fn compute_address_from_felts(
+        deployer_address: &Felt,
+        salt: &Felt,
+        class_hash: &Felt,
+        constructor_calldata: &[Felt],
+    ) -> Self {
+        let calldata_hash = compute_hash_on_elements(constructor_calldata);
+        let prefix_felt = felt_from_short_string(Self::CONTRACT_ADDRESS_PREFIX);
 
-        // Apply modular reduction (already done by Felt)
-        let address_felt = h4;
+        let raw = compute_hash_on_elements(&[
+            prefix_felt,
+            *deployer_address,
+            *salt,
+            *class_hash,
+            calldata_hash,
+        ]);
+        let address_felt = normalize_address(raw);
         let bytes = address_felt.to_bytes_be();
 
         Self { felt: bytes }
@@ -207,6 +239,11 @@ fn compute_hash_on_elements(elements: &[Felt]) -> Felt {
     pedersen_hash(&current, &Felt::from(elements.len()))
 }
 
+/// Reduce a field element into the valid StarkNet address range `[0, 2^251 - 256)`.
+fn normalize_address(address: Felt) -> Felt {
+    address.mod_floor(&ADDR_BOUND)
+}
+
 /// Convert a short string (≤31 chars) to a field element.
 fn felt_from_short_string(s: &str) -> Felt {
     let bytes = s.as_bytes();
@@ -232,6 +269,48 @@ mod tests {
         let address = StarknetAddress::from_hex(hex).unwrap();
 
         assert!(address.to_hex().starts_with("0x"));
+    }
+
+    /// Canonical contract-address KAT from `starknet-rs`
+    /// (`starknet-core` `test_get_contract_address`):
+    ///
+    /// ```text
+    /// salt       = 0x0018a7a329d1d85b621350f2b5fc9c64b2e57dfe708525f0aff2c90de1e5b9c8
+    /// class_hash = 0x0750cd490a7cd1572411169eaa8be292325990d33c5d4733655fe6b926985062
+    /// calldata   = [1]
+    /// deployer   = 0
+    /// => address = 0x00da27ef7c3869c3a6cc6a0f7bf07a51c3e590825adba8a51cae27d815839eec
+    /// ```
+    ///
+    /// Before the fix (no length-finalization on the 5 top-level elements and no
+    /// `normalize_address`), the computed address did not match (HIGH #7).
+    #[test]
+    fn test_contract_address_known_answer() {
+        let salt =
+            Felt::from_hex("0x0018a7a329d1d85b621350f2b5fc9c64b2e57dfe708525f0aff2c90de1e5b9c8")
+                .unwrap();
+        let class_hash =
+            Felt::from_hex("0x0750cd490a7cd1572411169eaa8be292325990d33c5d4733655fe6b926985062")
+                .unwrap();
+        let calldata = [Felt::ONE];
+
+        let addr =
+            StarknetAddress::compute_address_from_felts(&Felt::ZERO, &salt, &class_hash, &calldata);
+
+        assert_eq!(
+            addr.to_hex(),
+            "0x00da27ef7c3869c3a6cc6a0f7bf07a51c3e590825adba8a51cae27d815839eec"
+        );
+    }
+
+    /// `normalize_address` must reduce a value at or above the bound. The bound
+    /// `2^251 - 256` itself normalizes to 0.
+    #[test]
+    fn test_normalize_address_reduces() {
+        let bound: Felt = (&ADDR_BOUND).into();
+        assert_eq!(normalize_address(bound), Felt::ZERO);
+        // A value below the bound is unchanged.
+        assert_eq!(normalize_address(Felt::from(5u64)), Felt::from(5u64));
     }
 
     #[test]

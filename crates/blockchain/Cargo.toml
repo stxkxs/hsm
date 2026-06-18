@@ -21,11 +21,19 @@ bitcoin = { version = "0.32", features = ["std", "secp-recovery"] }
 
 # StarkNet support
 starknet-crypto = "0.8"
+# Exposes NonZeroFelt + Felt::mod_floor for canonical StarkNet contract-address
+# normalization (the Felt type unifies with the one re-exported by
+# starknet-crypto, which depends on the same starknet-types-core 0.2.x).
+starknet-types-core = { version = "0.2", default-features = false, features = ["curve", "hash"] }
 
 # Cryptographic primitives
 k256 = { version = "0.13", features = ["ecdsa", "schnorr"] }
 sha2.workspace = true
 sha3 = "0.10"
+# RIPEMD-160 for Cosmos HASH160 address derivation
+ripemd = "0.1"
+# Blake2b-512 for SS58 (Substrate/Polkadot) address checksums
+blake2 = "0.10"
 hmac = "0.12"
 pbkdf2 = { version = "0.12", features = ["hmac"] }
 ed25519-dalek.workspace = true
@@ -45,7 +53,11 @@ zeroize.workspace = true
 
 # Serialization
 serde.workspace = true
-serde_json.workspace = true
+# arbitrary_precision is required so that large EIP-712 integer literals (e.g.
+# wei amounts above u64::MAX) survive JSON parsing without being lossily coerced
+# into an f64. With this feature, serde_json::Number preserves the exact decimal
+# digits, which encode_int parses into a 256-bit value.
+serde_json = { workspace = true, features = ["arbitrary_precision"] }
 hex = "0.4"
 
 # Error handling

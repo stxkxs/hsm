@@ -34,16 +34,22 @@ impl KeyStore {
     /// Store a key in the given namespace
     pub fn insert(&self, namespace: &str, key: Key) -> Result<(), crate::Error> {
         let composite_key = (namespace.to_string(), key.id);
+        let key_id = key.id;
 
-        // Check if key already exists
-        if self.keys.contains_key(&composite_key) {
-            return Err(crate::Error::KeyAlreadyExists(key.id));
-        }
-
+        // Atomic check-and-insert via the DashMap Entry API. A separate
+        // `contains_key` + `insert` is a TOCTOU race: two concurrent inserts of
+        // the same (namespace, id) could both observe "absent" and one would
+        // silently overwrite the other. The Occupied/Vacant match closes that
+        // window so a duplicate id always errors.
         let key_arc = Arc::new(key);
-
-        // Insert into main store
-        self.keys.insert(composite_key.clone(), key_arc.clone());
+        match self.keys.entry(composite_key.clone()) {
+            dashmap::Entry::Occupied(_) => {
+                return Err(crate::Error::KeyAlreadyExists(key_id));
+            }
+            dashmap::Entry::Vacant(vacant) => {
+                vacant.insert(Arc::clone(&key_arc));
+            }
+        }
 
         // Add to hot cache
         self.hot_cache.lock().put(composite_key, key_arc);
@@ -191,9 +197,12 @@ impl KeyStore {
             }
         }
 
-        // Apply pagination
-        let start = offset;
-        let end = (offset + limit).min(key_ids.len());
+        // Apply pagination. Clamp both bounds so an offset past the end (or an
+        // offset+limit that overflows) yields an empty slice instead of
+        // panicking on an out-of-range / start>end slice index.
+        let len = key_ids.len();
+        let start = offset.min(len);
+        let end = offset.saturating_add(limit).min(len);
 
         Ok(key_ids[start..end].to_vec())
     }
@@ -356,6 +365,51 @@ mod tests {
 
         // Verify deletion
         assert_eq!(store.count(namespace), 7);
+    }
+
+    #[test]
+    fn test_insert_duplicate_id_errors() {
+        let store = KeyStore::new();
+        let namespace = "test-namespace";
+
+        let key = create_test_key(namespace);
+        let key_id = key.id;
+
+        // Build a second key sharing the SAME id (so the composite key collides).
+        let mut dup = create_test_key(namespace);
+        dup.id = key_id;
+
+        store.insert(namespace, key).unwrap();
+
+        let err = store
+            .insert(namespace, dup)
+            .expect_err("duplicate id must be rejected, not silently overwritten");
+        match err {
+            crate::Error::KeyAlreadyExists(id) => assert_eq!(id, key_id),
+            other => panic!("expected KeyAlreadyExists, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_list_batch_offset_past_end_returns_empty() {
+        let store = KeyStore::new();
+        let namespace = "test-namespace";
+
+        for _ in 0..3 {
+            store.insert(namespace, create_test_key(namespace)).unwrap();
+        }
+
+        // offset > len must not panic; returns empty.
+        let empty = store.list_batch(namespace, 100, 10).unwrap();
+        assert!(empty.is_empty());
+
+        // offset == len boundary also empty.
+        let boundary = store.list_batch(namespace, 3, 10).unwrap();
+        assert!(boundary.is_empty());
+
+        // offset within range but limit overruns end: clamped, no panic.
+        let tail = store.list_batch(namespace, 2, usize::MAX).unwrap();
+        assert_eq!(tail.len(), 1);
     }
 
     fn create_test_key(namespace: &str) -> Key {

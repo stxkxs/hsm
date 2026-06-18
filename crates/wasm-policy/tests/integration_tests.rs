@@ -1222,7 +1222,7 @@ fn test_host_functions_timestamp() {
 #[test]
 fn test_host_state_alloc_pos() {
     let host = HostFunctions::new(test_context());
-    let state = HostState::new(host);
+    let state = HostState::new(host, wasmtime::StoreLimitsBuilder::new().build());
     // Default alloc position is after the stack
     assert_eq!(state.alloc_pos, 16384);
 }

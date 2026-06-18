@@ -192,6 +192,37 @@ fn test_cleanup_expired() {
 }
 
 #[test]
+fn test_cleanup_expired_concurrent_no_underflow() {
+    use std::sync::Arc;
+    use std::thread;
+
+    // TTL = -1 makes every created session immediately expired.
+    let manager = Arc::new(SessionManager::new(-1));
+
+    // Concurrently insert sessions while repeatedly cleaning up. Previously the
+    // count was computed as `len_before - len_after`, which underflows (panics
+    // in debug) when an insert grows the map between the two length snapshots.
+    let mut handles = Vec::new();
+    for t in 0..4 {
+        let m = Arc::clone(&manager);
+        handles.push(thread::spawn(move || {
+            for i in 0..200 {
+                m.create_session(create_test_identity(&format!("c{}-{}", t, i)));
+                // Returns a usize; if the subtraction underflowed this would panic.
+                let _ = m.cleanup_expired();
+                let _ = m.delete_client_sessions(&format!("c{}-{}", t, i));
+            }
+        }));
+    }
+    for h in handles {
+        h.join().unwrap();
+    }
+
+    // Final cleanup must not panic and returns a sane value.
+    let _ = manager.cleanup_expired();
+}
+
+#[test]
 fn test_get_client_sessions() {
     let manager = SessionManager::new(3600);
     let identity1 = create_test_identity("client1");

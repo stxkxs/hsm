@@ -1,6 +1,6 @@
 //! Raft log implementation
 
-use crate::error::{ClusterError, Result};
+use crate::error::Result;
 use crate::node::Command;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -256,6 +256,12 @@ impl RaftLog {
             for item in storage.scan_prefix(prefix) {
                 let (key, value) = item?;
                 let entry: LogEntry = serde_json::from_slice(&value)?;
+                tracing::trace!(
+                    storage_key = %String::from_utf8_lossy(&key),
+                    index = entry.index,
+                    term = entry.term,
+                    "Loaded Raft log entry from storage"
+                );
                 self.entries.push_back(entry);
             }
 

@@ -37,30 +37,14 @@ license = "MIT OR Apache-2.0"
 # Async runtime
 tokio = { version = "1.49", features = ["full"] }
 tokio-rustls = "0.26"
-
-# Blockchain
-bip32 = "0.5"
-bip39 = { version = "2.1", features = ["rand"] }
-alloy-primitives = "1"
-alloy-rlp = "0.3"
-bitcoin = { version = "0.32", features = ["std", "secp-recovery"] }
-k256 = { version = "0.13", features = ["ecdsa", "schnorr"] }
 bs58 = "0.5"
 ed25519-dalek = "2.2"
-tiny-keccak = { version = "2.0", features = ["keccak"] }
 hmac = "0.12"
-pbkdf2 = { version = "0.12", features = ["hmac"] }
 rand = "0.8"
 hex = "0.4"
 
 # HTTP client for webhooks and OIDC
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
-
-# JWT for OIDC
-jsonwebtoken = "9.3"
-
-# BigDecimal for policy limits
-bigdecimal = { version = "0.4", features = ["serde"] }
 
 # gRPC
 tonic = "0.14"
@@ -70,11 +54,9 @@ prost = "0.14"
 ring = "0.17"
 p256 = "0.13"
 p384 = "0.13"
-p521 = "0.13"
 rsa = { version = "0.9", features = ["sha2"] }
 aes-gcm = "0.10"
 sha2 = "0.10"
-sha3 = "0.10"
 
 # TLS
 rustls = "0.23"
@@ -85,7 +67,6 @@ x509-parser = "0.18"
 secrecy = "0.10"
 zeroize = { version = "1.8", features = ["derive"] }
 getrandom = "0.3"
-sharks = "0.5"
 
 # Logging & Metrics
 tracing = "0.1"
@@ -96,10 +77,6 @@ prometheus = "0.14"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 postcard = { version = "1.0", features = ["alloc"] }
-
-# Configuration
-config = "0.15"
-toml = "1"
 
 # Error handling
 thiserror = "2.0"
@@ -115,20 +92,10 @@ uuid = { version = "1.19", features = ["v4", "serde"] }
 parking_lot = "0.12"
 bytes = "1.11"
 dashmap = "6.1"
-lru = "0.18"
 tempfile = "3.19"
-async-trait = "0.1"
 
 # Testing & Benchmarking
 criterion = { version = "0.8", features = ["html_reports"] }
-
-# High Availability / Clustering
-openraft = "0.10"
-sled = "0.34"
-hkdf = "0.12"
-
-# Bridge Monitoring
-url = "2.5"
 
 [profile.release]
 lto = true

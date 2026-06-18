@@ -612,7 +612,7 @@ mod tests {
     #[test]
     fn test_batch_encrypt_decrypt_aes256() {
         let key = KeyMaterial::from_bytes(vec![0x42; 32]);
-        let messages = vec![
+        let messages = [
             b"message one".to_vec(),
             b"message two".to_vec(),
             b"message three".to_vec(),

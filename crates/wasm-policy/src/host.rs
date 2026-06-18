@@ -237,14 +237,23 @@ pub struct HostState {
     pub host: HostFunctions,
     /// Memory allocator position.
     pub alloc_pos: i32,
+    /// Resource limits enforced by wasmtime during execution.
+    ///
+    /// This is wired into the [`wasmtime::Store`] via
+    /// [`wasmtime::Store::limiter`] so that `memory.grow` / `table.grow` and
+    /// instance/table/memory creation are rejected *before* they commit when
+    /// they would exceed the configured caps (rather than being detected only
+    /// after the policy has already allocated up to wasm's 4 GiB ceiling).
+    pub limits: wasmtime::StoreLimits,
 }
 
 impl HostState {
-    /// Create new host state.
-    pub fn new(host: HostFunctions) -> Self {
+    /// Create new host state with the given wasmtime resource limits.
+    pub fn new(host: HostFunctions, limits: wasmtime::StoreLimits) -> Self {
         Self {
             host,
             alloc_pos: 16384, // Start after 16KB stack space, leaving room for data
+            limits,
         }
     }
 }

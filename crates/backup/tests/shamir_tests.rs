@@ -19,12 +19,12 @@ fn test_shamir_split_recover_basic() {
     for share in &shares {
         assert_eq!(share.threshold, 3);
         assert_eq!(share.total_shares, 5);
-        assert!(share.data.len() > 0);
+        assert!(!share.data.is_empty());
     }
 
     // Recover with exactly threshold shares
     let recovered = shamir.recover_secret(&shares[0..3]).unwrap();
-    assert_eq!(recovered, secret);
+    assert_eq!(recovered.as_slice(), &secret[..]);
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn test_shamir_different_combinations() {
     for combo in combinations {
         let combo_owned: Vec<SerializableShare> = combo.iter().map(|&s| s.clone()).collect();
         let recovered = shamir.recover_secret(&combo_owned).unwrap();
-        assert_eq!(recovered, secret);
+        assert_eq!(recovered.as_slice(), &secret[..]);
     }
 }
 
@@ -106,7 +106,7 @@ fn test_shamir_share_serialization() {
         let json = shamir.serialize_share(original_share).unwrap();
 
         // Verify it's valid JSON
-        assert!(json.len() > 0);
+        assert!(!json.is_empty());
 
         let deserialized = shamir.deserialize_share(&json).unwrap();
 
@@ -183,11 +183,11 @@ fn test_split_recover_master_key_functions() {
 
     // Recover with minimum shares
     let recovered = recover_master_key(&shares[0..3]).unwrap();
-    assert_eq!(recovered, master_key);
+    assert_eq!(recovered.as_slice(), &master_key[..]);
 
     // Recover with all shares
     let recovered = recover_master_key(&shares).unwrap();
-    assert_eq!(recovered, master_key);
+    assert_eq!(recovered.as_slice(), &master_key[..]);
 }
 
 #[test]
@@ -203,11 +203,11 @@ fn test_large_secret_splitting() {
 
     // Recover with exactly threshold
     let recovered = shamir.recover_secret(&shares[0..5]).unwrap();
-    assert_eq!(recovered, large_secret);
+    assert_eq!(recovered.as_slice(), &large_secret[..]);
 
     // Recover with more than threshold
     let recovered = shamir.recover_secret(&shares[0..7]).unwrap();
-    assert_eq!(recovered, large_secret);
+    assert_eq!(recovered.as_slice(), &large_secret[..]);
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn test_multiple_split_operations() {
         let shares = shamir.split_secret(secret.as_bytes()).unwrap();
         let recovered = shamir.recover_secret(&shares[0..3]).unwrap();
 
-        assert_eq!(recovered, secret.as_bytes());
+        assert_eq!(recovered.as_slice(), secret.as_bytes());
     }
 }
 
@@ -240,7 +240,7 @@ fn test_shamir_with_various_thresholds() {
         let recovered = shamir
             .recover_secret(&shares[0..threshold as usize])
             .unwrap();
-        assert_eq!(recovered, secret);
+        assert_eq!(recovered.as_slice(), &secret[..]);
     }
 }
 
@@ -280,7 +280,7 @@ fn test_maximum_threshold() {
 
     // Need all 5 shares to recover
     let recovered = shamir.recover_secret(&shares).unwrap();
-    assert_eq!(recovered, secret);
+    assert_eq!(recovered.as_slice(), &secret[..]);
 
     // Cannot recover with 4 shares
     let result = shamir.recover_secret(&shares[0..4]);
@@ -306,7 +306,7 @@ fn test_serialized_shares_roundtrip() {
 
     // Recover the master key
     let recovered = recover_master_key(&deserialized_shares[0..3]).unwrap();
-    assert_eq!(recovered, master_key);
+    assert_eq!(recovered.as_slice(), &master_key[..]);
 }
 
 #[test]

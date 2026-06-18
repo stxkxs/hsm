@@ -1,7 +1,20 @@
 # Phase 3: Production Hardening
 
+> **STATUS: ✅ RESOLVED.** All 7 fixes below are implemented. Retained as a
+> historical hardening record, not an open work list. Verified 2026-06-17:
+>
+> | Fix | Implemented in |
+> | --- | --- |
+> | 1. Webhook circuit breaker | `crates/webhooks/src/delivery.rs:67` — `CircuitState` + `is_circuit_open` (130), threshold 5 |
+> | 2. Composite rate-limit key | `crates/auth/src/rate_limit.rs:90` — keyed on `common_name:serial_number` |
+> | 3. Token-bound session validation | `crates/auth/src/session/manager.rs:583` — `validate_session` `#[deprecated]`; `validate_session_with_token` (609); `generate_session_id` uses `getrandom` (`session_data.rs:259`) |
+> | 4. Journal stores ciphertext only | `crates/storage/src/journal.rs:125,135` — `StoreKey.data` documented + enforced as pre-encrypted |
+> | 5. Path-traversal protection | `crates/storage/src/encrypted_fs.rs:301` — `validate_path_component` rejects `/`,`\`,`..`,NUL on namespace + key id |
+> | 6. Atomic key deletion | `crates/key-manager/src/lib.rs:443` — store delete first, then mark destroyed |
+> | 7. Namespace check on cache hit | `crates/key-manager/src/store.rs:64` — hot-cache hit re-verifies namespace, errors `NamespaceViolation` |
+
 ## Overview
-7 medium-severity fixes for production-grade resilience.
+7 medium-severity fixes that were resolved for production-grade resilience.
 
 ---
 

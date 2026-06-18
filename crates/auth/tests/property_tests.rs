@@ -128,6 +128,7 @@ proptest! {
 // SessionManager property tests
 proptest! {
     #[test]
+    #[allow(deprecated)] // exercises the deprecated validate_session path on purpose
     fn prop_session_manager_create_validate(_seed in any::<u64>()) {
         let manager = SessionManager::new(3600);
         let identity = create_test_identity("client1");
@@ -175,6 +176,7 @@ proptest! {
     }
 
     #[test]
+    #[allow(deprecated)] // exercises the deprecated validate_session path on purpose
     fn prop_session_manager_delete(_seed in any::<u64>()) {
         let manager = SessionManager::new(3600);
         let identity = create_test_identity("client1");
@@ -358,7 +360,7 @@ proptest! {
         let permission = permissions[perm_idx];
 
         prop_assert!(!permission.as_str().is_empty());
-        prop_assert!(permission.to_string().len() > 0);
+        prop_assert!(!permission.to_string().is_empty());
     }
 
     #[test]

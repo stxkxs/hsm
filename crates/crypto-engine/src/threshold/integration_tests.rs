@@ -266,8 +266,13 @@ fn run_ecdsa_dkg(
     Ok((shares, group_key.unwrap()))
 }
 
-/// Test: ECDSA P-256 DKG + Signing end-to-end
+/// Test: ECDSA P-256 DKG + Signing end-to-end.
+///
+/// Ignored: the threshold-ECDSA signing flow now fails closed (no `k^-1`; see
+/// `ThresholdEcdsaEngine::presign`) and this test only checked the signature shape,
+/// never that it verifies. Re-enable with a correct GG20/MtA implementation.
 #[test]
+#[ignore = "requires correct threshold ECDSA (GG20/MtA)"]
 fn test_ecdsa_p256_dkg_and_signing() {
     let (shares, group_key) = run_ecdsa_dkg(2, 3, EcdsaCurve::P256).unwrap();
 
@@ -319,8 +324,11 @@ fn test_ecdsa_p256_dkg_and_signing() {
     assert_eq!(signature.curve, EcdsaCurve::P256);
 }
 
-/// Test: ECDSA secp256k1 DKG + Signing end-to-end
+/// Test: ECDSA secp256k1 DKG + Signing end-to-end.
+///
+/// Ignored: threshold-ECDSA signing flow fails closed (no `k^-1`).
 #[test]
+#[ignore = "requires correct threshold ECDSA (GG20/MtA)"]
 fn test_ecdsa_secp256k1_dkg_and_signing() {
     let (shares, group_key) = run_ecdsa_dkg(2, 3, EcdsaCurve::Secp256k1).unwrap();
 
@@ -453,8 +461,12 @@ fn test_bls_dkg_and_signing() {
     let sig_share2 = ThresholdBlsEngine::sign_share(&shares[2], message).unwrap();
 
     let participants = vec![shares[0].participant_id, shares[2].participant_id];
-    let signature =
-        ThresholdBlsEngine::aggregate(&[sig_share0, sig_share2], &participants).unwrap();
+    let signature = ThresholdBlsEngine::aggregate(
+        &[sig_share0, sig_share2],
+        &participants,
+        shares[0].config.threshold,
+    )
+    .unwrap();
 
     // Verify the signature
     assert!(ThresholdBlsEngine::verify(&group_pk, message, &signature).unwrap());
@@ -471,13 +483,21 @@ fn test_bls_deterministic_signatures() {
     let sig1_share0 = ThresholdBlsEngine::sign_share(&shares[0], message).unwrap();
     let sig1_share1 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
     let participants = vec![shares[0].participant_id, shares[1].participant_id];
-    let signature1 =
-        ThresholdBlsEngine::aggregate(&[sig1_share0, sig1_share1], &participants).unwrap();
+    let signature1 = ThresholdBlsEngine::aggregate(
+        &[sig1_share0, sig1_share1],
+        &participants,
+        shares[0].config.threshold,
+    )
+    .unwrap();
 
     let sig2_share0 = ThresholdBlsEngine::sign_share(&shares[0], message).unwrap();
     let sig2_share1 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
-    let signature2 =
-        ThresholdBlsEngine::aggregate(&[sig2_share0, sig2_share1], &participants).unwrap();
+    let signature2 = ThresholdBlsEngine::aggregate(
+        &[sig2_share0, sig2_share1],
+        &participants,
+        shares[0].config.threshold,
+    )
+    .unwrap();
 
     // BLS signatures are deterministic - same message, same signers = same signature
     assert_eq!(signature1.bytes, signature2.bytes);
@@ -495,15 +515,23 @@ fn test_bls_different_subsets_same_signature() {
     let sig_01_0 = ThresholdBlsEngine::sign_share(&shares[0], message).unwrap();
     let sig_01_1 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
     let participants_01 = vec![shares[0].participant_id, shares[1].participant_id];
-    let signature_01 =
-        ThresholdBlsEngine::aggregate(&[sig_01_0, sig_01_1], &participants_01).unwrap();
+    let signature_01 = ThresholdBlsEngine::aggregate(
+        &[sig_01_0, sig_01_1],
+        &participants_01,
+        shares[0].config.threshold,
+    )
+    .unwrap();
 
     // Sign with participants [1, 2]
     let sig_12_1 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
     let sig_12_2 = ThresholdBlsEngine::sign_share(&shares[2], message).unwrap();
     let participants_12 = vec![shares[1].participant_id, shares[2].participant_id];
-    let signature_12 =
-        ThresholdBlsEngine::aggregate(&[sig_12_1, sig_12_2], &participants_12).unwrap();
+    let signature_12 = ThresholdBlsEngine::aggregate(
+        &[sig_12_1, sig_12_2],
+        &participants_12,
+        shares[0].config.threshold,
+    )
+    .unwrap();
 
     // Both signatures should be the same (threshold BLS property with Lagrange interpolation)
     assert_eq!(signature_01.bytes, signature_12.bytes);
@@ -556,7 +584,7 @@ fn test_frost_key_refresh_and_signing() {
 #[test]
 fn test_ecdsa_key_refresh_same_threshold() {
     // Generate initial keys via DKG
-    let (shares, group_key) = run_ecdsa_dkg(2, 3, EcdsaCurve::P256).unwrap();
+    let (shares, _group_key) = run_ecdsa_dkg(2, 3, EcdsaCurve::P256).unwrap();
 
     // Create KeyShare wrappers for the refresh protocol
     let key_shares: Vec<KeyShare> = shares
@@ -732,7 +760,7 @@ fn test_resharing_decrease_threshold_and_participants() {
         })
         .collect();
 
-    let old_participants: Vec<ParticipantId> = (1..=5).map(ParticipantId).collect();
+    let _old_participants: Vec<ParticipantId> = (1..=5).map(ParticipantId).collect();
     // New participants: keep 1, 2, 3, 4 (drop 5)
     let new_participants: Vec<ParticipantId> = vec![
         ParticipantId(1),
@@ -824,7 +852,8 @@ fn test_bls_insufficient_shares_fails() {
     let participants = vec![shares[0].participant_id];
 
     // Aggregation should fail
-    let result = ThresholdBlsEngine::aggregate(&[sig_share], &participants);
+    let result =
+        ThresholdBlsEngine::aggregate(&[sig_share], &participants, shares[0].config.threshold);
 
     assert!(matches!(
         result,
@@ -963,8 +992,12 @@ fn test_all_schemes_dkg_consistent_group_key() {
     assert_eq!(bls_gk.bytes.len(), 48); // Compressed G1 point
 }
 
-/// Test: Large threshold configuration (5-of-9)
+/// Test: Large threshold configuration (5-of-9).
+///
+/// Ignored: after the DKG-shape assertions it exercises the threshold-ECDSA signing
+/// flow, which now fails closed (no `k^-1`).
 #[test]
+#[ignore = "requires correct threshold ECDSA (GG20/MtA)"]
 fn test_large_threshold_5_of_9() {
     // ECDSA P-256
     let (shares, group_key) = run_ecdsa_dkg(5, 9, EcdsaCurve::P256).unwrap();

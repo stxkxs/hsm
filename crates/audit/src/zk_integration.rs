@@ -193,6 +193,7 @@ mod tests {
             },
             enabled: true,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();
@@ -228,6 +229,7 @@ mod tests {
             },
             enabled: true,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();

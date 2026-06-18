@@ -296,10 +296,10 @@ mod tests {
 
     #[test]
     fn test_participant_creation() {
-        let (group_key, participants) = setup_participants();
+        let (_group_key, participants) = setup_participants();
 
         assert_eq!(participants.len(), 3);
-        for (i, p) in participants.iter().enumerate() {
+        for p in &participants {
             assert_eq!(p.config().threshold, 2);
             assert_eq!(p.config().total_participants, 3);
             assert_eq!(p.active_session_count(), 0);

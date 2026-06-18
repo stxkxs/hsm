@@ -1,8 +1,9 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use hsm_audit::{
     AsyncAuditConfig, AsyncAuditLogger, AuditConfig, AuditLogger, EnhancedAuditStorage,
     EnhancedStorageConfig, EventType, StorageConfig, TamperDetector,
 };
+use std::hint::black_box;
 use tempfile::TempDir;
 
 // Synchronous logging benchmarks
@@ -22,6 +23,7 @@ fn bench_sync_logging(c: &mut Criterion) {
                     },
                     enabled: true,
                     rebuild_merkle_on_start: false,
+                    checkpoint_key: None,
                 };
 
                 let logger = AuditLogger::new(config).unwrap();
@@ -65,6 +67,7 @@ fn bench_async_logging(c: &mut Criterion) {
                     },
                     enabled: true,
                     rebuild_merkle_on_start: false,
+                    checkpoint_key: None,
                     channel_capacity: 10000,
                     batch_size: 100,
                     ..Default::default()
@@ -114,6 +117,7 @@ fn bench_verification(c: &mut Criterion) {
                 },
                 enabled: true,
                 rebuild_merkle_on_start: false,
+                checkpoint_key: None,
             };
 
             let logger = AuditLogger::new(config).unwrap();
@@ -158,6 +162,7 @@ fn bench_quick_verification(c: &mut Criterion) {
                 },
                 enabled: true,
                 rebuild_merkle_on_start: false,
+                checkpoint_key: None,
             };
 
             let logger = AuditLogger::new(config).unwrap();
@@ -258,6 +263,7 @@ fn bench_merkle_proof(c: &mut Criterion) {
                     },
                     enabled: true,
                     rebuild_merkle_on_start: false,
+                    checkpoint_key: None,
                 };
 
                 let logger = AuditLogger::new(config).unwrap();

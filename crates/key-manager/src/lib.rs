@@ -29,15 +29,21 @@
 //!        │
 //!        ▼
 //! ┌──────────────┐
-//! │  Destroyed   │  ◄─── Key material wiped, only metadata remains
+//! │  Destroyed   │  ◄─── Key material zeroized and entry removed (terminal)
 //! └──────────────┘
 //! ```
 //!
 //! ## State Transitions
 //!
 //! - **Active → Deactivated**: Manual via `update_state()` or automatic via `rotate_key()`
-//! - **Deactivated → Destroyed**: Manual via `delete_key()`
-//! - **Active → Destroyed**: Direct deletion via `delete_key()`
+//! - **Deactivated → Destroyed**: Terminal deletion via `delete_key()`
+//! - **Active → Destroyed**: Terminal deletion via `delete_key()`
+//!
+//! Reaching `Destroyed` via [`KeyManager::delete_key`] zeroizes the private key
+//! material and removes the store entry; a subsequent `get_key` therefore
+//! returns [`Error::KeyNotFound`]. (`KeyState::Destroyed` itself remains a valid
+//! metadata state for backends, such as the hardware manager, that retain a
+//! destroyed-key tombstone.)
 //!
 //! See [`KeyState`] for detailed state documentation.
 //!
@@ -441,21 +447,16 @@ impl KeyManager for DefaultKeyManager {
     }
 
     fn delete_key(&self, key_id: &KeyId, namespace: &str) -> Result<()> {
-        // Delete from store first (this will zeroize the key material on drop)
+        // For the in-memory key manager, deletion is the terminal "Destroyed"
+        // transition: removing the entry from the store drops the last `Arc`
+        // reference to the `Key`, which zeroizes the private key material via
+        // its `Drop`/`ZeroizeOnDrop` impl. No metadata tombstone is retained,
+        // so a subsequent `get_key` correctly returns `KeyNotFound`.
+        //
+        // We must NOT follow this with `update_state(.., Destroyed)`: the entry
+        // is already gone, so that call would always fail with `KeyNotFound`
+        // and error-log on every successful delete (the bug this replaces).
         let _deleted_key = self.store.delete(namespace, key_id)?;
-
-        // Then mark state as destroyed. If this fails after deletion,
-        // log the error but don't fail the operation since the key
-        // material has already been securely removed.
-        if let Err(e) = self.update_state(key_id, namespace, KeyState::Destroyed) {
-            tracing::error!(
-                key_id = %key_id,
-                namespace = namespace,
-                error = %e,
-                "Failed to mark key state as destroyed after deletion"
-            );
-        }
-
         Ok(())
     }
 
@@ -676,5 +677,125 @@ impl KeyManager for DefaultKeyManager {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tracing::level_filters::LevelFilter;
+    use tracing::subscriber::DefaultGuard;
+    use tracing::{Event, Level, Metadata, Subscriber};
+    use tracing_subscriber::layer::{Context, SubscriberExt};
+    use tracing_subscriber::registry::LookupSpan;
+    use tracing_subscriber::Layer;
+
+    /// A minimal tracing layer that counts ERROR-level events. Used to prove
+    /// that `delete_key` no longer emits `tracing::error!` on the happy path.
+    #[derive(Clone, Default)]
+    struct ErrorCounter(Arc<AtomicUsize>);
+
+    impl<S> Layer<S> for ErrorCounter
+    where
+        S: Subscriber + for<'a> LookupSpan<'a>,
+    {
+        fn enabled(&self, metadata: &Metadata<'_>, _ctx: Context<'_, S>) -> bool {
+            *metadata.level() == Level::ERROR
+        }
+
+        fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
+            if *event.metadata().level() == Level::ERROR {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+    }
+
+    fn install_error_counter() -> (Arc<AtomicUsize>, DefaultGuard) {
+        let counter = Arc::new(AtomicUsize::new(0));
+        let layer = ErrorCounter(Arc::clone(&counter));
+        let subscriber = tracing_subscriber::registry()
+            .with(LevelFilter::ERROR)
+            .with(layer);
+        let guard = tracing::subscriber::set_default(subscriber);
+        (counter, guard)
+    }
+
+    fn ed25519_spec(namespace: &str) -> KeySpec {
+        KeySpec {
+            key_type: KeyType::Ed25519,
+            namespace: namespace.to_string(),
+            policy: KeyUsagePolicy {
+                can_sign: true,
+                can_encrypt: false,
+                can_derive: false,
+                can_export: false,
+                max_operations: None,
+                expires_at: None,
+            },
+            labels: HashMap::new(),
+        }
+    }
+
+    /// MEDIUM #20 regression: a successful `delete_key` must NOT emit any
+    /// `tracing::error!` event.
+    ///
+    /// Before the fix, `delete_key` removed the entry and then called
+    /// `update_state(.., Destroyed)`, which failed with `KeyNotFound` and
+    /// logged an ERROR on EVERY delete. This test captures ERROR-level tracing
+    /// events around the delete and asserts the count is zero — it FAILS on the
+    /// old code (count == 1) and PASSES after the fix (count == 0).
+    #[test]
+    fn test_delete_key_does_not_error_log_on_happy_path() {
+        let manager = DefaultKeyManager::new();
+        let key_id = manager
+            .generate_key(ed25519_spec("test"))
+            .expect("generate");
+
+        let (error_count, _guard) = install_error_counter();
+
+        let result = manager.delete_key(&key_id, "test");
+
+        let errors = error_count.load(Ordering::SeqCst);
+        assert!(result.is_ok(), "delete_key should succeed");
+        assert_eq!(
+            errors, 0,
+            "successful delete_key must not emit any tracing::error! events (got {})",
+            errors
+        );
+    }
+
+    /// The documented terminal lifecycle: after `delete_key`, the key is gone
+    /// (zeroized + removed) and `get_key` returns `KeyNotFound`.
+    #[test]
+    fn test_delete_key_lifecycle_is_terminal() {
+        let manager = DefaultKeyManager::new();
+        let key_id = manager
+            .generate_key(ed25519_spec("test"))
+            .expect("generate");
+
+        // Key exists and is Active before deletion.
+        assert!(manager.get_key(&key_id, "test").is_ok());
+
+        manager.delete_key(&key_id, "test").expect("delete");
+
+        // After deletion the entry is removed; lookups fail with KeyNotFound.
+        match manager.get_key(&key_id, "test") {
+            Err(Error::KeyNotFound(missing)) => assert_eq!(missing, key_id),
+            other => panic!("expected KeyNotFound after delete, got {:?}", other),
+        }
+    }
+
+    /// Deleting a non-existent key still surfaces the error to the caller
+    /// (the store's `KeyNotFound`), rather than swallowing it.
+    #[test]
+    fn test_delete_missing_key_returns_error() {
+        let manager = DefaultKeyManager::new();
+        let missing = KeyId::new();
+        assert!(matches!(
+            manager.delete_key(&missing, "test"),
+            Err(Error::KeyNotFound(_))
+        ));
     }
 }

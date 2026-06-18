@@ -19,8 +19,8 @@ fn test_export_import_roundtrip() {
     // Verify backup properties
     assert_eq!(backup.version, 1);
     assert_eq!(backup.namespace, Some(namespace.to_string()));
-    assert!(backup.encrypted_data.len() > 0);
-    assert!(backup.nonce.len() == 12);
+    assert!(!backup.encrypted_data.is_empty());
+    assert_eq!(backup.nonce.len(), 12);
 
     // Import the data
     let imported = importer
@@ -212,7 +212,7 @@ fn test_concurrent_exports() {
 
     for handle in handles {
         let backup = handle.join().unwrap();
-        assert!(backup.encrypted_data.len() > 0);
+        assert!(!backup.encrypted_data.is_empty());
     }
 }
 
@@ -224,6 +224,81 @@ fn test_invalid_json_import() {
     let result = importer.import_from_json(invalid_json, b"test-password-1234");
 
     assert!(matches!(result, Err(BackupError::Deserialization(_))));
+}
+
+/// Regression test for the "backup contains its own decryption key" defect.
+///
+/// Previously the AES-256 key was the first 32 bytes of the Argon2 PHC hash
+/// that was itself stored in the backup file, so anyone holding the file could
+/// recover the key and decrypt it with NO password. This test proves:
+///   (a) a wrong password fails to decrypt through the public import API,
+///   (b) the file does not leak the actual derived AES key bytes, and
+///   (c) the adversarial "recover key from the file alone" attack that worked
+///       against the old format no longer recovers a key that can decrypt.
+#[test]
+fn test_backup_file_does_not_leak_key_and_rejects_wrong_password() {
+    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::{Aes256Gcm, Nonce};
+
+    let exporter = KeyExporter::new();
+    let importer = KeyImporter::new();
+
+    let secret = b"this_is_extremely_secret_private_key_bytes";
+    let password = b"correct horse battery staple!!";
+
+    let json = exporter
+        .export_to_json(secret, password, Some("prod".to_string()))
+        .unwrap();
+
+    // (a) wrong password must fail through the public import API.
+    let wrong = importer.import_from_json(&json, b"definitely the wrong pw");
+    assert!(matches!(wrong, Err(BackupError::InvalidPassword)));
+
+    // correct password round-trips.
+    let ok = importer.import_from_json(&json, password).unwrap();
+    assert_eq!(ok.data, secret);
+
+    let backup: hsm_backup::EncryptedBackup = serde_json::from_slice(&json).unwrap();
+    let nonce = Nonce::from_slice(&backup.nonce);
+
+    // (b) the serialized JSON must not contain the raw AES key. Reconstruct it
+    // the same way import does (Argon2 raw KDF over password + kdf_salt) and
+    // confirm those 32 bytes do not appear anywhere in the file.
+    let mut real_key = [0u8; 32];
+    argon2::Argon2::default()
+        .hash_password_into(password, &backup.kdf_salt, &mut real_key)
+        .unwrap();
+    assert!(
+        !json.windows(real_key.len()).any(|w| w == real_key),
+        "serialized backup leaks the raw AES-256 key; file is decryptable without a password"
+    );
+
+    // (c) Adversarial attack that succeeded on the OLD format: for every PHC
+    // string embedded in the JSON, decode its hash and try its first 32 bytes
+    // as the AES key. On the vulnerable code this recovered the real key and
+    // decrypted the payload; on the fixed code no embedded value yields a
+    // working key, so this attack must NOT recover the plaintext.
+    let json_str = String::from_utf8_lossy(&json);
+    for token in json_str.split('"') {
+        if let Ok(phc) = argon2::password_hash::PasswordHash::new(token) {
+            if let Some(hash) = phc.hash {
+                let bytes = hash.as_bytes();
+                if bytes.len() >= 32 {
+                    let candidate: [u8; 32] = bytes[..32].try_into().unwrap();
+                    let cipher = Aes256Gcm::new(&candidate.into());
+                    assert!(
+                        cipher
+                            .decrypt(nonce, backup.encrypted_data.as_ref())
+                            .is_err(),
+                        "an embedded hash in the backup file recovered a working AES key"
+                    );
+                }
+            }
+        }
+    }
+
+    // The old leaking field name must be gone entirely.
+    assert!(!json_str.contains("password_hash"));
 }
 
 #[test]

@@ -16,16 +16,17 @@
 //! - Batch proof generation
 
 use ark_bn254::Fr;
-use ark_std::{rand::SeedableRng, test_rng};
+use ark_std::rand::{rngs::StdRng, SeedableRng};
 use chrono::Utc;
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use hsm_audit::{AuditEventBuilder, EventType, OperationResult};
-use zk_proofs::{
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use hsm_audit::EventType;
+use hsm_zk_proofs::{
     event_proof::EventProofRequest,
     lasso::{LookupArgument, LookupTable},
     merkle_proof::MerkleProofRequest,
     proof_system::ProofSystem,
 };
+use std::hint::black_box;
 
 /// Create a test audit event
 fn create_test_event(sequence: u64) -> hsm_audit::AuditEvent {
@@ -60,14 +61,14 @@ fn bench_lasso_lookup(c: &mut Criterion) {
         let indices: Vec<usize> = (0..(*table_size / 2)).collect();
 
         group.bench_with_input(BenchmarkId::new("prove", table_size), table_size, |b, _| {
-            let mut rng = test_rng();
+            let mut rng = StdRng::seed_from_u64(0);
             b.iter(|| {
                 let proof = lookup_arg.prove(black_box(&indices), &mut rng);
                 black_box(proof)
             });
         });
 
-        let mut rng = test_rng();
+        let mut rng = StdRng::seed_from_u64(1);
         let proof = lookup_arg.prove(&indices, &mut rng).unwrap();
 
         group.bench_with_input(
@@ -234,7 +235,7 @@ fn bench_event_proof_verification(c: &mut Criterion) {
 
 /// Benchmark proof size
 fn bench_proof_size(c: &mut Criterion) {
-    let mut group = c.benchmark_group("proof_size");
+    let group = c.benchmark_group("proof_size");
 
     let mut proof_system = ProofSystem::new().unwrap();
     proof_system.initialize(64, 4).unwrap();
@@ -248,6 +249,7 @@ fn bench_proof_size(c: &mut Criterion) {
     let (merkle_proof, merkle_metrics) = proof_system
         .prove_merkle_integrity(&merkle_request)
         .unwrap();
+    black_box(&merkle_proof);
     println!("Merkle proof size: {} bytes", merkle_metrics.proof_size);
     assert!(
         merkle_metrics.proof_size < 1024,
@@ -264,6 +266,7 @@ fn bench_proof_size(c: &mut Criterion) {
     };
 
     let (event_proof, event_metrics) = proof_system.prove_event_existence(&event_request).unwrap();
+    black_box(&event_proof);
     println!("Event proof size: {} bytes", event_metrics.proof_size);
     assert!(
         event_metrics.proof_size < 1024,

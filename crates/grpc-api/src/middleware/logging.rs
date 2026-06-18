@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn test_default_logger() {
-        let logger = RequestLogger::default();
+        let logger: RequestLogger = Default::default();
         assert!(std::mem::size_of_val(&logger) == 0);
     }
 }

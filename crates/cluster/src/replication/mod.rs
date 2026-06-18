@@ -1,7 +1,6 @@
 //! Key and session replication
 
 use crate::config::NodeId;
-use crate::error::{ClusterError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

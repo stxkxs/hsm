@@ -411,12 +411,14 @@ mod tests {
                 data: vec![1, 2, 3],
                 threshold: 3,
                 total_shares: 5,
+                commitment: Vec::new(),
             },
             SerializableShare {
                 index: 2,
                 data: vec![4, 5, 6],
                 threshold: 2, // Different threshold
                 total_shares: 5,
+                commitment: Vec::new(),
             },
         ];
 

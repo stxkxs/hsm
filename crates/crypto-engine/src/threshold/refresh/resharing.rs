@@ -67,8 +67,7 @@ impl ResharingPackage {
                 verify_ed25519_share(self.new_participant, &self.share, &self.commitments)
             }
             ThresholdScheme::ThresholdBls12381 => {
-                // Simplified verification for BLS
-                Ok(true)
+                verify_bls_share(self.new_participant, &self.share, &self.commitments)
             }
         }
     }
@@ -206,7 +205,16 @@ impl Resharing {
             });
         }
 
-        // Verify all packages are for this participant
+        // Validate every package and collect DISTINCT old-participant shares.
+        //
+        // Lagrange interpolation assumes the supplied sample points are distinct,
+        // valid members of the old committee. Without this check a caller could
+        // pass duplicate or non-member `old_participant` IDs, producing a silently
+        // corrupted reconstructed share (the Lagrange basis would be wrong). We
+        // therefore reject duplicates and non-members up front.
+        let mut seen: std::collections::HashSet<ParticipantId> = std::collections::HashSet::new();
+        let mut shares_with_ids: Vec<(ParticipantId, Vec<u8>)> = Vec::with_capacity(packages.len());
+
         for pkg in &packages {
             if pkg.new_participant != new_participant_id {
                 return Err(ThresholdError::InvalidParticipant(
@@ -214,17 +222,37 @@ impl Resharing {
                 ));
             }
 
-            // Verify the share against commitments
+            // The sender must be a member of the old committee.
+            if !self.config.old_participants.contains(&pkg.old_participant) {
+                return Err(ThresholdError::ResharingInvalidShare(pkg.old_participant));
+            }
+
+            // Reject duplicate senders: a single old participant must not be
+            // counted twice toward the interpolation.
+            if !seen.insert(pkg.old_participant) {
+                return Err(ThresholdError::ResharingInvalidShare(pkg.old_participant));
+            }
+
+            // Verify the share against commitments.
             if !pkg.verify()? {
                 return Err(ThresholdError::ResharingInvalidShare(pkg.old_participant));
             }
+
+            shares_with_ids.push((pkg.old_participant, pkg.share.clone()));
         }
 
-        // Collect the shares and their senders (old participant IDs)
-        let shares_with_ids: Vec<(ParticipantId, Vec<u8>)> = packages
-            .iter()
-            .map(|pkg| (pkg.old_participant, pkg.share.clone()))
-            .collect();
+        // After de-duplication we must still have at least `threshold` distinct
+        // valid members (the earlier length check could have been satisfied by
+        // duplicates).
+        if shares_with_ids.len() < self.config.old_config.threshold as usize {
+            return Err(ThresholdError::ResharingInsufficientShares {
+                required: self.config.old_config.threshold as usize,
+                provided: shares_with_ids.len(),
+            });
+        }
+
+        // Use exactly `threshold` distinct shares for interpolation.
+        shares_with_ids.truncate(self.config.old_config.threshold as usize);
 
         // Compute the new share using Lagrange interpolation
         // The new share is: sum_i (lambda_i * s_i) where lambda_i is the
@@ -414,31 +442,41 @@ fn generate_ed25519_commitments(coefficients: &[Vec<u8>]) -> Result<Vec<Vec<u8>>
 
 /// Generate BLS Feldman commitments.
 fn generate_bls_commitments(coefficients: &[Vec<u8>]) -> Result<Vec<Vec<u8>>, ThresholdError> {
-    use blst::{blst_p1, blst_p1_compress, blst_p1_mult};
+    use blst::{blst_p1, blst_p1_compress, blst_p1_mult, blst_scalar, blst_scalar_from_bendian};
 
     let mut commitments = Vec::with_capacity(coefficients.len());
 
     for coeff_bytes in coefficients {
+        if coeff_bytes.len() != 32 {
+            return Err(ThresholdError::SerializationError(
+                "BLS coefficient must be 32 bytes".into(),
+            ));
+        }
+
         if coeff_bytes.iter().all(|&b| b == 0) {
             // Identity point: first byte 0xc0, rest zeros
             let mut identity_bytes = vec![0xc0u8];
             identity_bytes.extend(vec![0u8; 47]);
             commitments.push(identity_bytes);
         } else {
-            // Compute commitment = coeff * G1
-            // SAFETY: blst_p1_generator returns a valid static G1 generator pointer; blst_p1_mult
-            // reads coeff_bytes (bit-length passed explicitly) and writes to caller-owned result;
-            // blst_p1_compress writes exactly 48 bytes to compressed (a [u8; 48]).
+            // Compute commitment = coeff * G1. `blst_p1_mult` reads the scalar as a
+            // *little-endian* byte array, so the big-endian `coeff_bytes` must be converted
+            // via `blst_scalar_from_bendian` first (filling the little-endian `.b` limbs).
+            // Passing the raw big-endian bytes would commit to `reverse(coeff)` and never
+            // match the field-reduced share in `verify_bls_share`.
+            let mut coeff_arr = [0u8; 32];
+            coeff_arr.copy_from_slice(coeff_bytes);
+            // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from coeff_arr (a [u8; 32]);
+            // blst_p1_generator returns a valid static G1 generator pointer; blst_p1_mult reads
+            // scalar.b (a [u8; 32] inside blst_scalar, bit-length 256 passed explicitly) and writes
+            // to caller-owned result; blst_p1_compress writes exactly 48 bytes to compressed.
             unsafe {
+                let mut scalar = blst_scalar::default();
+                blst_scalar_from_bendian(&mut scalar, coeff_arr.as_ptr());
+
                 let generator = blst::blst_p1_generator();
                 let mut result = blst_p1::default();
-
-                blst_p1_mult(
-                    &mut result,
-                    generator,
-                    coeff_bytes.as_ptr(),
-                    coeff_bytes.len() * 8,
-                );
+                blst_p1_mult(&mut result, generator, scalar.b.as_ptr(), 256);
 
                 let mut compressed = [0u8; 48];
                 blst_p1_compress(compressed.as_mut_ptr(), &result);
@@ -448,6 +486,127 @@ fn generate_bls_commitments(coefficients: &[Vec<u8>]) -> Result<Vec<Vec<u8>>, Th
     }
 
     Ok(commitments)
+}
+
+/// Verify a BLS12-381 Feldman-VSS share against G1 commitments.
+///
+/// Checks `G1 * share == sum_i(C_i * x^i)` where `x = participant_id` and each
+/// `C_i` is a compressed G1 commitment to a polynomial coefficient. This mirrors
+/// the reference implementation in `bls/dkg.rs::verify_share` and replaces the
+/// previous `Ok(true)` stub that accepted any (including malicious) share.
+///
+/// Returns `Err(InvalidCommitment)` if a commitment fails to decompress and
+/// `Err(InvalidKeyShare)` if the share is not 32 bytes.
+pub(crate) fn verify_bls_share(
+    participant_id: ParticipantId,
+    share: &[u8],
+    commitments: &[Vec<u8>],
+) -> Result<bool, ThresholdError> {
+    use blst::{
+        blst_fr, blst_fr_from_scalar, blst_fr_mul, blst_p1, blst_p1_add_or_double, blst_p1_affine,
+        blst_p1_compress, blst_p1_from_affine, blst_p1_generator, blst_p1_mult, blst_p1_uncompress,
+        blst_scalar, blst_scalar_from_bendian, blst_scalar_from_fr, BLST_ERROR,
+    };
+
+    if commitments.is_empty() {
+        return Err(ThresholdError::ResharingFailed(
+            "no BLS commitments to verify share against".into(),
+        ));
+    }
+
+    // Share must be a 32-byte scalar in big-endian.
+    let share_arr: [u8; 32] = share
+        .try_into()
+        .map_err(|_| ThresholdError::InvalidKeyShare)?;
+
+    // LHS = G1 * share
+    let lhs: [u8; 48] = unsafe {
+        let mut scalar_repr = blst_scalar::default();
+        blst_scalar_from_bendian(&mut scalar_repr, share_arr.as_ptr());
+        let generator = *blst_p1_generator();
+        let mut point = blst_p1::default();
+        blst_p1_mult(&mut point, &generator, scalar_repr.b.as_ptr(), 256);
+        let mut out = [0u8; 48];
+        blst_p1_compress(out.as_mut_ptr(), &point);
+        out
+    };
+
+    // x = participant_id as a field element; start x^0 = 1.
+    let x = participant_id.0;
+    let mut x_pow = blst_fr::default();
+    unsafe {
+        let mut one_bytes = [0u8; 32];
+        one_bytes[31] = 1;
+        let mut one_scalar = blst_scalar::default();
+        blst_scalar_from_bendian(&mut one_scalar, one_bytes.as_ptr());
+        blst_fr_from_scalar(&mut x_pow, &one_scalar);
+    }
+    let x_fr = unsafe {
+        let mut x_bytes = [0u8; 32];
+        x_bytes[30] = (x >> 8) as u8;
+        x_bytes[31] = x as u8;
+        let mut x_scalar = blst_scalar::default();
+        blst_scalar_from_bendian(&mut x_scalar, x_bytes.as_ptr());
+        let mut fr = blst_fr::default();
+        blst_fr_from_scalar(&mut fr, &x_scalar);
+        fr
+    };
+
+    // RHS = sum_i(C_i * x^i)
+    let mut sum = blst_p1::default();
+    let mut is_first = true;
+    for commitment in commitments {
+        let commitment_arr: [u8; 48] = commitment
+            .as_slice()
+            .try_into()
+            .map_err(|_| ThresholdError::InvalidCommitment(participant_id))?;
+
+        // Scalar bytes for x^i.
+        let mut xi_scalar = blst_scalar::default();
+        unsafe {
+            blst_scalar_from_fr(&mut xi_scalar, &x_pow);
+        }
+
+        let scaled = unsafe {
+            let mut c_affine = blst_p1_affine::default();
+            if blst_p1_uncompress(&mut c_affine, commitment_arr.as_ptr())
+                != BLST_ERROR::BLST_SUCCESS
+            {
+                return Err(ThresholdError::InvalidCommitment(participant_id));
+            }
+            let mut c_point = blst_p1::default();
+            blst_p1_from_affine(&mut c_point, &c_affine);
+            let mut scaled = blst_p1::default();
+            blst_p1_mult(&mut scaled, &c_point, xi_scalar.b.as_ptr(), 256);
+            scaled
+        };
+
+        if is_first {
+            sum = scaled;
+            is_first = false;
+        } else {
+            let mut new_sum = blst_p1::default();
+            unsafe {
+                blst_p1_add_or_double(&mut new_sum, &sum, &scaled);
+            }
+            sum = new_sum;
+        }
+
+        // x_pow *= x
+        let mut next = blst_fr::default();
+        unsafe {
+            blst_fr_mul(&mut next, &x_pow, &x_fr);
+        }
+        x_pow = next;
+    }
+
+    let rhs: [u8; 48] = unsafe {
+        let mut out = [0u8; 48];
+        blst_p1_compress(out.as_mut_ptr(), &sum);
+        out
+    };
+
+    Ok(subtle::ConstantTimeEq::ct_eq(&lhs[..], &rhs[..]).into())
 }
 
 /// Verify an Ed25519 share against commitments.

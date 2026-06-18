@@ -12,9 +12,9 @@ fn test_default_config_creation() {
     assert_eq!(config.server.host, "127.0.0.1");
     assert_eq!(config.server.port, 8443);
     assert!(config.server.tls_enabled);
-    assert_eq!(config.security.encryption_at_rest, true);
+    assert!(config.security.encryption_at_rest);
     assert_eq!(config.logging.level, LogLevel::Info);
-    assert_eq!(config.metrics.enabled, true);
+    assert!(config.metrics.enabled);
 }
 
 #[test]
@@ -37,7 +37,7 @@ fn test_production_config() {
     assert_eq!(config.server.port, 8443);
     assert!(config.server.tls_enabled);
     assert_eq!(config.storage.sync_mode, SyncMode::Full);
-    assert_eq!(config.security.encryption_at_rest, true);
+    assert!(config.security.encryption_at_rest);
     assert_eq!(config.security.key_derivation_iterations, 200_000);
     assert_eq!(config.logging.format, LogFormat::Json);
 }
@@ -575,8 +575,10 @@ fn test_session_timeout_bounds() {
 #[test]
 fn test_namespace_max_keys_validation() {
     let mut config = HsmConfig::default();
-    let mut namespace = NamespaceConfig::default();
-    namespace.max_keys = Some(0); // Invalid: must be > 0
+    let namespace = NamespaceConfig {
+        max_keys: Some(0), // Invalid: must be > 0
+        ..Default::default()
+    };
 
     config.namespaces.insert("test".to_string(), namespace);
 

@@ -170,70 +170,68 @@ impl TypedData {
         }
     }
 
-    /// Compute the message hash for signing.
+    /// Compute the SNIP-12 message hash for signing.
     ///
-    /// This follows SNIP-12 specification for typed data hashing.
-    pub fn compute_hash(&self, account_address: &super::StarknetAddress) -> Result<[u8; 32]> {
-        // Compute domain hash
-        let domain_hash = self.compute_domain_hash()?;
-
-        // Compute message hash
-        let message_hash = self.compute_message_hash()?;
-
-        // Compute account address felt
-        let account_felt = Felt::from_bytes_be_slice(account_address.to_bytes());
-
-        // SNIP-12 prefix
-        let prefix = felt_from_short_string("StarkNet Message")?;
-
-        // Final hash: H(prefix, domain_hash, account, message_hash)
-        let h1 = pedersen_hash(&prefix, &domain_hash);
-        let h2 = pedersen_hash(&h1, &account_felt);
-        let h3 = pedersen_hash(&h2, &message_hash);
-
-        Ok(h3.to_bytes_be())
+    /// # Fail-closed: not implemented (GATE, HIGH #8)
+    ///
+    /// A correct SNIP-12 implementation requires, for the declared `revision`:
+    ///
+    /// * **revision 1** — Poseidon hashing (not Pedersen), and `struct_hash`
+    ///   prefixed by a *type hash* `starknet_keccak(encode_type(...))`, with the
+    ///   `StarknetDomain` type and full `encode_type` dependency ordering
+    ///   (nested structs, `enum`, arrays, `u256`, `i128`, `timestamp`,
+    ///   `selector`, `merkletree`, ...).
+    /// * **revision 0** — Pedersen hashing with the legacy `StarkNetDomain`
+    ///   type and the rev-0 type-encoding rules.
+    ///
+    /// The previous implementation used Pedersen for everything and **omitted
+    /// the per-struct type hashes entirely**, so it produced a digest that does
+    /// not match `starknet.js` / `starknet-rs` for any revision. Signing that
+    /// digest yields a signature that wallets and account contracts reject.
+    ///
+    /// Faithfully reimplementing the full SNIP-12 encoder (with an interop KAT)
+    /// is out of scope for this change, and emitting a plausible-but-wrong hash
+    /// is a security footgun. This entry point is therefore **fail-closed**: it
+    /// returns an explicit error instead of a non-interoperable hash. For
+    /// signing a raw, already-correct message digest, use
+    /// [`super::StarkPrivateKey::sign_deterministic`] directly with a hash you
+    /// computed with a conformant SNIP-12 library.
+    pub fn compute_hash(&self, _account_address: &super::StarknetAddress) -> Result<[u8; 32]> {
+        Err(BlockchainError::UnsupportedOperation(format!(
+            "SNIP-12 typed-data hashing (revision {:?}) is not implemented: a \
+             conformant hash needs per-struct type hashes via starknet_keccak \
+             and Poseidon (rev 1) / Pedersen (rev 0) with full encode_type \
+             dependency ordering. Refusing to emit a non-interoperable hash.",
+            self.domain.revision
+        )))
     }
 
-    /// Compute the domain separator hash.
-    fn compute_domain_hash(&self) -> Result<Felt> {
-        let name_felt = felt_from_short_string(&self.domain.name)?;
-        let version_felt = felt_from_short_string(&self.domain.version)?;
-        let chain_id_felt = felt_from_short_string(&self.domain.chain_id)?;
-        let revision_felt = felt_from_short_string(&self.domain.revision)?;
-
-        // Hash domain components
-        let h1 = pedersen_hash(&name_felt, &version_felt);
-        let h2 = pedersen_hash(&h1, &chain_id_felt);
-        let h3 = pedersen_hash(&h2, &revision_felt);
-
-        Ok(h3)
-    }
-
-    /// Compute the message hash.
-    fn compute_message_hash(&self) -> Result<Felt> {
-        // Get the primary type fields
+    /// Encode each declared field of the primary type to a felt (used for
+    /// validating that field values parse). This does NOT compute a
+    /// SNIP-12-conformant hash; see [`Self::compute_hash`].
+    #[cfg(test)]
+    fn encode_primary_fields(&self) -> Result<Vec<Felt>> {
         let fields = self
             .types
             .get(&self.primary_type)
             .ok_or_else(|| BlockchainError::InvalidTypedData("Primary type not found".into()))?;
 
-        let mut current = Felt::ZERO;
-
+        let mut out = Vec::with_capacity(fields.len());
         for field in fields {
             let value = self.message.get(&field.name).ok_or_else(|| {
                 BlockchainError::InvalidTypedData(format!("Missing field: {}", field.name))
             })?;
-
-            let field_felt = encode_value(&field.field_type, value)?;
-            current = pedersen_hash(&current, &field_felt);
+            out.push(encode_value(&field.field_type, value)?);
         }
-
-        // Include field count
-        Ok(pedersen_hash(&current, &Felt::from(fields.len())))
+        Ok(out)
     }
 }
 
 /// Encode a value based on its type.
+///
+/// Used only for field-value validation in tests now that SNIP-12 hashing is
+/// fail-closed (see [`TypedData::compute_hash`]).
+#[cfg(test)]
 fn encode_value(field_type: &str, value: &serde_json::Value) -> Result<Felt> {
     match field_type {
         "felt" | "felt252" => {
@@ -290,7 +288,9 @@ fn encode_value(field_type: &str, value: &serde_json::Value) -> Result<Felt> {
 /// Convert a short string to a felt.
 ///
 /// StarkNet short strings must be at most 31 bytes. Returns an error
-/// if the input exceeds this limit.
+/// if the input exceeds this limit. Test-only since SNIP-12 hashing is
+/// fail-closed (see [`TypedData::compute_hash`]).
+#[cfg(test)]
 fn felt_from_short_string(s: &str) -> Result<Felt> {
     let bytes = s.as_bytes();
     if bytes.len() > 31 {
@@ -390,8 +390,19 @@ mod tests {
         let public_key = private_key.public_key();
         let address = StarknetAddress::from_public_key(&public_key);
 
-        let hash = typed_data.compute_hash(&address).unwrap();
-        assert_eq!(hash.len(), 32);
+        // SNIP-12 typed-data hashing is fail-closed (GATE, HIGH #8): the
+        // previous Pedersen-without-type-hashes implementation was not
+        // interoperable, so we refuse to emit a hash rather than produce a
+        // wrong-but-plausible one.
+        assert!(matches!(
+            typed_data.compute_hash(&address),
+            Err(BlockchainError::UnsupportedOperation(_))
+        ));
+
+        // Field values still parse/encode (validation helper), proving the
+        // refusal is about the hashing scheme, not malformed input.
+        let fields = typed_data.encode_primary_fields().unwrap();
+        assert_eq!(fields.len(), 2);
     }
 
     #[test]
@@ -439,9 +450,17 @@ mod tests {
         let public_key = private_key.public_key();
         let address = StarknetAddress::from_public_key(&public_key);
 
-        let hash = typed_data.compute_hash(&address).unwrap();
-        let signature = private_key.sign_deterministic(&hash).unwrap();
+        // Typed-data hashing is fail-closed.
+        assert!(typed_data.compute_hash(&address).is_err());
 
-        assert!(public_key.verify(&hash, &signature));
+        // The signing primitive itself remains correct: signing a raw,
+        // already-computed digest round-trips (sign -> verify), and a forged
+        // digest is rejected (negative test).
+        let digest = [0x37u8; 32];
+        let signature = private_key.sign_deterministic(&digest).unwrap();
+        assert!(public_key.verify(&digest, &signature));
+
+        let forged = [0x38u8; 32];
+        assert!(!public_key.verify(&forged, &signature));
     }
 }

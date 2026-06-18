@@ -100,10 +100,26 @@ impl Secp256k1Engine {
     ///
     /// 33-byte compressed public key
     pub fn derive_public_key(private_key: &KeyMaterial) -> Result<Vec<u8>> {
-        let signing_key = SigningKey::from_bytes(private_key.as_bytes().into())
-            .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
+        let signing_key = Self::signing_key_from_material(private_key)?;
         let verifying_key = signing_key.verifying_key();
         Ok(verifying_key.to_sec1_bytes().to_vec())
+    }
+
+    /// Parses a 32-byte secp256k1 scalar into a `SigningKey`.
+    ///
+    /// `SigningKey::from_bytes(&[u8].into())` panics (via a generic-array length
+    /// assertion) when the input is not exactly 32 bytes, which makes any
+    /// `.map_err(...)` on it dead code. This helper length-checks first so wrong
+    /// length keys yield a clean `CryptoError::InvalidKeySize` instead of a panic.
+    fn signing_key_from_material(key: &KeyMaterial) -> Result<SigningKey> {
+        let bytes: &[u8; 32] =
+            key.as_bytes()
+                .try_into()
+                .map_err(|_| CryptoError::InvalidKeySize {
+                    expected: 32,
+                    actual: key.as_bytes().len(),
+                })?;
+        SigningKey::from_bytes(bytes.into()).map_err(|e| CryptoError::InvalidKey(e.to_string()))
     }
 
     /// Signs a message using secp256k1 ECDSA with SHA-256.
@@ -122,8 +138,7 @@ impl Secp256k1Engine {
     /// Uses RFC 6979 deterministic nonce generation which is safe against
     /// nonce reuse attacks while remaining deterministic.
     pub fn sign_ecdsa(key: &KeyMaterial, message: &[u8]) -> Result<Vec<u8>> {
-        let signing_key = SigningKey::from_bytes(key.as_bytes().into())
-            .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
+        let signing_key = Self::signing_key_from_material(key)?;
 
         let signature: Signature = signing_key.sign(message);
         Ok(signature.to_bytes().to_vec())
@@ -141,11 +156,20 @@ impl Secp256k1Engine {
     ///
     /// `true` if signature is valid
     pub fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<bool> {
+        // Validate signature size before parsing to avoid a panic in `Signature::from_bytes`
+        // (the generic-array `From<&[u8]>` conversion asserts len == 64 and would abort).
+        if signature.len() != 64 {
+            return Err(CryptoError::InvalidSignatureSize {
+                expected: 64,
+                actual: signature.len(),
+            });
+        }
+
         let verifying_key = VerifyingKey::from_sec1_bytes(public_key)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
-        let sig = Signature::from_bytes(signature.into())
-            .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
+        let sig =
+            Signature::from_slice(signature).map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
         verifying_key
             .verify(message, &sig)
@@ -290,5 +314,60 @@ mod tests {
         let signature = Secp256k1Engine::sign_schnorr(&private_key, message).unwrap();
         let result = Secp256k1Engine::verify_schnorr(&public_key, wrong_message, &signature);
         assert!(result.is_err());
+    }
+
+    // ===== Regression tests: wrong-length inputs must return Err, not panic =====
+    //
+    // Before the fix, `SigningKey::from_bytes(key.as_bytes().into())` and
+    // `Signature::from_bytes(signature.into())` panicked via a generic-array length
+    // assertion for any length != 32 / != 64 respectively, so a malformed key or
+    // signature crashed the process instead of returning a `CryptoError`.
+
+    #[test]
+    fn test_sign_ecdsa_wrong_key_length_returns_err_not_panic() {
+        let message = b"msg";
+        for len in [0usize, 31, 33] {
+            let key = KeyMaterial::from_bytes(vec![0x11u8; len]);
+            let result = Secp256k1Engine::sign_ecdsa(&key, message);
+            assert!(
+                matches!(result, Err(CryptoError::InvalidKeySize { expected: 32, actual }) if actual == len),
+                "len {len} should yield InvalidKeySize, got {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_derive_public_key_wrong_length_returns_err_not_panic() {
+        for len in [0usize, 31, 33] {
+            let key = KeyMaterial::from_bytes(vec![0x22u8; len]);
+            let result = Secp256k1Engine::derive_public_key(&key);
+            assert!(
+                matches!(result, Err(CryptoError::InvalidKeySize { expected: 32, actual }) if actual == len),
+                "len {len} should yield InvalidKeySize, got {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_verify_ecdsa_wrong_signature_length_returns_err_not_panic() {
+        let (_private_key, public_key) = Secp256k1Engine::generate_keypair().unwrap();
+        let message = b"msg";
+        for len in [0usize, 63, 65] {
+            let sig = vec![0x33u8; len];
+            let result = Secp256k1Engine::verify_ecdsa(&public_key, message, &sig);
+            assert!(
+                matches!(result, Err(CryptoError::InvalidSignatureSize { expected: 64, actual }) if actual == len),
+                "sig len {len} should yield InvalidSignatureSize, got {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_sign_ecdsa_correct_key_still_works() {
+        // Round-trip guard so the length check does not break the happy path.
+        let (private_key, public_key) = Secp256k1Engine::generate_keypair().unwrap();
+        let message = b"round trip after length guard";
+        let signature = Secp256k1Engine::sign_ecdsa(&private_key, message).unwrap();
+        assert!(Secp256k1Engine::verify_ecdsa(&public_key, message, &signature).unwrap());
     }
 }

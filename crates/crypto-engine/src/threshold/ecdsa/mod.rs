@@ -128,8 +128,16 @@ mod tests {
     use super::*;
     use crate::threshold::types::{EcdsaCurve, ThresholdConfig};
 
-    /// Integration test: Full 2-of-3 P-256 signing and verification
+    /// Integration test: Full 2-of-3 P-256 signing and verification.
+    ///
+    /// Ignored: the threshold-ECDSA signing path now fails closed because it never
+    /// computes `k^-1` (see `ThresholdEcdsaEngine::presign`). This test drove the
+    /// full presign->sign_share->aggregate flow and only checked the signature's
+    /// shape (`r.len()/s.len()`), never that it verifies — exactly the kind of
+    /// shape-only assertion that masked the broken math. Re-enable once a correct
+    /// GG20/MtA protocol is implemented.
     #[test]
+    #[ignore = "requires correct threshold ECDSA (GG20/MtA)"]
     fn test_integration_p256_2_of_3() {
         let config = ThresholdConfig::new(2, 3).unwrap();
         let (group_key, shares) =
@@ -185,8 +193,13 @@ mod tests {
         assert_eq!(signature.curve, EcdsaCurve::P256);
     }
 
-    /// Integration test: Full 3-of-5 secp256k1 signing
+    /// Integration test: Full 3-of-5 secp256k1 signing.
+    ///
+    /// Ignored: the threshold-ECDSA signing path now fails closed (no `k^-1`); this
+    /// test only checked `signature.to_bytes().len() == 64`, never that the signature
+    /// verifies. Re-enable once a correct GG20/MtA protocol is implemented.
     #[test]
+    #[ignore = "requires correct threshold ECDSA (GG20/MtA)"]
     fn test_integration_secp256k1_3_of_5() {
         let config = ThresholdConfig::new(3, 5).unwrap();
         let (group_key, shares) =
@@ -271,14 +284,14 @@ mod tests {
     #[test]
     fn test_threshold_enforcement() {
         let config = ThresholdConfig::new(3, 5).unwrap();
-        let (group_key, shares) =
+        let (_group_key, shares) =
             ThresholdEcdsaEngine::trusted_dealer_keygen(config, EcdsaCurve::P256).unwrap();
 
-        let message_hash = ThresholdEcdsaEngine::hash_message(b"threshold test");
+        let _message_hash = ThresholdEcdsaEngine::hash_message(b"threshold test");
 
         // Try with only 2 participants (need 3)
         let (nonce1, commit1) = ThresholdEcdsaEngine::generate_nonces(&shares[0]).unwrap();
-        let (nonce2, commit2) = ThresholdEcdsaEngine::generate_nonces(&shares[1]).unwrap();
+        let (_nonce2, commit2) = ThresholdEcdsaEngine::generate_nonces(&shares[1]).unwrap();
         let commitments = vec![commit1, commit2];
         let participants = vec![shares[0].participant_id, shares[1].participant_id];
 

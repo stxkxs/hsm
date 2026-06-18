@@ -94,7 +94,17 @@ impl EcdsaEngine {
     /// **Critical**: Each signature uses a fresh cryptographically secure random nonce.
     /// Nonce reuse would leak the private key.
     pub fn sign_p256(key: &KeyMaterial, message: &[u8]) -> Result<Vec<u8>> {
-        let signing_key = SigningKey::from_bytes(key.as_bytes().into())
+        // `SigningKey::from_bytes(&[u8].into())` panics (generic-array length assertion)
+        // when the key is not exactly 32 bytes, making the `.map_err` dead. Length-check
+        // first so wrong-length keys return `CryptoError::InvalidKeySize` instead of panicking.
+        let bytes: &[u8; 32] =
+            key.as_bytes()
+                .try_into()
+                .map_err(|_| CryptoError::InvalidKeySize {
+                    expected: 32,
+                    actual: key.as_bytes().len(),
+                })?;
+        let signing_key = SigningKey::from_bytes(bytes.into())
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
         let signature: Signature = signing_key.sign(message);
@@ -179,7 +189,16 @@ impl EcdsaEngine {
     ///
     /// P-384 is ~2x slower than P-256 due to larger field operations.
     pub fn sign_p384(key: &KeyMaterial, message: &[u8]) -> Result<Vec<u8>> {
-        let signing_key = P384SigningKey::from_bytes(key.as_bytes().into())
+        // Length-check before `P384SigningKey::from_bytes` to avoid a generic-array panic
+        // on wrong-length keys (P-384 private keys are 48 bytes).
+        let bytes: &[u8; 48] =
+            key.as_bytes()
+                .try_into()
+                .map_err(|_| CryptoError::InvalidKeySize {
+                    expected: 48,
+                    actual: key.as_bytes().len(),
+                })?;
+        let signing_key = P384SigningKey::from_bytes(bytes.into())
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
         let signature: P384Signature = signing_key.sign(message);
@@ -257,5 +276,31 @@ mod tests {
         let valid = EcdsaEngine::verify_p384(&public_key, message, &signature).unwrap();
 
         assert!(valid);
+    }
+
+    // Regression: before the fix, `sign_p256`/`sign_p384` panicked (generic-array length
+    // assertion in `SigningKey::from_bytes`) for any key length != 32 / != 48.
+    #[test]
+    fn test_sign_p256_wrong_key_length_returns_err_not_panic() {
+        for len in [0usize, 31, 33] {
+            let key = KeyMaterial::from_bytes(vec![0x44u8; len]);
+            let result = EcdsaEngine::sign_p256(&key, b"msg");
+            assert!(
+                matches!(result, Err(CryptoError::InvalidKeySize { expected: 32, actual }) if actual == len),
+                "p256 len {len} should yield InvalidKeySize, got {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_sign_p384_wrong_key_length_returns_err_not_panic() {
+        for len in [0usize, 47, 49] {
+            let key = KeyMaterial::from_bytes(vec![0x55u8; len]);
+            let result = EcdsaEngine::sign_p384(&key, b"msg");
+            assert!(
+                matches!(result, Err(CryptoError::InvalidKeySize { expected: 48, actual }) if actual == len),
+                "p384 len {len} should yield InvalidKeySize, got {result:?}"
+            );
+        }
     }
 }

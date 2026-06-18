@@ -561,21 +561,48 @@ impl WebAuthnManager {
         let credential_id = base64_url_decode(&response.raw_id)
             .map_err(|_| AuthError::Internal("Invalid credential ID".to_string()))?;
 
-        // In a full implementation, we would:
-        // 1. Parse the CBOR attestation object
-        // 2. Extract and verify the authenticator data
-        // 3. Verify the attestation statement
-        // 4. Extract the public key
+        // Parse the CBOR attestation object and extract the authenticator data.
+        // We then parse the attested credential data to recover the COSE public
+        // key that the authenticator generated. We store the *COSE key* (not the
+        // raw attestation blob) so that we can verify assertion signatures during
+        // authentication.
+        let attestation = parse_attestation_object(&attestation_object)?;
+        let auth_data = AuthenticatorData::parse(&attestation.auth_data)?;
 
-        // For now, we'll create a simplified credential
-        // In production, use a proper WebAuthn library like webauthn-rs
+        // Verify the RP ID hash binds this credential to our relying party.
+        let expected_rp_hash = {
+            let mut hasher = Sha256::new();
+            hasher.update(self.config.rp_id.as_bytes());
+            hasher.finalize()
+        };
+        if auth_data.rp_id_hash != expected_rp_hash.as_slice() {
+            return Err(AuthError::Internal(
+                "RP ID hash mismatch in attestation".to_string(),
+            ));
+        }
+
+        let attested = auth_data.attested_credential.ok_or_else(|| {
+            AuthError::Internal("Attestation missing attested credential data".to_string())
+        })?;
+
+        // The credential ID inside authData must match the one the client claims.
+        if attested.credential_id != credential_id {
+            return Err(AuthError::Internal(
+                "Credential ID mismatch in attestation".to_string(),
+            ));
+        }
+
+        // Parse the COSE public key so we can both validate it now and store it
+        // in canonical form for later signature verification.
+        let cose_key = CoseKey::parse(&attested.credential_public_key)?;
+
         let credential = WebAuthnCredential {
             credential_id: credential_id.clone(),
             user_id: user_id.to_string(),
-            public_key: attestation_object.clone(), // Should extract actual public key
-            counter: 0,
-            algorithm: CoseAlgorithm::ES256 as i32, // Should extract from attestation
-            aaguid: None,
+            public_key: attested.credential_public_key.clone(),
+            counter: auth_data.counter,
+            algorithm: cose_key.algorithm(),
+            aaguid: Some(attested.aaguid.clone()),
             user_handle: self.create_user_handle(user_id),
             name: credential_name,
             registered_at: std::time::SystemTime::now()
@@ -583,8 +610,8 @@ impl WebAuthnManager {
                 .unwrap()
                 .as_secs() as i64,
             last_used_at: None,
-            backup_eligible: false,
-            backed_up: false,
+            backup_eligible: auth_data.backup_eligible,
+            backed_up: auth_data.backed_up,
         };
 
         // Store credential
@@ -661,7 +688,7 @@ impl WebAuthnManager {
         let authenticator_data = base64_url_decode(&response.response.authenticator_data)
             .map_err(|_| AuthError::Internal("Invalid authenticator data".to_string()))?;
 
-        let _signature = base64_url_decode(&response.response.signature)
+        let signature = base64_url_decode(&response.response.signature)
             .map_err(|_| AuthError::Internal("Invalid signature".to_string()))?;
 
         // Parse client data
@@ -725,8 +752,22 @@ impl WebAuthnManager {
             return Err(AuthError::Internal("Counter replay detected".to_string()));
         }
 
-        // In a full implementation, we would verify the signature here
-        // using the stored public key
+        // Verify the assertion signature. WebAuthn signs the concatenation of the
+        // raw authenticator data and the SHA-256 of the clientDataJSON, using the
+        // credential's private key. We verify with the stored COSE public key.
+        //
+        // This is the security-critical step: without it, any client that knows a
+        // credential ID could authenticate as the owner. The signature MUST match.
+        let client_data_hash = {
+            let mut hasher = Sha256::new();
+            hasher.update(&client_data);
+            hasher.finalize()
+        };
+        let mut signed_message = authenticator_data.clone();
+        signed_message.extend_from_slice(&client_data_hash);
+
+        let cose_key = CoseKey::parse(&credential.public_key)?;
+        cose_key.verify_signature(&signed_message, &signature)?;
 
         // Update credential
         credential.counter = counter;
@@ -864,10 +905,18 @@ impl WebAuthnManager {
 
     /// Cleanup expired challenges
     pub fn cleanup_expired_challenges(&self) -> usize {
-        let before = self.pending_challenges.len();
-        self.pending_challenges
-            .retain(|_, challenge| !challenge.is_expired());
-        before - self.pending_challenges.len()
+        // Count removals inside `retain` rather than diffing two `len()`
+        // snapshots: concurrent inserts between the snapshots can make the
+        // second length larger, underflowing the `usize` subtraction.
+        let mut removed = 0usize;
+        self.pending_challenges.retain(|_, challenge| {
+            let keep = !challenge.is_expired();
+            if !keep {
+                removed += 1;
+            }
+            keep
+        });
+        removed
     }
 
     /// Check if user has any credentials
@@ -882,6 +931,289 @@ impl WebAuthnManager {
 impl Default for WebAuthnManager {
     fn default() -> Self {
         Self::new(WebAuthnConfig::default())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Attestation object / authenticator data / COSE key parsing
+// ---------------------------------------------------------------------------
+
+/// Parsed attestation object (CBOR map produced by the authenticator).
+struct AttestationObject {
+    auth_data: Vec<u8>,
+}
+
+/// Parse the CBOR attestation object and extract the raw `authData` bytes.
+fn parse_attestation_object(bytes: &[u8]) -> Result<AttestationObject> {
+    let value: ciborium::value::Value = ciborium::from_reader(bytes)
+        .map_err(|_| AuthError::Internal("Invalid CBOR attestation object".to_string()))?;
+
+    let map = value
+        .as_map()
+        .ok_or_else(|| AuthError::Internal("Attestation object is not a map".to_string()))?;
+
+    let mut auth_data = None;
+    for (k, v) in map {
+        if k.as_text() == Some("authData") {
+            auth_data = v.as_bytes().cloned();
+        }
+    }
+
+    let auth_data = auth_data
+        .ok_or_else(|| AuthError::Internal("Attestation object missing authData".to_string()))?;
+
+    Ok(AttestationObject { auth_data })
+}
+
+/// Attested credential data embedded in `authData`.
+struct AttestedCredentialData {
+    aaguid: Vec<u8>,
+    credential_id: Vec<u8>,
+    credential_public_key: Vec<u8>,
+}
+
+/// Parsed authenticator data.
+struct AuthenticatorData {
+    rp_id_hash: Vec<u8>,
+    counter: u32,
+    backup_eligible: bool,
+    backed_up: bool,
+    attested_credential: Option<AttestedCredentialData>,
+}
+
+impl AuthenticatorData {
+    /// Parse authenticator data per the WebAuthn spec layout:
+    /// rpIdHash(32) || flags(1) || signCount(4) || [attestedCredentialData] || [extensions]
+    fn parse(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() < 37 {
+            return Err(AuthError::Internal(
+                "Authenticator data too short".to_string(),
+            ));
+        }
+
+        let rp_id_hash = bytes[0..32].to_vec();
+        let flags = bytes[32];
+        let counter = u32::from_be_bytes([bytes[33], bytes[34], bytes[35], bytes[36]]);
+
+        let attested_present = flags & 0x40 != 0; // AT flag (bit 6)
+        let backup_eligible = flags & 0x08 != 0; // BE flag (bit 3)
+        let backed_up = flags & 0x10 != 0; // BS flag (bit 4)
+
+        let attested_credential = if attested_present {
+            // attestedCredentialData: aaguid(16) || credIdLen(2 BE) || credId(L) || COSE key (CBOR)
+            if bytes.len() < 37 + 18 {
+                return Err(AuthError::Internal(
+                    "Attested credential data too short".to_string(),
+                ));
+            }
+            let aaguid = bytes[37..53].to_vec();
+            let cred_id_len = u16::from_be_bytes([bytes[53], bytes[54]]) as usize;
+            let cred_id_start: usize = 55;
+            let cred_id_end = cred_id_start
+                .checked_add(cred_id_len)
+                .ok_or_else(|| AuthError::Internal("Credential ID length overflow".to_string()))?;
+            if bytes.len() < cred_id_end {
+                return Err(AuthError::Internal(
+                    "Credential ID exceeds authenticator data".to_string(),
+                ));
+            }
+            let credential_id = bytes[cred_id_start..cred_id_end].to_vec();
+
+            // The remaining bytes start the COSE_Key (and possibly extensions).
+            // Read exactly one CBOR item so trailing extension data is ignored.
+            let key_slice = &bytes[cred_id_end..];
+            let mut reader = key_slice;
+            let key_value: ciborium::value::Value = ciborium::from_reader(&mut reader)
+                .map_err(|_| AuthError::Internal("Invalid COSE key CBOR".to_string()))?;
+            // Re-encode the single parsed COSE_Key item into canonical bytes so
+            // we store only the public key (without any trailing extensions).
+            let mut canonical = Vec::new();
+            ciborium::into_writer(&key_value, &mut canonical)
+                .map_err(|_| AuthError::Internal("Failed to encode COSE key".to_string()))?;
+
+            Some(AttestedCredentialData {
+                aaguid,
+                credential_id,
+                credential_public_key: canonical,
+            })
+        } else {
+            None
+        };
+
+        Ok(AuthenticatorData {
+            rp_id_hash,
+            counter,
+            backup_eligible,
+            backed_up,
+            attested_credential,
+        })
+    }
+}
+
+/// Parsed COSE public key (subset: EC2 / RSA).
+enum CoseKey {
+    /// EC2 key: curve + uncompressed point coordinates.
+    Ec2 { alg: i64, x: Vec<u8>, y: Vec<u8> },
+    /// RSA key: modulus (n) and exponent (e).
+    Rsa { alg: i64, n: Vec<u8>, e: Vec<u8> },
+}
+
+impl CoseKey {
+    /// Parse a COSE_Key CBOR map. We support EC2 (kty=2) and RSA (kty=3).
+    fn parse(bytes: &[u8]) -> Result<Self> {
+        let value: ciborium::value::Value = ciborium::from_reader(bytes)
+            .map_err(|_| AuthError::Internal("Invalid COSE key CBOR".to_string()))?;
+        let map = value
+            .as_map()
+            .ok_or_else(|| AuthError::Internal("COSE key is not a map".to_string()))?;
+
+        // COSE label -> value lookup (labels are integers).
+        let get = |label: i64| -> Option<&ciborium::value::Value> {
+            map.iter()
+                .find(|(k, _)| {
+                    k.as_integer().and_then(|i| i128::from(i).try_into().ok()) == Some(label)
+                })
+                .map(|(_, v)| v)
+        };
+
+        let as_int = |v: &ciborium::value::Value| -> Option<i64> {
+            v.as_integer().and_then(|i| i128::from(i).try_into().ok())
+        };
+
+        let kty = get(1)
+            .and_then(as_int)
+            .ok_or_else(|| AuthError::Internal("COSE key missing kty".to_string()))?;
+        let alg = get(3)
+            .and_then(as_int)
+            .ok_or_else(|| AuthError::Internal("COSE key missing alg".to_string()))?;
+
+        match kty {
+            2 => {
+                // EC2
+                let x = get(-2)
+                    .and_then(|v| v.as_bytes().cloned())
+                    .ok_or_else(|| AuthError::Internal("COSE EC2 key missing x".to_string()))?;
+                let y = get(-3)
+                    .and_then(|v| v.as_bytes().cloned())
+                    .ok_or_else(|| AuthError::Internal("COSE EC2 key missing y".to_string()))?;
+                Ok(CoseKey::Ec2 { alg, x, y })
+            }
+            3 => {
+                // RSA
+                let n = get(-1)
+                    .and_then(|v| v.as_bytes().cloned())
+                    .ok_or_else(|| AuthError::Internal("COSE RSA key missing n".to_string()))?;
+                let e = get(-2)
+                    .and_then(|v| v.as_bytes().cloned())
+                    .ok_or_else(|| AuthError::Internal("COSE RSA key missing e".to_string()))?;
+                Ok(CoseKey::Rsa { alg, n, e })
+            }
+            _ => Err(AuthError::Internal(format!(
+                "Unsupported COSE key type: {}",
+                kty
+            ))),
+        }
+    }
+
+    /// The COSE algorithm identifier of this key.
+    fn algorithm(&self) -> i32 {
+        match self {
+            CoseKey::Ec2 { alg, .. } | CoseKey::Rsa { alg, .. } => *alg as i32,
+        }
+    }
+
+    /// Verify a signature over `message` using this COSE public key.
+    ///
+    /// WebAuthn ECDSA signatures are ASN.1 DER encoded (not the raw R||S used by
+    /// JWT). RSA signatures are PKCS#1 v1.5.
+    fn verify_signature(&self, message: &[u8], signature: &[u8]) -> Result<()> {
+        match self {
+            CoseKey::Ec2 { alg, x, y } => match alg {
+                // ES256 (-7): P-256 + SHA-256
+                -7 => {
+                    use p256::ecdsa::{signature::Verifier, DerSignature, VerifyingKey};
+                    use p256::EncodedPoint;
+
+                    if x.len() != 32 || y.len() != 32 {
+                        return Err(AuthError::Internal(
+                            "Invalid P-256 coordinate length".to_string(),
+                        ));
+                    }
+                    let point = EncodedPoint::from_affine_coordinates(
+                        p256::FieldBytes::from_slice(x),
+                        p256::FieldBytes::from_slice(y),
+                        false,
+                    );
+                    let key = VerifyingKey::from_encoded_point(&point)
+                        .map_err(|_| AuthError::Internal("Invalid P-256 public key".to_string()))?;
+                    let sig = DerSignature::try_from(signature).map_err(|_| {
+                        AuthError::Internal("Invalid ECDSA DER signature".to_string())
+                    })?;
+                    key.verify(message, &sig).map_err(|_| {
+                        AuthError::Unauthorized(
+                            "WebAuthn signature verification failed".to_string(),
+                        )
+                    })
+                }
+                // ES384 (-35): P-384 + SHA-384
+                -35 => {
+                    use p384::ecdsa::{signature::Verifier, DerSignature, VerifyingKey};
+                    use p384::EncodedPoint;
+
+                    if x.len() != 48 || y.len() != 48 {
+                        return Err(AuthError::Internal(
+                            "Invalid P-384 coordinate length".to_string(),
+                        ));
+                    }
+                    let point = EncodedPoint::from_affine_coordinates(
+                        p384::FieldBytes::from_slice(x),
+                        p384::FieldBytes::from_slice(y),
+                        false,
+                    );
+                    let key = VerifyingKey::from_encoded_point(&point)
+                        .map_err(|_| AuthError::Internal("Invalid P-384 public key".to_string()))?;
+                    let sig = DerSignature::try_from(signature).map_err(|_| {
+                        AuthError::Internal("Invalid ECDSA DER signature".to_string())
+                    })?;
+                    key.verify(message, &sig).map_err(|_| {
+                        AuthError::Unauthorized(
+                            "WebAuthn signature verification failed".to_string(),
+                        )
+                    })
+                }
+                other => Err(AuthError::Internal(format!(
+                    "Unsupported COSE EC algorithm: {}",
+                    other
+                ))),
+            },
+            CoseKey::Rsa { alg, n, e } => match alg {
+                // RS256 (-257): RSASSA-PKCS1-v1_5 + SHA-256
+                -257 => {
+                    use rsa::pkcs1v15::{
+                        Signature as RsaSignature, VerifyingKey as RsaVerifyingKey,
+                    };
+                    use rsa::signature::Verifier;
+                    use rsa::BigUint;
+
+                    let modulus = BigUint::from_bytes_be(n);
+                    let exponent = BigUint::from_bytes_be(e);
+                    let public_key = rsa::RsaPublicKey::new(modulus, exponent)
+                        .map_err(|_| AuthError::Internal("Invalid RSA public key".to_string()))?;
+                    let verifying_key = RsaVerifyingKey::<Sha256>::new(public_key);
+                    let sig = RsaSignature::try_from(signature)
+                        .map_err(|_| AuthError::Internal("Invalid RSA signature".to_string()))?;
+                    verifying_key.verify(message, &sig).map_err(|_| {
+                        AuthError::Unauthorized(
+                            "WebAuthn signature verification failed".to_string(),
+                        )
+                    })
+                }
+                other => Err(AuthError::Internal(format!(
+                    "Unsupported COSE RSA algorithm: {}",
+                    other
+                ))),
+            },
+        }
     }
 }
 
@@ -958,5 +1290,279 @@ mod tests {
         };
 
         assert!(challenge.is_expired());
+    }
+
+    // ----- Signature verification tests (#3) -----
+
+    use ciborium::value::Value as CborValue;
+    use p256::ecdsa::SigningKey;
+
+    /// Build a COSE_Key (EC2/ES256) CBOR map for a P-256 public key.
+    fn cose_key_es256(vk: &p256::ecdsa::VerifyingKey) -> Vec<u8> {
+        let point = vk.to_encoded_point(false);
+        let x = point.x().unwrap().to_vec();
+        let y = point.y().unwrap().to_vec();
+
+        // COSE_Key map: 1(kty)=2(EC2), 3(alg)=-7(ES256), -1(crv)=1(P-256), -2(x), -3(y)
+        let map = CborValue::Map(vec![
+            (CborValue::Integer(1.into()), CborValue::Integer(2.into())),
+            (
+                CborValue::Integer(3.into()),
+                CborValue::Integer((-7).into()),
+            ),
+            (
+                CborValue::Integer((-1).into()),
+                CborValue::Integer(1.into()),
+            ),
+            (CborValue::Integer((-2).into()), CborValue::Bytes(x)),
+            (CborValue::Integer((-3).into()), CborValue::Bytes(y)),
+        ]);
+        let mut out = Vec::new();
+        ciborium::into_writer(&map, &mut out).unwrap();
+        out
+    }
+
+    /// Build authData embedding the supplied COSE key (registration form).
+    fn build_auth_data(
+        rp_id: &str,
+        credential_id: &[u8],
+        cose_key: &[u8],
+        counter: u32,
+    ) -> Vec<u8> {
+        let mut auth_data = Vec::new();
+        let rp_hash = {
+            let mut h = Sha256::new();
+            h.update(rp_id.as_bytes());
+            h.finalize()
+        };
+        auth_data.extend_from_slice(&rp_hash);
+        // flags: UP(0x01) | UV(0x04) | AT(0x40)
+        auth_data.push(0x01 | 0x04 | 0x40);
+        auth_data.extend_from_slice(&counter.to_be_bytes());
+        // attestedCredentialData: aaguid(16) || credIdLen(2) || credId || COSE key
+        auth_data.extend_from_slice(&[0u8; 16]);
+        auth_data.extend_from_slice(&(credential_id.len() as u16).to_be_bytes());
+        auth_data.extend_from_slice(credential_id);
+        auth_data.extend_from_slice(cose_key);
+        auth_data
+    }
+
+    /// Build a CBOR attestation object wrapping authData ("none" fmt).
+    fn build_attestation_object(auth_data: &[u8]) -> Vec<u8> {
+        let map = CborValue::Map(vec![
+            (
+                CborValue::Text("fmt".to_string()),
+                CborValue::Text("none".to_string()),
+            ),
+            (
+                CborValue::Text("attStmt".to_string()),
+                CborValue::Map(vec![]),
+            ),
+            (
+                CborValue::Text("authData".to_string()),
+                CborValue::Bytes(auth_data.to_vec()),
+            ),
+        ]);
+        let mut out = Vec::new();
+        ciborium::into_writer(&map, &mut out).unwrap();
+        out
+    }
+
+    fn client_data_json(typ: &str, challenge_b64: &str, origin: &str) -> Vec<u8> {
+        format!(
+            r#"{{"type":"{}","challenge":"{}","origin":"{}"}}"#,
+            typ, challenge_b64, origin
+        )
+        .into_bytes()
+    }
+
+    /// Register a credential using a real P-256 key; returns (signing_key, credential_id).
+    fn register_es256(manager: &WebAuthnManager, user_id: &str) -> (SigningKey, Vec<u8>) {
+        let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
+        let verifying_key = *signing_key.verifying_key();
+        let credential_id = vec![9u8; 16];
+        let cose_key = cose_key_es256(&verifying_key);
+
+        let reg = manager.start_registration(user_id, "user", "User").unwrap();
+
+        let auth_data = build_auth_data(&manager.config.rp_id, &credential_id, &cose_key, 0);
+        let attestation_object = build_attestation_object(&auth_data);
+        let cdj = client_data_json("webauthn.create", &reg.challenge, &manager.config.origin);
+
+        let response = RegistrationResponse {
+            id: base64_url_encode(&credential_id),
+            raw_id: base64_url_encode(&credential_id),
+            response_type: "public-key".to_string(),
+            response: AttestationResponse {
+                client_data_json: base64_url_encode(&cdj),
+                attestation_object: base64_url_encode(&attestation_object),
+                transports: None,
+            },
+            client_extension_results: serde_json::json!({}),
+            authenticator_attachment: None,
+        };
+
+        let cred = manager
+            .complete_registration(user_id, &response, Some("test".to_string()))
+            .unwrap();
+        assert_eq!(cred.algorithm, -7);
+        assert_eq!(cred.credential_id, credential_id);
+        // The stored public key must be the COSE key, not the raw attestation blob.
+        assert!(CoseKey::parse(&cred.public_key).is_ok());
+
+        (signing_key, credential_id)
+    }
+
+    fn make_assertion(
+        manager: &WebAuthnManager,
+        signing_key: &SigningKey,
+        credential_id: &[u8],
+        challenge_b64: &str,
+        counter: u32,
+        tamper: bool,
+    ) -> AuthenticationResponse {
+        use p256::ecdsa::{signature::Signer, DerSignature};
+
+        // authData for assertion: no attested credential (AT flag clear).
+        let mut auth_data = Vec::new();
+        let rp_hash = {
+            let mut h = Sha256::new();
+            h.update(manager.config.rp_id.as_bytes());
+            h.finalize()
+        };
+        auth_data.extend_from_slice(&rp_hash);
+        auth_data.push(0x01 | 0x04); // UP | UV
+        auth_data.extend_from_slice(&counter.to_be_bytes());
+
+        let cdj = client_data_json("webauthn.get", challenge_b64, &manager.config.origin);
+        let client_data_hash = {
+            let mut h = Sha256::new();
+            h.update(&cdj);
+            h.finalize()
+        };
+
+        let mut signed = auth_data.clone();
+        signed.extend_from_slice(&client_data_hash);
+
+        let sig_bytes = if tamper {
+            // A structurally valid DER signature that does NOT match the message.
+            let der_sig2: DerSignature = signing_key.sign(b"a totally different message");
+            der_sig2.as_bytes().to_vec()
+        } else {
+            let der_sig: DerSignature = signing_key.sign(&signed);
+            der_sig.as_bytes().to_vec()
+        };
+
+        AuthenticationResponse {
+            id: base64_url_encode(credential_id),
+            raw_id: base64_url_encode(credential_id),
+            response_type: "public-key".to_string(),
+            response: AssertionResponse {
+                client_data_json: base64_url_encode(&cdj),
+                authenticator_data: base64_url_encode(&auth_data),
+                signature: base64_url_encode(&sig_bytes),
+                user_handle: None,
+            },
+            client_extension_results: serde_json::json!({}),
+            authenticator_attachment: None,
+        }
+    }
+
+    #[test]
+    fn test_registration_extracts_cose_public_key() {
+        let manager = WebAuthnManager::new(WebAuthnConfig::new("example.com", "Example"));
+        let (_sk, _cid) = register_es256(&manager, "user-1");
+    }
+
+    #[test]
+    fn test_valid_assertion_accepted() {
+        let manager = WebAuthnManager::new(WebAuthnConfig::new("example.com", "Example"));
+        let (signing_key, credential_id) = register_es256(&manager, "user-1");
+
+        let verification = manager.start_authentication("user-1").unwrap();
+        let assertion = make_assertion(
+            &manager,
+            &signing_key,
+            &credential_id,
+            &verification.challenge,
+            5,
+            false,
+        );
+
+        let user = manager.complete_authentication(&assertion).unwrap();
+        assert_eq!(user, "user-1");
+    }
+
+    #[test]
+    fn test_forged_assertion_signature_rejected() {
+        let manager = WebAuthnManager::new(WebAuthnConfig::new("example.com", "Example"));
+        let (signing_key, credential_id) = register_es256(&manager, "user-1");
+
+        let verification = manager.start_authentication("user-1").unwrap();
+        // tamper=true -> structurally valid DER signature that does not match.
+        let assertion = make_assertion(
+            &manager,
+            &signing_key,
+            &credential_id,
+            &verification.challenge,
+            5,
+            true,
+        );
+
+        let result = manager.complete_authentication(&assertion);
+        assert!(
+            result.is_err(),
+            "forged/mismatched assertion signature must be rejected"
+        );
+    }
+
+    #[test]
+    fn test_assertion_with_wrong_key_rejected() {
+        let manager = WebAuthnManager::new(WebAuthnConfig::new("example.com", "Example"));
+        let (_signing_key, credential_id) = register_es256(&manager, "user-1");
+
+        // An attacker who knows the credential ID signs with their OWN key.
+        let attacker_key = SigningKey::random(&mut rand::rngs::OsRng);
+        let verification = manager.start_authentication("user-1").unwrap();
+        let assertion = make_assertion(
+            &manager,
+            &attacker_key,
+            &credential_id,
+            &verification.challenge,
+            5,
+            false,
+        );
+
+        let result = manager.complete_authentication(&assertion);
+        assert!(
+            result.is_err(),
+            "assertion signed by a non-owner key must be rejected"
+        );
+    }
+
+    #[test]
+    fn test_cleanup_expired_challenges_no_underflow() {
+        let manager = WebAuthnManager::new(WebAuthnConfig::default());
+        let expired = WebAuthnChallenge {
+            challenge: vec![1, 2, 3],
+            user_id: "u".to_string(),
+            challenge_type: ChallengeType::Authentication,
+            created_at: Instant::now() - Duration::from_secs(3600),
+            expires_in: Duration::from_secs(1),
+        };
+        manager
+            .pending_challenges
+            .insert("k1".to_string(), expired.clone());
+        let fresh = WebAuthnChallenge {
+            created_at: Instant::now(),
+            expires_in: Duration::from_secs(3600),
+            ..expired
+        };
+        manager.pending_challenges.insert("k2".to_string(), fresh);
+
+        let removed = manager.cleanup_expired_challenges();
+        assert_eq!(removed, 1);
+        // A second cleanup removes nothing and must not underflow.
+        assert_eq!(manager.cleanup_expired_challenges(), 0);
     }
 }

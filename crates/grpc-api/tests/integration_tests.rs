@@ -74,7 +74,7 @@ mod validation_tests {
         assert!(validate_data_size(&vec![0u8; MAX_MESSAGE_SIZE], "test").is_ok());
 
         // Invalid data
-        assert!(validate_data_size(&vec![], "test").is_err());
+        assert!(validate_data_size(&[], "test").is_err());
         assert!(validate_data_size(&vec![0u8; MAX_MESSAGE_SIZE + 1], "test").is_err());
     }
 

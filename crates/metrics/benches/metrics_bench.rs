@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use metrics::{MetricsCollector, OperationStatus, SamplingConfig};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use hsm_metrics::{MetricsCollector, OperationStatus, SamplingConfig};
+use std::hint::black_box;
 use std::time::Duration;
 
 fn bench_lock_free_counters(c: &mut Criterion) {

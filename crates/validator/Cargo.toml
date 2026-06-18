@@ -52,10 +52,13 @@ criterion.workspace = true
 [[bench]]
 name = "anti_slashing"
 harness = false
+required-features = ["test-util"]
 
 [features]
 default = []
 # Enable Babylon EOTS support
 babylon = []
+# Expose in-memory database constructors for benchmarks/integration tests
+test-util = []
 # Enable all validator features
 full = ["babylon"]

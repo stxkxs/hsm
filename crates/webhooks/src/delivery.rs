@@ -3,6 +3,7 @@
 use crate::{signature::WebhookSigner, WebhookEvent};
 use chrono::Utc;
 use dashmap::DashMap;
+use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -86,6 +87,9 @@ impl CircuitState {
 const CIRCUIT_BREAKER_THRESHOLD: u32 = 5;
 /// Cooldown period in seconds before allowing a retry through an open circuit
 const CIRCUIT_BREAKER_COOLDOWN_SECS: i64 = 60;
+/// Upper bound on the per-retry backoff delay. Caps unbounded doubling so a
+/// long retry chain cannot grow the wait without limit.
+const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
 /// HTTP webhook deliverer
 pub struct WebhookDeliverer {
@@ -280,9 +284,19 @@ impl WebhookDeliverer {
                         };
                     }
 
-                    // Exponential backoff
-                    tokio::time::sleep(delay).await;
-                    delay *= 2;
+                    // Exponential backoff with equal jitter. The jitter
+                    // decorrelates retries across many webhooks failing at the
+                    // same time, preventing a synchronized retry storm
+                    // (thundering herd) from hammering a recovering endpoint.
+                    let half = delay / 2;
+                    let jitter_ms = if half.is_zero() {
+                        0
+                    } else {
+                        rand::thread_rng().gen_range(0..=half.as_millis() as u64)
+                    };
+                    let sleep_for = half + Duration::from_millis(jitter_ms);
+                    tokio::time::sleep(sleep_for).await;
+                    delay = (delay * 2).min(MAX_BACKOFF);
                 }
             }
         }
@@ -320,11 +334,11 @@ mod tests {
     #[tokio::test]
     async fn test_deliverer_creation() {
         let deliverer = WebhookDeliverer::new();
-        // Just verify it creates successfully
-        assert!(true);
+        // A freshly created deliverer should have no open circuits.
+        assert!(!deliverer.is_circuit_open("https://example.com/webhook"));
 
         let deliverer_with_timeout = WebhookDeliverer::with_timeout(Duration::from_secs(60));
-        assert!(true);
+        assert!(!deliverer_with_timeout.is_circuit_open("https://example.com/webhook"));
     }
 
     #[test]

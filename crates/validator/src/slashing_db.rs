@@ -111,7 +111,16 @@ impl SlashingProtectionDb {
     /// The database directory should be on a persistent, reliable storage medium.
     /// Data loss could result in slashing if the validator signs conflicting messages.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let db = sled::open(&path)?;
+        // SECURITY: Disable sled's periodic background flush (default 500ms). Slashing
+        // protection requires that a signing record is durable on disk *before* the
+        // signature is produced. We therefore flush explicitly inside the
+        // check-and-record functions while still holding the per-validator write lock.
+        // Relying on the background flush would leave a window in which a crash after
+        // signing but before fsync allows the record to be lost, enabling a double-sign.
+        let db = sled::Config::new()
+            .path(path.as_ref())
+            .flush_every_ms(None)
+            .open()?;
 
         let validators = db.open_tree(VALIDATORS_TREE)?;
         let attestations = db.open_tree(ATTESTATIONS_TREE)?;
@@ -131,10 +140,13 @@ impl SlashingProtectionDb {
         })
     }
 
-    /// Create an in-memory database (for testing only).
-    #[cfg(test)]
+    /// Create an in-memory database (for testing and benchmarking only).
+    #[cfg(any(test, feature = "test-util"))]
     pub fn in_memory() -> Result<Self> {
-        let db = sled::Config::new().temporary(true).open()?;
+        let db = sled::Config::new()
+            .temporary(true)
+            .flush_every_ms(None)
+            .open()?;
 
         let validators = db.open_tree(VALIDATORS_TREE)?;
         let attestations = db.open_tree(ATTESTATIONS_TREE)?;
@@ -332,7 +344,72 @@ impl SlashingProtectionDb {
                     min_source_epoch: 0,
                 })?;
 
-        // Check 1: Source epoch must be >= min_source_epoch
+        // Check 3 (done first): Double vote / idempotent repeat.
+        //
+        // We look up any existing attestation at this exact target epoch BEFORE the
+        // min-epoch checks. This implements the EIP-3076 "identical repeat" exception:
+        // re-signing the exact same attestation (same signing root) at the minimum
+        // target epoch must be allowed even though `target == min_target` would
+        // otherwise be refused by the `<=` boundary check below.
+        //
+        // SECURITY (fail closed): a sled read error MUST NOT silently fall through to
+        // record-and-sign. Any Err here aborts signing with DatabaseError.
+        let attestation_key = self.attestation_key(public_key, target_epoch);
+        match self.attestations.get(&attestation_key) {
+            Ok(Some(existing)) => {
+                let existing_data: AttestationData =
+                    serde_json::from_slice(&existing).map_err(|_| SlashingError::DoubleVote {
+                        target_epoch,
+                        existing_root: "unknown".to_string(),
+                        attempted_root: signing_root.to_hex(),
+                    })?;
+
+                if existing_data.signing_root != *signing_root.as_bytes() {
+                    error!(
+                        validator = %hex::encode(&public_key[..8]),
+                        target_epoch,
+                        existing_root = %hex::encode(&existing_data.signing_root[..8]),
+                        attempted_root = %hex::encode(&signing_root.as_bytes()[..8]),
+                        "DOUBLE VOTE PREVENTED"
+                    );
+                    self.stats.write().slashable_prevented += 1;
+                    self.stats.write().double_votes_prevented += 1;
+                    return Err(SlashingError::DoubleVote {
+                        target_epoch,
+                        existing_root: hex::encode(existing_data.signing_root),
+                        attempted_root: signing_root.to_hex(),
+                    });
+                }
+
+                // Same signing root is fine (idempotent repeat) - already durable.
+                debug!(
+                    validator = %hex::encode(&public_key[..8]),
+                    target_epoch,
+                    "Attestation already recorded with same signing root"
+                );
+                return Ok(());
+            }
+            Ok(None) => {}
+            Err(e) => {
+                error!(
+                    validator = %hex::encode(&public_key[..8]),
+                    target_epoch,
+                    error = %e,
+                    "Slashing DB read error during double-vote check - refusing to sign (fail closed)"
+                );
+                self.stats.write().slashable_prevented += 1;
+                return Err(SlashingError::DatabaseError(format!(
+                    "Failed to read attestation record: {e}"
+                )));
+            }
+        }
+
+        // Check 1: Source epoch must be >= min_source_epoch.
+        //
+        // EIP-3076 uses a strict `<` here (NOT `<=`): the FFG source is the last
+        // justified checkpoint and legitimately repeats across many attestations
+        // within and across epochs, so re-using the minimum source epoch is allowed.
+        // Only the *target* epoch boundary (Check 2) uses `<=`.
         if let Some(min_source) = validator_data.min_source_epoch {
             if source_epoch < min_source {
                 warn!(
@@ -349,9 +426,11 @@ impl SlashingProtectionDb {
             }
         }
 
-        // Check 2: Target epoch must be >= min_target_epoch
+        // Check 2: Target epoch must be > min_target_epoch (EIP-3076 boundary: refuse <=).
+        // The identical-repeat exception (target == min_target with the same signing
+        // root) was already handled by the double-vote check above.
         if let Some(min_target) = validator_data.min_target_epoch {
-            if target_epoch < min_target {
+            if target_epoch <= min_target {
                 warn!(
                     validator = %hex::encode(&public_key[..8]),
                     target_epoch,
@@ -364,42 +443,6 @@ impl SlashingProtectionDb {
                     min_target_epoch: min_target,
                 });
             }
-        }
-
-        // Check 3: Double vote (same target epoch, different signing root)
-        let attestation_key = self.attestation_key(public_key, target_epoch);
-        if let Ok(Some(existing)) = self.attestations.get(&attestation_key) {
-            let existing_data: AttestationData =
-                serde_json::from_slice(&existing).map_err(|_| SlashingError::DoubleVote {
-                    target_epoch,
-                    existing_root: "unknown".to_string(),
-                    attempted_root: signing_root.to_hex(),
-                })?;
-
-            if existing_data.signing_root != *signing_root.as_bytes() {
-                error!(
-                    validator = %hex::encode(&public_key[..8]),
-                    target_epoch,
-                    existing_root = %hex::encode(&existing_data.signing_root[..8]),
-                    attempted_root = %hex::encode(&signing_root.as_bytes()[..8]),
-                    "DOUBLE VOTE PREVENTED"
-                );
-                self.stats.write().slashable_prevented += 1;
-                self.stats.write().double_votes_prevented += 1;
-                return Err(SlashingError::DoubleVote {
-                    target_epoch,
-                    existing_root: hex::encode(existing_data.signing_root),
-                    attempted_root: signing_root.to_hex(),
-                });
-            }
-
-            // Same signing root is fine (idempotent)
-            debug!(
-                validator = %hex::encode(&public_key[..8]),
-                target_epoch,
-                "Attestation already recorded with same signing root"
-            );
-            return Ok(());
         }
 
         // Check 4 & 5: Surrounding and surrounded votes
@@ -494,6 +537,22 @@ impl SlashingProtectionDb {
             SlashingError::DatabaseError(format!("Failed to persist validator data: {}", e))
         })?;
 
+        // SECURITY (durability before signing): the attestation record MUST be durable
+        // on disk before the caller produces a signature. We flush WHILE STILL HOLDING
+        // the per-validator write lock and only return Ok once fsync succeeds. If the
+        // flush fails we report DatabaseError and the caller must NOT sign. Without this,
+        // a crash in sled's background-flush window would lose the record and permit a
+        // double-vote on restart.
+        self.db.flush().map_err(|e| {
+            error!(
+                validator = %hex::encode(&public_key[..8]),
+                target_epoch,
+                error = %e,
+                "Failed to flush attestation record to disk - refusing to sign"
+            );
+            SlashingError::DatabaseError(format!("Failed to flush attestation record: {e}"))
+        })?;
+
         // Update stats
         self.stats.write().attestations_signed += 1;
 
@@ -540,9 +599,70 @@ impl SlashingProtectionDb {
             .get_validator_data(public_key)
             .map_err(|_| SlashingError::SlotTooLow { slot, min_slot: 0 })?;
 
-        // Check 1: Slot must be >= min_slot
+        // Check 2 (done first): Double block proposal / idempotent repeat.
+        //
+        // Looked up before the min-slot check so that re-proposing the exact same block
+        // (same signing root) at the minimum slot is allowed (EIP-3076 identical-repeat
+        // exception), even though `slot == min_slot` is otherwise refused below.
+        //
+        // SECURITY (fail closed): a sled read error MUST NOT silently fall through to
+        // record-and-sign. Any Err here aborts signing with DatabaseError.
+        let block_key = self.block_key(public_key, slot);
+        match self.blocks.get(&block_key) {
+            Ok(Some(existing)) => {
+                let existing_data: BlockData = serde_json::from_slice(&existing).map_err(|_| {
+                    SlashingError::DoubleBlockProposal {
+                        slot,
+                        existing_root: "unknown".to_string(),
+                        attempted_root: signing_root.to_hex(),
+                    }
+                })?;
+
+                if existing_data.signing_root != *signing_root.as_bytes() {
+                    error!(
+                        validator = %hex::encode(&public_key[..8]),
+                        slot,
+                        existing_root = %hex::encode(&existing_data.signing_root[..8]),
+                        attempted_root = %hex::encode(&signing_root.as_bytes()[..8]),
+                        "DOUBLE BLOCK PROPOSAL PREVENTED"
+                    );
+                    self.stats.write().slashable_prevented += 1;
+                    self.stats.write().double_blocks_prevented += 1;
+                    return Err(SlashingError::DoubleBlockProposal {
+                        slot,
+                        existing_root: hex::encode(existing_data.signing_root),
+                        attempted_root: signing_root.to_hex(),
+                    });
+                }
+
+                // Same signing root is fine (idempotent repeat) - already durable.
+                debug!(
+                    validator = %hex::encode(&public_key[..8]),
+                    slot,
+                    "Block already recorded with same signing root"
+                );
+                return Ok(());
+            }
+            Ok(None) => {}
+            Err(e) => {
+                error!(
+                    validator = %hex::encode(&public_key[..8]),
+                    slot,
+                    error = %e,
+                    "Slashing DB read error during double-proposal check - refusing to sign (fail closed)"
+                );
+                self.stats.write().slashable_prevented += 1;
+                return Err(SlashingError::DatabaseError(format!(
+                    "Failed to read block record: {e}"
+                )));
+            }
+        }
+
+        // Check 1: Slot must be > min_slot (EIP-3076 boundary: refuse <=). The
+        // identical-repeat exception (slot == min_slot with the same signing root)
+        // was already handled by the double-proposal check above.
         if let Some(min_slot) = validator_data.min_slot {
-            if slot < min_slot {
+            if slot <= min_slot {
                 warn!(
                     validator = %hex::encode(&public_key[..8]),
                     slot,
@@ -552,43 +672,6 @@ impl SlashingProtectionDb {
                 self.stats.write().slashable_prevented += 1;
                 return Err(SlashingError::SlotTooLow { slot, min_slot });
             }
-        }
-
-        // Check 2: Double block proposal
-        let block_key = self.block_key(public_key, slot);
-        if let Ok(Some(existing)) = self.blocks.get(&block_key) {
-            let existing_data: BlockData = serde_json::from_slice(&existing).map_err(|_| {
-                SlashingError::DoubleBlockProposal {
-                    slot,
-                    existing_root: "unknown".to_string(),
-                    attempted_root: signing_root.to_hex(),
-                }
-            })?;
-
-            if existing_data.signing_root != *signing_root.as_bytes() {
-                error!(
-                    validator = %hex::encode(&public_key[..8]),
-                    slot,
-                    existing_root = %hex::encode(&existing_data.signing_root[..8]),
-                    attempted_root = %hex::encode(&signing_root.as_bytes()[..8]),
-                    "DOUBLE BLOCK PROPOSAL PREVENTED"
-                );
-                self.stats.write().slashable_prevented += 1;
-                self.stats.write().double_blocks_prevented += 1;
-                return Err(SlashingError::DoubleBlockProposal {
-                    slot,
-                    existing_root: hex::encode(existing_data.signing_root),
-                    attempted_root: signing_root.to_hex(),
-                });
-            }
-
-            // Same signing root is fine (idempotent)
-            debug!(
-                validator = %hex::encode(&public_key[..8]),
-                slot,
-                "Block already recorded with same signing root"
-            );
-            return Ok(());
         }
 
         // All checks passed - record the block
@@ -620,6 +703,20 @@ impl SlashingProtectionDb {
         validator_data.updated_at = now;
         self.update_validator_data(&validator_data).map_err(|e| {
             SlashingError::DatabaseError(format!("Failed to persist validator data: {}", e))
+        })?;
+
+        // SECURITY (durability before signing): the block record MUST be durable on disk
+        // before the caller produces a signature. We flush WHILE STILL HOLDING the
+        // per-validator write lock and only return Ok once fsync succeeds. If the flush
+        // fails we report DatabaseError and the caller must NOT sign.
+        self.db.flush().map_err(|e| {
+            error!(
+                validator = %hex::encode(&public_key[..8]),
+                slot,
+                error = %e,
+                "Failed to flush block record to disk - refusing to sign"
+            );
+            SlashingError::DatabaseError(format!("Failed to flush block record: {e}"))
         })?;
 
         // Update stats
@@ -960,5 +1057,258 @@ mod tests {
         let stats = db.stats();
         assert_eq!(stats.attestations_signed, 5);
         assert_eq!(stats.blocks_signed, 3);
+    }
+
+    // ---------------------------------------------------------------------
+    // CRITICAL #4: durability-before-signature regression tests.
+    //
+    // These prove that `check_and_record_attestation` / `check_and_record_block`
+    // make the signing record durable on disk (fsync) BEFORE returning Ok, while
+    // still holding the per-validator write lock. The signature is produced by the
+    // caller only after Ok, so if the record is durable before Ok, a crash in the
+    // signing window cannot lose it (which would permit a double-sign on restart).
+    //
+    // The crash is simulated by re-executing the test binary as a child that writes
+    // the record and then calls `std::process::abort()` (terminates WITHOUT running
+    // destructors, so sled's Drop-flush never runs). The database is opened with
+    // `flush_every_ms(None)`, so the ONLY thing that can make the record durable is
+    // the explicit flush inside the check-and-record function. The parent then
+    // reopens the DB from a fresh process and asserts the record survived.
+    //
+    // Before the fix (no internal flush) the record lives only in the in-memory IO
+    // buffer and is lost by the abort, so the conflicting re-sign below would be
+    // ALLOWED and these tests would FAIL.
+    // ---------------------------------------------------------------------
+
+    const CRASH_CHILD_ENV: &str = "HSM_VALIDATOR_CRASH_CHILD";
+    // 48-byte pubkey used by the crash-durability child/parent (deterministic).
+    const CRASH_PUBKEY: [u8; 48] = [0x42u8; 48];
+    // Signing root recorded by the child before it crashes.
+    const CRASH_ROOT: [u8; 32] = [0x11u8; 32];
+    const CRASH_SOURCE: Epoch = 10;
+    const CRASH_TARGET: Epoch = 20;
+    const CRASH_SLOT: Slot = 100;
+
+    // If this test process was re-spawned as a crash child, perform the recorded
+    // write and abort before any normal test runs. Marked #[ctor]-like via a guard
+    // inside each test entrypoint instead would be cleaner, but a plain helper keeps
+    // it dependency-free; the parent only ever spawns the child with the env var set.
+    fn maybe_run_crash_child() {
+        let mode = match std::env::var(CRASH_CHILD_ENV) {
+            Ok(m) => m,
+            Err(_) => return,
+        };
+        let path = std::env::var("HSM_VALIDATOR_CRASH_PATH").unwrap();
+        let db = SlashingProtectionDb::open(&path).unwrap();
+        db.register_validator(&CRASH_PUBKEY).unwrap();
+        match mode.as_str() {
+            "attestation" => {
+                db.check_and_record_attestation(
+                    &CRASH_PUBKEY,
+                    CRASH_SOURCE,
+                    CRASH_TARGET,
+                    &SigningRoot::new(CRASH_ROOT),
+                )
+                .unwrap();
+            }
+            "block" => {
+                db.check_and_record_block(&CRASH_PUBKEY, CRASH_SLOT, &SigningRoot::new(CRASH_ROOT))
+                    .unwrap();
+            }
+            other => panic!("unknown crash mode: {other}"),
+        }
+        // Simulate a crash immediately after the check-and-record returned Ok: abort
+        // terminates the process WITHOUT running destructors, so sled's Drop-flush
+        // never executes. Only the explicit in-function flush can have persisted data.
+        std::process::abort();
+    }
+
+    fn spawn_crash_child(mode: &str, db_path: &std::path::Path) {
+        let exe = std::env::current_exe().expect("current_exe");
+        let status = std::process::Command::new(exe)
+            // Run only this single test in the child so it hits maybe_run_crash_child.
+            .arg("--exact")
+            .arg(match mode {
+                "attestation" => {
+                    "slashing_db::tests::test_attestation_durable_before_signature_returned"
+                }
+                "block" => "slashing_db::tests::test_block_durable_before_signature_returned",
+                _ => unreachable!(),
+            })
+            .env(CRASH_CHILD_ENV, mode)
+            .env("HSM_VALIDATOR_CRASH_PATH", db_path)
+            .status()
+            .expect("spawn crash child");
+        // The child aborts, so it must NOT exit successfully.
+        assert!(
+            !status.success(),
+            "crash child should have aborted, got {status:?}"
+        );
+    }
+
+    #[test]
+    fn test_attestation_durable_before_signature_returned() {
+        maybe_run_crash_child();
+
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("slashing-db");
+
+        // Child records an attestation, then crashes (abort, no Drop-flush).
+        spawn_crash_child("attestation", &db_path);
+
+        // Reopen from this (fresh) process. The record must have survived because the
+        // check-and-record flushed it to disk before returning Ok.
+        let db = SlashingProtectionDb::open(&db_path).unwrap();
+        let records = db.get_attestation_records(&CRASH_PUBKEY).unwrap();
+        assert_eq!(
+            records.len(),
+            1,
+            "attestation record must be durable across a crash (flush before signature)"
+        );
+        assert_eq!(records[0].target_epoch, CRASH_TARGET);
+        assert_eq!(records[0].signing_root.as_bytes(), &CRASH_ROOT);
+
+        // And the durable record must now block a conflicting double-vote.
+        let conflicting = SigningRoot::new([0x22u8; 32]);
+        let result = db.check_and_record_attestation(
+            &CRASH_PUBKEY,
+            CRASH_SOURCE,
+            CRASH_TARGET,
+            &conflicting,
+        );
+        assert!(
+            matches!(result, Err(SlashingError::DoubleVote { .. })),
+            "after crash recovery the recorded attestation must prevent a double vote, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_block_durable_before_signature_returned() {
+        maybe_run_crash_child();
+
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("slashing-db");
+
+        spawn_crash_child("block", &db_path);
+
+        let db = SlashingProtectionDb::open(&db_path).unwrap();
+        let records = db.get_block_records(&CRASH_PUBKEY).unwrap();
+        assert_eq!(
+            records.len(),
+            1,
+            "block record must be durable across a crash (flush before signature)"
+        );
+        assert_eq!(records[0].slot, CRASH_SLOT);
+
+        let conflicting = SigningRoot::new([0x33u8; 32]);
+        let result = db.check_and_record_block(&CRASH_PUBKEY, CRASH_SLOT, &conflicting);
+        assert!(
+            matches!(result, Err(SlashingError::DoubleBlockProposal { .. })),
+            "after crash recovery the recorded block must prevent a double proposal, got {result:?}"
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // MEDIUM #21: EIP-3076 boundary regression tests.
+    //
+    // EIP-3076 requires refusing to sign an attestation whose target epoch is
+    // `<= min_target_epoch` and a block whose slot is `<= min_slot` (the previous
+    // code used strict `<`, which permitted signing AT the minimum - a slashable
+    // gap when migrating protection between clients). The identical-signing-root
+    // repeat is still allowed.
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn test_attestation_at_min_target_epoch_refused() {
+        let db = SlashingProtectionDb::in_memory().unwrap();
+        let pubkey = random_pubkey();
+        db.register_validator(&pubkey).unwrap();
+
+        // Imported protection sets the minimum target epoch to 100.
+        db.set_min_target_epoch(&pubkey, 100).unwrap();
+
+        // Signing AT the minimum target epoch (100) with a fresh root must be refused.
+        // Source is well above any min_source so only the target boundary is exercised.
+        let root = random_root();
+        let result = db.check_and_record_attestation(&pubkey, 90, 100, &root);
+        assert!(
+            matches!(result, Err(SlashingError::TargetEpochTooLow { .. })),
+            "signing AT the minimum target epoch must be refused (EIP-3076 <=), got {result:?}"
+        );
+
+        // One above the minimum is allowed.
+        let root2 = random_root();
+        db.check_and_record_attestation(&pubkey, 90, 101, &root2)
+            .expect("target epoch above minimum must be allowed");
+    }
+
+    #[test]
+    fn test_block_at_min_slot_refused() {
+        let db = SlashingProtectionDb::in_memory().unwrap();
+        let pubkey = random_pubkey();
+        db.register_validator(&pubkey).unwrap();
+
+        db.set_min_slot(&pubkey, 100).unwrap();
+
+        // Signing AT the minimum slot (100) must be refused.
+        let root = random_root();
+        let result = db.check_and_record_block(&pubkey, 100, &root);
+        assert!(
+            matches!(result, Err(SlashingError::SlotTooLow { .. })),
+            "signing AT the minimum slot must be refused (EIP-3076 <=), got {result:?}"
+        );
+
+        // One above the minimum is allowed.
+        let root2 = random_root();
+        db.check_and_record_block(&pubkey, 101, &root2)
+            .expect("slot above minimum must be allowed");
+    }
+
+    #[test]
+    fn test_source_epoch_at_min_allowed() {
+        // Source epoch uses strict `<` (NOT `<=`): the FFG source legitimately repeats,
+        // so signing AT the minimum source epoch must be allowed (only target/slot use
+        // the `<=` boundary).
+        let db = SlashingProtectionDb::in_memory().unwrap();
+        let pubkey = random_pubkey();
+        db.register_validator(&pubkey).unwrap();
+
+        db.set_min_source_epoch(&pubkey, 50).unwrap();
+
+        let root = random_root();
+        db.check_and_record_attestation(&pubkey, 50, 200, &root)
+            .expect("source epoch AT the minimum must be allowed (strict < for source)");
+    }
+
+    // ---------------------------------------------------------------------
+    // HIGH #5: fail-closed on an unreadable existing record.
+    //
+    // The previous code used `if let Ok(Some(existing)) = ...get(&key)`, so a read
+    // that did not yield `Ok(Some(_))` silently fell through to record-and-sign. We
+    // now match explicitly. This test corrupts the stored value at the exact
+    // attestation key so it cannot be deserialized; signing MUST be refused rather
+    // than proceeding to overwrite/record and sign.
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn test_attestation_unreadable_record_fails_closed() {
+        let db = SlashingProtectionDb::in_memory().unwrap();
+        let pubkey = random_pubkey();
+        db.register_validator(&pubkey).unwrap();
+
+        let target = 20u64;
+        // Plant a value at the attestation key that is NOT valid AttestationData JSON.
+        let key = db.attestation_key(&pubkey, target);
+        db.attestations
+            .insert(&key, b"not valid json".as_ref())
+            .unwrap();
+
+        // Attempting to sign at this target must be refused (fail closed), not signed.
+        let root = random_root();
+        let result = db.check_and_record_attestation(&pubkey, 10, target, &root);
+        assert!(
+            result.is_err(),
+            "an unreadable existing attestation record must fail closed, got {result:?}"
+        );
     }
 }

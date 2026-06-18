@@ -311,7 +311,7 @@ fn test_mixed_workload() {
     for i in 0..3 {
         let namespace = format!("mixed_ns_{}", i);
         let keys = manager.list_keys(&namespace, KeyFilter::default()).unwrap();
-        assert!(keys.len() > 0, "Namespace {} should have keys", namespace);
+        assert!(!keys.is_empty(), "Namespace {} should have keys", namespace);
     }
 }
 
@@ -344,7 +344,7 @@ fn test_batch_operations_stress() {
         let page1 = manager.list_keys_batch(&namespace, 0, 5).unwrap();
         let page2 = manager.list_keys_batch(&namespace, 5, 5).unwrap();
 
-        assert!(page1.len() > 0 || page2.len() > 0);
+        assert!(!page1.is_empty() || !page2.is_empty());
     }
 }
 

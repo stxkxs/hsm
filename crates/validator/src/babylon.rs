@@ -76,7 +76,15 @@ pub struct EotsSlashingDb {
 impl EotsSlashingDb {
     /// Open or create an EOTS slashing protection database.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let db = sled::open(&path)?;
+        // SECURITY: Disable sled's periodic background flush (default 500ms). EOTS
+        // double-signing reveals the private key, so a height record MUST be durable on
+        // disk before the signature is produced. We flush explicitly inside
+        // check_and_record_height while holding the per-key write lock. Relying on the
+        // background flush would leave a crash window in which the record is lost.
+        let db = sled::Config::new()
+            .path(path.as_ref())
+            .flush_every_ms(None)
+            .open()?;
 
         let keys = db.open_tree(EOTS_KEYS_TREE)?;
         let heights = db.open_tree(EOTS_HEIGHTS_TREE)?;
@@ -94,10 +102,13 @@ impl EotsSlashingDb {
         })
     }
 
-    /// Create an in-memory database (for testing only).
-    #[cfg(test)]
+    /// Create an in-memory database (for testing and benchmarking only).
+    #[cfg(any(test, feature = "test-util"))]
     pub fn in_memory() -> Result<Self> {
-        let db = sled::Config::new().temporary(true).open()?;
+        let db = sled::Config::new()
+            .temporary(true)
+            .flush_every_ms(None)
+            .open()?;
 
         let keys = db.open_tree(EOTS_KEYS_TREE)?;
         let heights = db.open_tree(EOTS_HEIGHTS_TREE)?;
@@ -187,24 +198,61 @@ impl EotsSlashingDb {
 
         let height_key = self.height_key(public_key, height);
 
-        // Check if already signed at this height
-        if self.heights.contains_key(&height_key).unwrap_or(false) {
-            error!(
-                key = %hex::encode(&public_key[..8]),
-                height,
-                "EOTS DOUBLE SIGN PREVENTED - Private key would have been revealed!"
-            );
-            return Err(SlashingError::EotsDoubleSign { height });
+        // Check if already signed at this height.
+        //
+        // SECURITY (fail closed): a sled read error MUST NOT be treated as "not signed".
+        // For EOTS, double-signing the same height *reveals the private key*, so a read
+        // error must abort signing with DatabaseError rather than fall through and sign
+        // again. (`contains_key(..).unwrap_or(false)` previously failed OPEN here.)
+        match self.heights.contains_key(&height_key) {
+            Ok(true) => {
+                error!(
+                    key = %hex::encode(&public_key[..8]),
+                    height,
+                    "EOTS DOUBLE SIGN PREVENTED - Private key would have been revealed!"
+                );
+                return Err(SlashingError::EotsDoubleSign { height });
+            }
+            Ok(false) => {}
+            Err(e) => {
+                error!(
+                    key = %hex::encode(&public_key[..8]),
+                    height,
+                    error = %e,
+                    "EOTS slashing DB read error - refusing to sign (fail closed)"
+                );
+                return Err(SlashingError::DatabaseError(format!(
+                    "Failed to read EOTS height record: {e}"
+                )));
+            }
         }
 
         // Record the height
         let now = chrono::Utc::now();
         let timestamp = now.timestamp().to_le_bytes();
-        self.heights
-            .insert(&height_key, &timestamp)
-            .map_err(|_| SlashingError::EotsDoubleSign { height })?;
+        self.heights.insert(&height_key, &timestamp).map_err(|e| {
+            SlashingError::DatabaseError(format!("Failed to record EOTS height: {e}"))
+        })?;
 
-        // Update key metadata
+        // SECURITY (durability before signing): the EOTS height record MUST be durable on
+        // disk before the caller produces a signature. EOTS double-signing reveals the
+        // private key, so this is the most safety-critical flush in the crate. We flush
+        // WHILE STILL HOLDING the per-key write lock and only return Ok once fsync
+        // succeeds. If the flush fails we report DatabaseError and the caller must NOT
+        // sign. Without this, a crash in sled's background-flush window would lose the
+        // record and permit an irreversible key-revealing double-sign on restart.
+        self.db.flush().map_err(|e| {
+            error!(
+                key = %hex::encode(&public_key[..8]),
+                height,
+                error = %e,
+                "Failed to flush EOTS height record to disk - refusing to sign"
+            );
+            SlashingError::DatabaseError(format!("Failed to flush EOTS height record: {e}"))
+        })?;
+
+        // Update key metadata (best-effort; durability of the height record above is what
+        // guards against double-signing).
         if let Ok(Some(data)) = self.keys.get(public_key) {
             if let Ok(mut key_data) = serde_json::from_slice::<EotsKeyData>(&data) {
                 key_data.last_activity = now;
@@ -589,5 +637,80 @@ mod tests {
             result,
             Err(SlashingError::EotsDoubleSign { height: 100 })
         ));
+    }
+
+    // ---------------------------------------------------------------------
+    // CRITICAL #4 (EOTS): durability-before-signature regression test.
+    //
+    // For Babylon EOTS, signing the same height twice does not merely incur a
+    // slashing penalty - it REVEALS THE PRIVATE KEY. The height record therefore
+    // MUST be durable on disk before `sign_finality_vote` returns a signature.
+    //
+    // We simulate a crash by re-executing the test binary as a child that records
+    // the height (via check_and_record_height, which flushes internally) and then
+    // calls `std::process::abort()` - terminating WITHOUT running sled's Drop-flush.
+    // The DB is opened with `flush_every_ms(None)`, so only the explicit in-function
+    // flush can persist the record. The parent reopens and asserts the height is
+    // still recorded (so a restart cannot double-sign and leak the key).
+    //
+    // Before the fix the height lived only in the in-memory IO buffer and was lost
+    // on the abort, so on restart the height would appear unsigned and a second
+    // signature (key reveal) would be permitted - this test would FAIL.
+    // ---------------------------------------------------------------------
+
+    const EOTS_CRASH_CHILD_ENV: &str = "HSM_VALIDATOR_EOTS_CRASH_CHILD";
+    const EOTS_CRASH_PUBKEY: [u8; 33] = [0x02u8; 33];
+    const EOTS_CRASH_HEIGHT: BlockHeight = 777;
+
+    fn eots_maybe_run_crash_child() {
+        if std::env::var(EOTS_CRASH_CHILD_ENV).is_err() {
+            return;
+        }
+        let path = std::env::var("HSM_VALIDATOR_EOTS_CRASH_PATH").unwrap();
+        let db = EotsSlashingDb::open(&path).unwrap();
+        db.register_key(&EOTS_CRASH_PUBKEY, "babylon-testnet")
+            .unwrap();
+        db.check_and_record_height(&EOTS_CRASH_PUBKEY, EOTS_CRASH_HEIGHT)
+            .unwrap();
+        // Crash immediately after the record returned Ok: abort skips destructors so
+        // sled's Drop-flush never runs. Only the in-function flush can have persisted.
+        std::process::abort();
+    }
+
+    #[test]
+    fn test_eots_height_durable_before_signature_returned() {
+        eots_maybe_run_crash_child();
+
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("eots-db");
+
+        let exe = std::env::current_exe().expect("current_exe");
+        let status = std::process::Command::new(exe)
+            .arg("--exact")
+            .arg("babylon::tests::test_eots_height_durable_before_signature_returned")
+            .env(EOTS_CRASH_CHILD_ENV, "1")
+            .env("HSM_VALIDATOR_EOTS_CRASH_PATH", &db_path)
+            .status()
+            .expect("spawn eots crash child");
+        assert!(
+            !status.success(),
+            "eots crash child should have aborted, got {status:?}"
+        );
+
+        // Reopen from a fresh process; the height must have survived the crash.
+        let db = EotsSlashingDb::open(&db_path).unwrap();
+        assert!(
+            db.is_height_signed(&EOTS_CRASH_PUBKEY, EOTS_CRASH_HEIGHT)
+                .unwrap(),
+            "EOTS height must be durable across a crash (flush before signature) - \
+             otherwise a restart could double-sign and reveal the private key"
+        );
+
+        // And the durable record must block a second sign at that height (key reveal).
+        let result = db.check_and_record_height(&EOTS_CRASH_PUBKEY, EOTS_CRASH_HEIGHT);
+        assert!(
+            matches!(result, Err(SlashingError::EotsDoubleSign { .. })),
+            "after crash recovery the recorded height must prevent an EOTS double sign, got {result:?}"
+        );
     }
 }

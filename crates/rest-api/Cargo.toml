@@ -20,6 +20,7 @@ serde_json = { workspace = true }
 
 # HSM dependencies
 hsm-auth = { path = "../auth" }
+hsm-audit = { path = "../audit" }
 hsm-crypto-engine = { path = "../crypto-engine" }
 hsm-key-manager = { path = "../key-manager" }
 
@@ -44,3 +45,5 @@ tokio-test = "0.4"
 tower = { version = "0.5", features = ["util"] }
 http = "1"
 http-body-util = "0.1"
+hsm-audit = { path = "../audit" }
+tempfile = "3"

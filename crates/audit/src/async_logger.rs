@@ -6,6 +6,7 @@
 //! - Backpressure handling when queue is full
 //! - Background writer task for I/O operations
 
+use crate::checkpoint::{Checkpoint, CheckpointError};
 use crate::event::{AuditEvent, AuditEventBuilder, EventType};
 use crate::hash_chain::HashChain;
 use crate::merkle_tree::MerkleTree;
@@ -35,6 +36,9 @@ pub enum AsyncAuditError {
 
     #[error("Channel send error")]
     ChannelSend,
+
+    #[error("Checkpoint verification failed: {0}")]
+    Checkpoint(#[from] CheckpointError),
 }
 
 /// Configuration for async audit logger
@@ -57,6 +61,11 @@ pub struct AsyncAuditConfig {
 
     /// Batch timeout in milliseconds (flush if no new events)
     pub batch_timeout_ms: u64,
+
+    /// Optional key for checkpoint integrity tags (HMAC-SHA256). See
+    /// [`crate::checkpoint`] for the tamper-evidence model. `None` falls back
+    /// to a keyless hash usable only for dev/test.
+    pub checkpoint_key: Option<Vec<u8>>,
 }
 
 impl Default for AsyncAuditConfig {
@@ -68,6 +77,7 @@ impl Default for AsyncAuditConfig {
             channel_capacity: 10000,
             batch_size: 100,
             batch_timeout_ms: 100,
+            checkpoint_key: None,
         }
     }
 }
@@ -104,6 +114,19 @@ impl AsyncAuditLogger {
                     .map_err(|_e| AsyncAuditError::EventBuild("Failed to rebuild hash chain"))?;
                 merkle_tree.write().update(&event.current_hash);
             }
+
+            // Tail-truncation guard: verify the rebuilt live tip against the
+            // persisted checkpoint. A tip behind the checkpoint indicates
+            // deleted events; fail closed by refusing to start.
+            if let Some(checkpoint) = storage.read_checkpoint()? {
+                let live_seq = hash_chain.current_sequence();
+                let live_root = merkle_tree.read().get_root().ok();
+                checkpoint.verify_against_live(
+                    live_seq,
+                    live_root.as_deref(),
+                    config.checkpoint_key.as_deref(),
+                )?;
+            }
         }
 
         // Create channel for log requests
@@ -139,6 +162,7 @@ impl AsyncAuditLogger {
         tokio::spawn(async move {
             let mut batch: Vec<LogRequest> = Vec::with_capacity(config.batch_size);
             let timeout = tokio::time::Duration::from_millis(config.batch_timeout_ms);
+            let checkpoint_key = config.checkpoint_key.clone();
 
             loop {
                 batch.clear();
@@ -170,7 +194,14 @@ impl AsyncAuditLogger {
 
                 // Process batch (take ownership for processing)
                 let batch_to_process = std::mem::take(&mut batch);
-                Self::process_batch(batch_to_process, &hash_chain, &merkle_tree, &storage).await;
+                Self::process_batch(
+                    batch_to_process,
+                    &hash_chain,
+                    &merkle_tree,
+                    &storage,
+                    checkpoint_key.as_deref(),
+                )
+                .await;
             }
         })
     }
@@ -181,10 +212,16 @@ impl AsyncAuditLogger {
         hash_chain: &Arc<HashChain>,
         merkle_tree: &Arc<RwLock<MerkleTree>>,
         storage: &Arc<AuditStorage>,
+        checkpoint_key: Option<&[u8]>,
     ) {
         for request in batch {
-            let result =
-                Self::process_single_event(&request.builder, hash_chain, merkle_tree, storage);
+            let result = Self::process_single_event(
+                &request.builder,
+                hash_chain,
+                merkle_tree,
+                storage,
+                checkpoint_key,
+            );
 
             // Send response back to caller
             let _ = request.response.send(result);
@@ -202,11 +239,16 @@ impl AsyncAuditLogger {
         hash_chain: &Arc<HashChain>,
         merkle_tree: &Arc<RwLock<MerkleTree>>,
         storage: &Arc<AuditStorage>,
+        checkpoint_key: Option<&[u8]>,
     ) -> Result<u64, AsyncAuditError> {
         // Get next sequence number
         let sequence = hash_chain.current_sequence() + 1;
 
-        // Build event with sequence and prev_hash
+        // Build event with sequence and prev_hash. The hash chain's `append`
+        // recomputes prev_hash/current_hash from its own state; the background
+        // writer task is the single writer, so chain state cannot change
+        // between here and the append, making the persisted event identical to
+        // the one the chain stores.
         let event = builder
             .clone()
             .sequence(sequence)
@@ -215,16 +257,31 @@ impl AsyncAuditLogger {
             .build()
             .map_err(AsyncAuditError::EventBuild)?;
 
-        // Append to hash chain
+        // Durability first: persist to storage BEFORE advancing any in-memory
+        // state. If the write fails we return the error without touching the
+        // hash chain or Merkle tree, so the in-memory sequence/last_hash do not
+        // advance and no persisted gap / refused-restart condition is created.
+        storage.write_event(&event)?;
+
+        // Append to hash chain (advances sequence + last_hash) only after the
+        // durable write succeeded.
         let hash = hash_chain
-            .append(event.clone())
+            .append(event)
             .map_err(|_| AsyncAuditError::EventBuild("Hash chain append failed"))?;
 
         // Update Merkle tree
-        merkle_tree.write().update(&hash);
+        let merkle_root = {
+            let mut tree = merkle_tree.write();
+            tree.update(&hash);
+            tree.get_root().ok()
+        };
 
-        // Persist to storage
-        storage.write_event(&event)?;
+        // Persist a signed-root checkpoint committing to this sequence + root,
+        // enabling tail-truncation detection on a later restart.
+        if let Some(root) = merkle_root {
+            let checkpoint = Checkpoint::new(sequence, root, checkpoint_key);
+            storage.write_checkpoint(&checkpoint)?;
+        }
 
         Ok(sequence)
     }

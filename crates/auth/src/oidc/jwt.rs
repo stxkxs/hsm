@@ -291,11 +291,21 @@ impl JwtValidator {
         let now = chrono::Utc::now().timestamp();
         let clock_skew = self.config.clock_skew_seconds as i64;
 
-        // Check expiration
+        // Check expiration.
+        //
+        // When expiration validation is enabled, a missing `exp` claim is a hard
+        // failure: a signature-valid token with no `exp` would otherwise never
+        // expire. We surface this as a MissingClaim directly rather than relying
+        // on `required_claims` containing "exp" (which it typically does not).
         if self.config.validate_exp {
-            if let Some(exp) = claims.exp {
-                if now > exp + clock_skew {
-                    return Err(JwtValidationError::Expired);
+            match claims.exp {
+                Some(exp) => {
+                    if now > exp + clock_skew {
+                        return Err(JwtValidationError::Expired);
+                    }
+                }
+                None => {
+                    return Err(JwtValidationError::MissingClaim("exp".to_string()));
                 }
             }
         }
@@ -307,15 +317,27 @@ impl JwtValidator {
             }
         }
 
-        // Check issuer
-        if let Some(iss) = &claims.iss {
-            let expected = self.config.issuer.trim_end_matches('/');
-            let actual = iss.trim_end_matches('/');
-            if expected != actual {
-                return Err(JwtValidationError::InvalidIssuer {
-                    expected: expected.to_string(),
-                    actual: actual.to_string(),
-                });
+        // Check issuer.
+        //
+        // Whenever an issuer is configured (non-empty), the token MUST carry a
+        // matching `iss` claim. A missing `iss` is a hard failure (MissingClaim)
+        // — without it, issuer binding would be silently skipped, allowing a
+        // token from any issuer to pass. This does not depend on `required_claims`.
+        let expected_issuer = self.config.issuer.trim_end_matches('/');
+        if !expected_issuer.is_empty() {
+            match &claims.iss {
+                Some(iss) => {
+                    let actual = iss.trim_end_matches('/');
+                    if expected_issuer != actual {
+                        return Err(JwtValidationError::InvalidIssuer {
+                            expected: expected_issuer.to_string(),
+                            actual: actual.to_string(),
+                        });
+                    }
+                }
+                None => {
+                    return Err(JwtValidationError::MissingClaim("iss".to_string()));
+                }
             }
         }
 
@@ -376,11 +398,130 @@ fn base64_url_decode(input: &str) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oidc::claims::OidcClaims;
+    use crate::oidc::token_cache::JwksCache;
+    use std::collections::HashMap;
 
     #[test]
     fn test_base64_url_decode() {
         let encoded = "SGVsbG8gV29ybGQ";
         let decoded = base64_url_decode(encoded).unwrap();
         assert_eq!(String::from_utf8(decoded).unwrap(), "Hello World");
+    }
+
+    // Build a JwtValidator over the given provider config. The JWKS cache is
+    // unused by validate_claims, so an empty one suffices.
+    fn validator_for(config: OidcProviderConfig) -> JwtValidator {
+        JwtValidator::new(config, Arc::new(JwksCache::new()))
+    }
+
+    // A baseline set of claims that PASSES validation: present exp in the
+    // future, matching issuer, and an audience the config accepts.
+    fn base_claims() -> OidcClaims {
+        OidcClaims {
+            sub: "user-123".to_string(),
+            iss: Some("https://issuer.example.com".to_string()),
+            aud: Some(serde_json::Value::String("client-id".to_string())),
+            exp: Some(chrono::Utc::now().timestamp() + 3600),
+            iat: Some(chrono::Utc::now().timestamp()),
+            nbf: None,
+            jti: None,
+            name: None,
+            email: None,
+            email_verified: None,
+            groups: None,
+            custom: HashMap::new(),
+        }
+    }
+
+    fn config() -> OidcProviderConfig {
+        // Generic config with validate_exp=true (default) and a configured issuer.
+        OidcProviderConfig::generic("https://issuer.example.com", "client-id")
+    }
+
+    /// Sanity: a well-formed token (exp present + future, iss present + matching)
+    /// passes. Guards against the fix over-rejecting valid tokens.
+    #[test]
+    fn well_formed_claims_pass() {
+        let v = validator_for(config());
+        assert!(v.validate_claims(&base_claims()).is_ok());
+    }
+
+    /// Regression for MEDIUM #16 (exp half): a signature-valid token that omits
+    /// `exp` must be REJECTED when validate_exp is set. Before the fix the
+    /// `if let Some(exp)` arm was simply skipped for `None`, so such a token
+    /// never expired and validation returned Ok.
+    #[test]
+    fn missing_exp_is_rejected_when_validate_exp_enabled() {
+        let cfg = config();
+        assert!(cfg.validate_exp, "precondition: validate_exp must be on");
+
+        let v = validator_for(cfg);
+        let mut claims = base_claims();
+        claims.exp = None;
+
+        let result = v.validate_claims(&claims);
+        assert!(
+            matches!(result, Err(JwtValidationError::MissingClaim(ref c)) if c == "exp"),
+            "token missing exp must be rejected as MissingClaim(exp), got: {:?}",
+            result
+        );
+    }
+
+    /// When validate_exp is explicitly disabled, a missing exp is tolerated
+    /// (confirms the rejection is gated on the flag, not unconditional).
+    #[test]
+    fn missing_exp_tolerated_when_validate_exp_disabled() {
+        let mut cfg = config();
+        cfg.validate_exp = false;
+        let v = validator_for(cfg);
+
+        let mut claims = base_claims();
+        claims.exp = None;
+
+        assert!(
+            v.validate_claims(&claims).is_ok(),
+            "with validate_exp disabled, a missing exp should be tolerated"
+        );
+    }
+
+    /// Regression for MEDIUM #16 (iss half): a signature-valid token that omits
+    /// `iss` must be REJECTED when an issuer is configured. Before the fix the
+    /// `if let Some(iss)` arm was skipped for `None`, silently bypassing issuer
+    /// binding so a token from ANY issuer would pass.
+    #[test]
+    fn missing_iss_is_rejected_when_issuer_configured() {
+        let cfg = config();
+        assert!(
+            !cfg.issuer.is_empty(),
+            "precondition: an issuer is configured"
+        );
+
+        let v = validator_for(cfg);
+        let mut claims = base_claims();
+        claims.iss = None;
+
+        let result = v.validate_claims(&claims);
+        assert!(
+            matches!(result, Err(JwtValidationError::MissingClaim(ref c)) if c == "iss"),
+            "token missing iss must be rejected as MissingClaim(iss), got: {:?}",
+            result
+        );
+    }
+
+    /// A present-but-wrong issuer is still reported as InvalidIssuer (unchanged
+    /// behavior, ensures we didn't collapse the two error paths).
+    #[test]
+    fn wrong_iss_is_rejected_as_invalid_issuer() {
+        let v = validator_for(config());
+        let mut claims = base_claims();
+        claims.iss = Some("https://evil.example.com".to_string());
+
+        let result = v.validate_claims(&claims);
+        assert!(
+            matches!(result, Err(JwtValidationError::InvalidIssuer { .. })),
+            "mismatched iss must be rejected as InvalidIssuer, got: {:?}",
+            result
+        );
     }
 }

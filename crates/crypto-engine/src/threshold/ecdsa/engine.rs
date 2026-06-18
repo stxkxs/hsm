@@ -3,6 +3,18 @@
 //! This module provides the main interface for threshold ECDSA operations,
 //! supporting both P-256 (FIPS approved) and secp256k1 (Bitcoin/Ethereum) curves.
 //!
+//! # Status: NOT production-ready (fails closed)
+//!
+//! The signing path ([`ThresholdEcdsaEngine::presign`], [`ThresholdEcdsaEngine::sign_share`],
+//! and [`ThresholdEcdsaEngine::aggregate`]) currently returns
+//! [`ThresholdError::NotImplemented`] instead of producing a signature. The
+//! implemented math forms `s = k * (m + r * x)` because it never computes the
+//! modular inverse `k^-1`; a correct threshold ECDSA protocol (e.g. GG18/GG20 with
+//! MtA) is required to obtain additive/multiplicative shares of `k^-1` without
+//! reconstructing `k`. Rather than emit signatures that fail every verifier, these
+//! entrypoints refuse. Key generation, nonce generation and verification remain
+//! usable. The `# Usage` example below documents the intended (future) flow.
+//!
 //! # Protocol Overview
 //!
 //! Threshold ECDSA signing requires 3 communication rounds:
@@ -299,101 +311,21 @@ impl ThresholdEcdsaEngine {
             }
         }
 
-        match key_share.curve {
-            EcdsaCurve::P256 => Self::presign_p256(key_share, nonce, commitments, participants),
-            EcdsaCurve::Secp256k1 => {
-                Self::presign_secp256k1(key_share, nonce, commitments, participants)
-            }
-        }
-    }
-
-    fn presign_p256(
-        key_share: &EcdsaKeyShare,
-        nonce: &EcdsaSigningNonce,
-        commitments: &[EcdsaSigningCommitment],
-        participants: &[ParticipantId],
-    ) -> Result<EcdsaPreSignature, ThresholdError> {
-        use p256::ProjectivePoint;
-
-        // Compute R = sum(D_i) = sum(k_i * G) = k * G
-        let mut r_point = ProjectivePoint::IDENTITY;
-        for commitment in commitments {
-            let d_point = P256ThresholdOps::point_from_bytes(&commitment.commitment_d)?;
-            r_point += d_point;
-        }
-
-        // Get r = x-coordinate of R
-        let r = P256ThresholdOps::point_x_coordinate(&r_point);
-        let r_bytes = P256ThresholdOps::scalar_to_bytes(&r);
-
-        // Get our k share
-        let k_share = P256ThresholdOps::scalar_from_bytes(&nonce.k_share)?;
-
-        // Compute Lagrange coefficient for this participant
-        let lambda = P256ThresholdOps::lagrange_coefficient(key_share.participant_id, participants);
-
-        // Compute k_inv share (simplified - in full MPC this involves MtA protocol)
-        // For this implementation, we compute a share of k^-1 using additive shares
-        // k_inv_share = lambda * k_share (will be summed and inverted in aggregation)
-        let k_inv_share = lambda * k_share;
-        let k_inv_share_bytes = P256ThresholdOps::scalar_to_bytes(&k_inv_share);
-
-        // Compute chi_share = x_i * k^-1 (share of private key weighted by k^-1)
-        // In simplified version: chi_share = lambda * x_i
-        let x_share = P256ThresholdOps::scalar_from_bytes(key_share.secret_share_bytes())?;
-        let chi_share = lambda * x_share;
-        let chi_share_bytes = P256ThresholdOps::scalar_to_bytes(&chi_share);
-
-        Ok(EcdsaPreSignature::new(
-            key_share.participant_id,
-            r_bytes,
-            k_inv_share_bytes,
-            chi_share_bytes,
-            EcdsaCurve::P256,
-        ))
-    }
-
-    fn presign_secp256k1(
-        key_share: &EcdsaKeyShare,
-        nonce: &EcdsaSigningNonce,
-        commitments: &[EcdsaSigningCommitment],
-        participants: &[ParticipantId],
-    ) -> Result<EcdsaPreSignature, ThresholdError> {
-        use k256::ProjectivePoint;
-
-        // Compute R = sum(D_i) = sum(k_i * G) = k * G
-        let mut r_point = ProjectivePoint::IDENTITY;
-        for commitment in commitments {
-            let d_point = Secp256k1ThresholdOps::point_from_bytes(&commitment.commitment_d)?;
-            r_point += d_point;
-        }
-
-        // Get r = x-coordinate of R
-        let r = Secp256k1ThresholdOps::point_x_coordinate(&r_point);
-        let r_bytes = Secp256k1ThresholdOps::scalar_to_bytes(&r);
-
-        // Get our k share
-        let k_share = Secp256k1ThresholdOps::scalar_from_bytes(&nonce.k_share)?;
-
-        // Compute Lagrange coefficient for this participant
-        let lambda =
-            Secp256k1ThresholdOps::lagrange_coefficient(key_share.participant_id, participants);
-
-        // Compute k_inv share (simplified)
-        let k_inv_share = lambda * k_share;
-        let k_inv_share_bytes = Secp256k1ThresholdOps::scalar_to_bytes(&k_inv_share);
-
-        // Compute chi_share = lambda * x_i
-        let x_share = Secp256k1ThresholdOps::scalar_from_bytes(key_share.secret_share_bytes())?;
-        let chi_share = lambda * x_share;
-        let chi_share_bytes = Secp256k1ThresholdOps::scalar_to_bytes(&chi_share);
-
-        Ok(EcdsaPreSignature::new(
-            key_share.participant_id,
-            r_bytes,
-            k_inv_share_bytes,
-            chi_share_bytes,
-            EcdsaCurve::Secp256k1,
+        // FAIL CLOSED: the threshold-ECDSA signing path is NOT production-ready.
+        //
+        // The pre-signing math below computes additive shares of `lambda * k` and
+        // `lambda * x`, and `sign_share` then forms `s_i = k_inv_i * m + chi_i * r`.
+        // Because the modular inverse `k^-1` is never computed, the aggregated `s`
+        // equals `k * (m + r * x)` instead of the required `k^-1 * (m + r * x)`, so
+        // every emitted signature FAILS standard ECDSA verification. Correct
+        // threshold ECDSA requires a real MtA / GG18-GG20 protocol to obtain shares
+        // of `k^-1` without reconstructing `k`. Until that is implemented we refuse
+        // to run rather than silently produce invalid signatures.
+        let _ = (nonce, participants);
+        Err(ThresholdError::NotImplemented(
+            "threshold ECDSA signing is not production-ready: protocol does not compute k^-1 \
+             (requires correct GG20/MtA); see EcdsaThresholdSignature docs"
+                .into(),
         ))
     }
 
@@ -415,60 +347,14 @@ impl ThresholdEcdsaEngine {
         presignature: &EcdsaPreSignature,
         message_hash: &[u8; 32],
     ) -> Result<EcdsaSignatureShare, ThresholdError> {
-        match key_share.curve {
-            EcdsaCurve::P256 => Self::sign_share_p256(key_share, presignature, message_hash),
-            EcdsaCurve::Secp256k1 => {
-                Self::sign_share_secp256k1(key_share, presignature, message_hash)
-            }
-        }
-    }
-
-    fn sign_share_p256(
-        key_share: &EcdsaKeyShare,
-        presignature: &EcdsaPreSignature,
-        message_hash: &[u8; 32],
-    ) -> Result<EcdsaSignatureShare, ThresholdError> {
-        // Parse values
-        let r = P256ThresholdOps::scalar_from_bytes(&presignature.r)?;
-        let k_inv_share = P256ThresholdOps::scalar_from_bytes(&presignature.k_inv_share)?;
-        let chi_share = P256ThresholdOps::scalar_from_bytes(&presignature.chi_share)?;
-
-        // Parse message hash as scalar
-        let m = P256ThresholdOps::scalar_from_bytes(message_hash)?;
-
-        // Compute signature share: s_i = k_inv_i * m + chi_i * r
-        // (In the full protocol this is s_i = k_i^-1 * (m + r * x_i) with proper MPC)
-        let s_share = k_inv_share * m + chi_share * r;
-        let s_share_bytes = P256ThresholdOps::scalar_to_bytes(&s_share);
-
-        Ok(EcdsaSignatureShare::new(
-            key_share.participant_id,
-            s_share_bytes,
-            EcdsaCurve::P256,
-        ))
-    }
-
-    fn sign_share_secp256k1(
-        key_share: &EcdsaKeyShare,
-        presignature: &EcdsaPreSignature,
-        message_hash: &[u8; 32],
-    ) -> Result<EcdsaSignatureShare, ThresholdError> {
-        // Parse values
-        let r = Secp256k1ThresholdOps::scalar_from_bytes(&presignature.r)?;
-        let k_inv_share = Secp256k1ThresholdOps::scalar_from_bytes(&presignature.k_inv_share)?;
-        let chi_share = Secp256k1ThresholdOps::scalar_from_bytes(&presignature.chi_share)?;
-
-        // Parse message hash as scalar
-        let m = Secp256k1ThresholdOps::scalar_from_bytes(message_hash)?;
-
-        // Compute signature share
-        let s_share = k_inv_share * m + chi_share * r;
-        let s_share_bytes = Secp256k1ThresholdOps::scalar_to_bytes(&s_share);
-
-        Ok(EcdsaSignatureShare::new(
-            key_share.participant_id,
-            s_share_bytes,
-            EcdsaCurve::Secp256k1,
+        // FAIL CLOSED: see [`Self::presign`]. The signing path cannot produce a
+        // verifiable signature because `k^-1` is never computed, so we refuse here
+        // too (a caller could otherwise hand-craft a pre-signature and reach this).
+        let _ = (key_share, presignature, message_hash);
+        Err(ThresholdError::NotImplemented(
+            "threshold ECDSA signing is not production-ready: protocol does not compute k^-1 \
+             (requires correct GG20/MtA)"
+                .into(),
         ))
     }
 
@@ -501,83 +387,14 @@ impl ThresholdEcdsaEngine {
             });
         }
 
-        match group_public_key.curve {
-            EcdsaCurve::P256 => Self::aggregate_p256(
-                group_public_key,
-                presignature,
-                signature_shares,
-                participants,
-            ),
-            EcdsaCurve::Secp256k1 => Self::aggregate_secp256k1(
-                group_public_key,
-                presignature,
-                signature_shares,
-                participants,
-            ),
-        }
-    }
-
-    fn aggregate_p256(
-        _group_public_key: &EcdsaGroupPublicKey,
-        presignature: &EcdsaPreSignature,
-        signature_shares: &[EcdsaSignatureShare],
-        _participants: &[ParticipantId],
-    ) -> Result<EcdsaThresholdSignature, ThresholdError> {
-        use p256::Scalar;
-
-        // Sum signature shares: s = sum(s_i)
-        let mut s = Scalar::ZERO;
-        for share in signature_shares {
-            let s_i = P256ThresholdOps::scalar_from_bytes(&share.share)?;
-            s += s_i;
-        }
-
-        // To get the actual signature, we need k^-1
-        // In a simplified model where we have k (sum of k_shares), compute k^-1
-        // For the full MPC protocol, this would use secure inversion
-
-        // Get r from pre-signature
-        let r_bytes = presignature.r.clone();
-
-        // The aggregated s is actually k * (m + r * x), so we need to multiply by k^-1
-        // In this simplified implementation, we rely on the share structure
-        // where k_inv_share already incorporates the share of k^-1
-
-        let s_bytes = P256ThresholdOps::scalar_to_bytes(&s);
-
-        Ok(EcdsaThresholdSignature::new(
-            r_bytes,
-            s_bytes,
-            EcdsaCurve::P256,
-        ))
-    }
-
-    fn aggregate_secp256k1(
-        _group_public_key: &EcdsaGroupPublicKey,
-        presignature: &EcdsaPreSignature,
-        signature_shares: &[EcdsaSignatureShare],
-        _participants: &[ParticipantId],
-    ) -> Result<EcdsaThresholdSignature, ThresholdError> {
-        use k256::Scalar;
-
-        // Sum signature shares: s = sum(s_i)
-        let mut s = Scalar::ZERO;
-        for share in signature_shares {
-            let s_i = Secp256k1ThresholdOps::scalar_from_bytes(&share.share)?;
-            s += s_i;
-        }
-
-        // Normalize s for Bitcoin/Ethereum (low-S)
-        let s_normalized = Secp256k1ThresholdOps::normalize_s(&s);
-
-        // Get r from pre-signature
-        let r_bytes = presignature.r.clone();
-        let s_bytes = Secp256k1ThresholdOps::scalar_to_bytes(&s_normalized);
-
-        Ok(EcdsaThresholdSignature::new(
-            r_bytes,
-            s_bytes,
-            EcdsaCurve::Secp256k1,
+        // FAIL CLOSED: see [`Self::presign`]. Summing the shares yields
+        // `s = k * (m + r * x)`, not `s = k^-1 * (m + r * x)`, so the result would
+        // never verify. Refuse rather than emit an invalid signature.
+        let _ = (presignature, participants);
+        Err(ThresholdError::NotImplemented(
+            "threshold ECDSA aggregation is not production-ready: protocol does not compute k^-1 \
+             (requires correct GG20/MtA)"
+                .into(),
         ))
     }
 
@@ -771,22 +588,95 @@ mod tests {
         assert_eq!(commitment.commitment_e.len(), 33);
     }
 
+    /// FAIL-CLOSED regression: the threshold-ECDSA signing path must NOT silently
+    /// produce a signature. Before the fix, `presign` -> `sign_share` -> `aggregate`
+    /// returned `Ok` with a signature whose `s = k * (m + r*x)` (k^-1 never computed),
+    /// so it failed every verifier. Now `presign` returns `NotImplemented`.
     #[test]
-    fn test_full_signing_flow_p256_2_of_3() {
+    fn test_presign_fails_closed_p256() {
+        let config = ThresholdConfig::new(2, 3).unwrap();
+        let (_group_key, shares) =
+            ThresholdEcdsaEngine::trusted_dealer_keygen(config, EcdsaCurve::P256).unwrap();
+
+        let (nonce1, commitment1) = ThresholdEcdsaEngine::generate_nonces(&shares[0]).unwrap();
+        let (_nonce2, commitment2) = ThresholdEcdsaEngine::generate_nonces(&shares[1]).unwrap();
+        let commitments = vec![commitment1, commitment2];
+        let participants = vec![shares[0].participant_id, shares[1].participant_id];
+
+        // Enough commitments / matching curve -> would previously succeed.
+        let result =
+            ThresholdEcdsaEngine::presign(&shares[0], &nonce1, &commitments, &participants);
+        assert!(
+            matches!(result, Err(ThresholdError::NotImplemented(_))),
+            "threshold ECDSA presign must fail closed, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_presign_fails_closed_secp256k1() {
+        let config = ThresholdConfig::new(2, 3).unwrap();
+        let (_group_key, shares) =
+            ThresholdEcdsaEngine::trusted_dealer_keygen(config, EcdsaCurve::Secp256k1).unwrap();
+
+        let (nonce1, commitment1) = ThresholdEcdsaEngine::generate_nonces(&shares[0]).unwrap();
+        let (_nonce2, commitment2) = ThresholdEcdsaEngine::generate_nonces(&shares[1]).unwrap();
+        let commitments = vec![commitment1, commitment2];
+        let participants = vec![shares[0].participant_id, shares[1].participant_id];
+
+        let result =
+            ThresholdEcdsaEngine::presign(&shares[0], &nonce1, &commitments, &participants);
+        assert!(matches!(result, Err(ThresholdError::NotImplemented(_))));
+    }
+
+    /// `sign_share` and `aggregate` must also refuse, even if a caller fabricates a
+    /// pre-signature, so the broken math is unreachable from every public entrypoint.
+    #[test]
+    fn test_sign_share_and_aggregate_fail_closed() {
+        let config = ThresholdConfig::new(2, 3).unwrap();
+        let (group_key, shares) =
+            ThresholdEcdsaEngine::trusted_dealer_keygen(config, EcdsaCurve::P256).unwrap();
+        let participants = vec![shares[0].participant_id, shares[1].participant_id];
+        let message_hash = hash_message(b"fabricated presig");
+
+        // A fabricated (structurally valid) pre-signature.
+        let presig = EcdsaPreSignature::new(
+            shares[0].participant_id,
+            vec![1u8; 32],
+            vec![2u8; 32],
+            vec![3u8; 32],
+            EcdsaCurve::P256,
+        );
+
+        let share_res = ThresholdEcdsaEngine::sign_share(&shares[0], &presig, &message_hash);
+        assert!(matches!(share_res, Err(ThresholdError::NotImplemented(_))));
+
+        let fake_shares = vec![
+            EcdsaSignatureShare::new(shares[0].participant_id, vec![4u8; 32], EcdsaCurve::P256),
+            EcdsaSignatureShare::new(shares[1].participant_id, vec![5u8; 32], EcdsaCurve::P256),
+        ];
+        let agg_res =
+            ThresholdEcdsaEngine::aggregate(&group_key, &presig, &fake_shares, &participants);
+        assert!(matches!(agg_res, Err(ThresholdError::NotImplemented(_))));
+    }
+
+    /// Target KAT for a correct threshold ECDSA implementation (GG20/MtA): the
+    /// aggregated threshold signature MUST verify under standard ECDSA against the
+    /// group public key. Ignored until `k^-1` is computed via a real MtA protocol.
+    /// This documents the acceptance criterion and will FAIL (presign errors) today.
+    #[test]
+    #[ignore = "requires correct threshold ECDSA (GG20/MtA)"]
+    fn test_threshold_ecdsa_signs_and_verifies_standard_p256() {
         let config = ThresholdConfig::new(2, 3).unwrap();
         let (group_key, shares) =
             ThresholdEcdsaEngine::trusted_dealer_keygen(config, EcdsaCurve::P256).unwrap();
 
-        let message = b"Test message for threshold ECDSA signing";
-        let message_hash = hash_message(message);
+        let message_hash = hash_message(b"threshold ECDSA KAT target");
 
-        // Round 1: Generate nonces and commitments for first 2 participants
         let (nonce1, commitment1) = ThresholdEcdsaEngine::generate_nonces(&shares[0]).unwrap();
         let (nonce2, commitment2) = ThresholdEcdsaEngine::generate_nonces(&shares[1]).unwrap();
         let commitments = vec![commitment1, commitment2];
         let participants = vec![shares[0].participant_id, shares[1].participant_id];
 
-        // Round 2: Generate pre-signatures
         let presig1 =
             ThresholdEcdsaEngine::presign(&shares[0], &nonce1, &commitments, &participants)
                 .unwrap();
@@ -794,69 +684,19 @@ mod tests {
             ThresholdEcdsaEngine::presign(&shares[1], &nonce2, &commitments, &participants)
                 .unwrap();
 
-        // Pre-signatures should have same r value
-        assert_eq!(presig1.r, presig2.r);
+        let s1 = ThresholdEcdsaEngine::sign_share(&shares[0], &presig1, &message_hash).unwrap();
+        let s2 = ThresholdEcdsaEngine::sign_share(&shares[1], &presig2, &message_hash).unwrap();
 
-        // Round 3: Generate signature shares
-        let sig_share1 =
-            ThresholdEcdsaEngine::sign_share(&shares[0], &presig1, &message_hash).unwrap();
-        let sig_share2 =
-            ThresholdEcdsaEngine::sign_share(&shares[1], &presig2, &message_hash).unwrap();
-
-        // Aggregate signature
-        let signature = ThresholdEcdsaEngine::aggregate(
-            &group_key,
-            &presig1,
-            &[sig_share1, sig_share2],
-            &participants,
-        )
-        .unwrap();
-
-        // Signature should have correct format
-        assert_eq!(signature.r.len(), 32);
-        assert_eq!(signature.s.len(), 32);
-        assert_eq!(signature.curve, EcdsaCurve::P256);
-    }
-
-    #[test]
-    fn test_full_signing_flow_secp256k1_2_of_3() {
-        let config = ThresholdConfig::new(2, 3).unwrap();
-        let (group_key, shares) =
-            ThresholdEcdsaEngine::trusted_dealer_keygen(config, EcdsaCurve::Secp256k1).unwrap();
-
-        let message = b"Bitcoin/Ethereum test message";
-        let message_hash = hash_message(message);
-
-        // Round 1
-        let (nonce1, commitment1) = ThresholdEcdsaEngine::generate_nonces(&shares[0]).unwrap();
-        let (nonce2, commitment2) = ThresholdEcdsaEngine::generate_nonces(&shares[1]).unwrap();
-        let commitments = vec![commitment1, commitment2];
-        let participants = vec![shares[0].participant_id, shares[1].participant_id];
-
-        // Round 2
-        let presig1 =
-            ThresholdEcdsaEngine::presign(&shares[0], &nonce1, &commitments, &participants)
-                .unwrap();
-        let presig2 =
-            ThresholdEcdsaEngine::presign(&shares[1], &nonce2, &commitments, &participants)
+        let signature =
+            ThresholdEcdsaEngine::aggregate(&group_key, &presig1, &[s1, s2], &participants)
                 .unwrap();
 
-        // Round 3
-        let sig_share1 =
-            ThresholdEcdsaEngine::sign_share(&shares[0], &presig1, &message_hash).unwrap();
-        let sig_share2 =
-            ThresholdEcdsaEngine::sign_share(&shares[1], &presig2, &message_hash).unwrap();
-
-        // Aggregate
-        let signature = ThresholdEcdsaEngine::aggregate(
-            &group_key,
-            &presig1,
-            &[sig_share1, sig_share2],
-            &participants,
-        )
-        .unwrap();
-
-        assert_eq!(signature.curve, EcdsaCurve::Secp256k1);
+        // Acceptance criterion: a standard ECDSA verifier accepts the threshold sig.
+        assert!(
+            ThresholdEcdsaEngine::verify_standard(&group_key.bytes, &message_hash, &signature)
+                .unwrap(),
+            "threshold signature must verify under standard ECDSA"
+        );
     }
 
     #[test]
@@ -880,7 +720,11 @@ mod tests {
         ));
     }
 
+    /// Target full 3-of-5 flow for a correct threshold ECDSA implementation
+    /// (GG20/MtA). Ignored until `k^-1` is computed; documents the non-consecutive
+    /// participant subset case and the standard-ECDSA acceptance criterion.
     #[test]
+    #[ignore = "requires correct threshold ECDSA (GG20/MtA)"]
     fn test_3_of_5_signing() {
         let config = ThresholdConfig::new(3, 5).unwrap();
         let (group_key, shares) =
@@ -926,40 +770,10 @@ mod tests {
             ThresholdEcdsaEngine::aggregate(&group_key, &presigs[0], &sig_shares, &participants)
                 .unwrap();
 
-        assert_eq!(signature.r.len(), 32);
-        assert_eq!(signature.s.len(), 32);
-    }
-
-    #[test]
-    fn test_different_subsets_produce_consistent_signatures() {
-        let config = ThresholdConfig::new(2, 3).unwrap();
-        let (group_key, shares) =
-            ThresholdEcdsaEngine::trusted_dealer_keygen(config, EcdsaCurve::P256).unwrap();
-
-        let message_hash = hash_message(b"consistency test");
-
-        // Sign with participants 0 and 1
-        let (nonce0a, commit0a) = ThresholdEcdsaEngine::generate_nonces(&shares[0]).unwrap();
-        let (nonce1a, commit1a) = ThresholdEcdsaEngine::generate_nonces(&shares[1]).unwrap();
-        let commits_01 = vec![commit0a, commit1a];
-        let parts_01 = vec![shares[0].participant_id, shares[1].participant_id];
-
-        let presig0a =
-            ThresholdEcdsaEngine::presign(&shares[0], &nonce0a, &commits_01, &parts_01).unwrap();
-        let presig1a =
-            ThresholdEcdsaEngine::presign(&shares[1], &nonce1a, &commits_01, &parts_01).unwrap();
-
-        let share0a =
-            ThresholdEcdsaEngine::sign_share(&shares[0], &presig0a, &message_hash).unwrap();
-        let share1a =
-            ThresholdEcdsaEngine::sign_share(&shares[1], &presig1a, &message_hash).unwrap();
-
-        let sig_01 =
-            ThresholdEcdsaEngine::aggregate(&group_key, &presig0a, &[share0a, share1a], &parts_01)
-                .unwrap();
-
-        // Both signatures should have valid format
-        assert_eq!(sig_01.to_bytes().len(), 64);
+        assert!(
+            ThresholdEcdsaEngine::verify_standard(&group_key.bytes, &message_hash, &signature)
+                .unwrap()
+        );
     }
 
     #[test]

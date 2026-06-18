@@ -6,6 +6,7 @@
 //! - Sequence gap detection
 //! - Timestamp anomaly detection
 
+use crate::checkpoint::Checkpoint;
 use crate::event::AuditEvent;
 use crate::merkle_tree::MerkleTree;
 use chrono::{DateTime, Utc};
@@ -46,6 +47,9 @@ pub enum Violation {
 
     /// Merkle tree is inconsistent
     MerkleTreeInconsistent { expected: String, actual: String },
+
+    /// Live log tip is behind the signed checkpoint (tail truncation)
+    TailTruncated { checkpoint: u64, live: u64 },
 
     /// Timestamp is not monotonically increasing
     TimestampAnomaly {
@@ -160,10 +164,70 @@ impl TamperDetector {
         // 3. Verify individual event hashes
         Self::verify_event_hashes(events, &mut report);
 
-        // 4. Verify Merkle tree consistency
-        Self::verify_merkle_consistency(events, &mut report);
+        // 4. Verify Merkle tree consistency (no external commitment available)
+        Self::verify_merkle_consistency(events, None, &mut report);
 
         // 5. Verify timestamp ordering
+        Self::verify_timestamps(events, &mut report);
+
+        report.verification_time_ms = start.elapsed().as_millis() as u64;
+
+        Ok(report)
+    }
+
+    /// Perform integrity verification against a persisted, signed checkpoint.
+    ///
+    /// In addition to the standard checks, this:
+    /// - validates the checkpoint's own integrity tag (under `checkpoint_key`),
+    /// - detects tail truncation (live tip behind the checkpoint sequence), and
+    /// - compares the recomputed Merkle root against the checkpoint root,
+    ///   turning the previously no-op consistency check into a real
+    ///   commitment comparison.
+    pub fn verify_integrity_with_checkpoint(
+        events: &[AuditEvent],
+        checkpoint: &Checkpoint,
+        checkpoint_key: Option<&[u8]>,
+    ) -> Result<IntegrityReport, TamperDetectionError> {
+        if events.is_empty() {
+            return Err(TamperDetectionError::EmptyLog);
+        }
+
+        let start = std::time::Instant::now();
+        let mut report = IntegrityReport::new();
+        report.total_events = events.len();
+
+        Self::verify_hash_chain(events, &mut report);
+        Self::verify_sequences(events, &mut report);
+        Self::verify_event_hashes(events, &mut report);
+
+        // Tail-truncation guard. The live tip is the highest sequence present.
+        let live_tip = events.last().map(|e| e.sequence).unwrap_or(0);
+        if live_tip < checkpoint.sequence {
+            report.add_violation(Violation::TailTruncated {
+                checkpoint: checkpoint.sequence,
+                live: live_tip,
+            });
+        }
+
+        // Merkle consistency against the committed root. Only meaningful when
+        // the event set covers exactly the checkpointed prefix; if the live
+        // tip equals the checkpoint sequence the recomputed root MUST equal the
+        // checkpoint root.
+        let expected_root = if checkpoint.verify_integrity(checkpoint_key).is_err() {
+            // A bad checkpoint tag is itself a violation; record it and do not
+            // trust its root.
+            report.add_violation(Violation::MerkleTreeInconsistent {
+                expected: "<invalid checkpoint tag>".to_string(),
+                actual: checkpoint.merkle_root.clone(),
+            });
+            None
+        } else if live_tip == checkpoint.sequence {
+            Some(checkpoint.merkle_root.as_str())
+        } else {
+            None
+        };
+        Self::verify_merkle_consistency(events, expected_root, &mut report);
+
         Self::verify_timestamps(events, &mut report);
 
         report.verification_time_ms = start.elapsed().as_millis() as u64;
@@ -226,14 +290,39 @@ impl TamperDetector {
         }
     }
 
-    /// Verify Merkle tree consistency
-    fn verify_merkle_consistency(events: &[AuditEvent], report: &mut IntegrityReport) {
+    /// Verify Merkle tree consistency.
+    ///
+    /// Recomputes the Merkle root from the event hashes and, when an
+    /// `expected_root` (e.g. from a signed checkpoint) is supplied, compares
+    /// the recomputed root against it. Without an expected root the inclusion
+    /// check alone is self-referential (the tree is built from the same
+    /// hashes), so the comparison against an external commitment is what makes
+    /// this a real tamper check — mirroring
+    /// [`crate::verifier::AuditVerifier::verify_merkle_tree`].
+    fn verify_merkle_consistency(
+        events: &[AuditEvent],
+        expected_root: Option<&str>,
+        report: &mut IntegrityReport,
+    ) {
         let hashes: Vec<String> = events.iter().map(|e| e.current_hash.clone()).collect();
 
         let tree = MerkleTree::from_hashes(hashes);
 
         if let Ok(root) = tree.get_root() {
             report.merkle_root = Some(root.clone());
+
+            // Compare against an external commitment when available. A
+            // mismatch means the committed prefix was altered (in-place
+            // tampering of a middle entry that survived the per-event hash
+            // check would still shift the root).
+            if let Some(expected) = expected_root {
+                if root != expected {
+                    report.add_violation(Violation::MerkleTreeInconsistent {
+                        expected: expected.to_string(),
+                        actual: root.clone(),
+                    });
+                }
+            }
 
             // Verify each event is in the tree
             for event in events {
@@ -362,6 +451,27 @@ mod tests {
         events
     }
 
+    /// Compute the Merkle root over a chain's event hashes, matching the
+    /// commitment the loggers persist in checkpoints.
+    fn merkle_root_of(events: &[AuditEvent]) -> String {
+        let hashes: Vec<String> = events.iter().map(|e| e.current_hash.clone()).collect();
+        MerkleTree::from_hashes(hashes).get_root().unwrap()
+    }
+
+    /// Re-link a chain after a middle entry was mutated, so the chain is once
+    /// again internally self-consistent (every per-event hash and prev_hash
+    /// link is valid). This models a sophisticated attacker who rewrites an
+    /// event and patches all downstream hashes — exactly the case a hash chain
+    /// alone cannot catch but a committed Merkle root can.
+    fn relink(events: &mut [AuditEvent]) {
+        let mut prev_hash = "0".repeat(64);
+        for e in events.iter_mut() {
+            e.prev_hash = prev_hash.clone();
+            e.current_hash = e.compute_hash();
+            prev_hash = e.current_hash.clone();
+        }
+    }
+
     #[test]
     fn test_verify_valid_chain() {
         let events = create_event_chain(10);
@@ -371,6 +481,90 @@ mod tests {
         assert_eq!(report.violation_count, 0);
         assert!(report.is_valid);
         assert!(report.merkle_root.is_some());
+    }
+
+    #[test]
+    fn test_checkpoint_catches_mutated_middle_entry() {
+        let key: &[u8] = b"checkpoint-key";
+        let honest = create_event_chain(8);
+        let honest_root = merkle_root_of(&honest);
+        let checkpoint = Checkpoint::new(8, honest_root, Some(key));
+
+        // Sanity: honest events verify clean against the checkpoint.
+        let clean =
+            TamperDetector::verify_integrity_with_checkpoint(&honest, &checkpoint, Some(key))
+                .unwrap();
+        assert!(
+            clean.is_valid,
+            "honest chain must pass: {:?}",
+            clean.violations
+        );
+
+        // Attacker rewrites a MIDDLE event and re-links the whole chain so that
+        // the hash chain is internally valid again. A plain hash-chain check
+        // (or the old no-op Merkle check) would PASS this. The committed root
+        // no longer matches, so the checkpoint comparison must catch it.
+        let mut tampered = honest.clone();
+        tampered[3].operation = "tampered".to_string();
+        relink(&mut tampered);
+
+        // The re-linked chain passes the plain hash-chain integrity check...
+        let plain = TamperDetector::verify_integrity(&tampered).unwrap();
+        assert!(
+            plain.is_valid,
+            "re-linked chain is internally consistent (demonstrates why a root commitment is needed)"
+        );
+
+        // ...but fails against the signed checkpoint root.
+        let report =
+            TamperDetector::verify_integrity_with_checkpoint(&tampered, &checkpoint, Some(key))
+                .unwrap();
+        assert!(!report.is_valid);
+        assert!(report
+            .violations
+            .iter()
+            .any(|v| matches!(v, Violation::MerkleTreeInconsistent { .. })));
+    }
+
+    #[test]
+    fn test_checkpoint_catches_truncated_tail() {
+        let key: &[u8] = b"checkpoint-key";
+        let honest = create_event_chain(10);
+        let honest_root = merkle_root_of(&honest);
+        let checkpoint = Checkpoint::new(10, honest_root, Some(key));
+
+        // Attacker deletes the last 3 events. The remaining 7-event prefix is a
+        // perfectly valid hash chain, so verify_integrity alone passes.
+        let truncated: Vec<AuditEvent> = honest[..7].to_vec();
+        let plain = TamperDetector::verify_integrity(&truncated).unwrap();
+        assert!(plain.is_valid, "truncated prefix is internally valid");
+
+        // Against the checkpoint, the missing tail is detected.
+        let report =
+            TamperDetector::verify_integrity_with_checkpoint(&truncated, &checkpoint, Some(key))
+                .unwrap();
+        assert!(!report.is_valid);
+        assert!(report.violations.iter().any(|v| matches!(
+            v,
+            Violation::TailTruncated {
+                checkpoint: 10,
+                live: 7
+            }
+        )));
+    }
+
+    #[test]
+    fn test_checkpoint_with_wrong_key_is_flagged() {
+        let honest = create_event_chain(5);
+        let root = merkle_root_of(&honest);
+        let checkpoint = Checkpoint::new(5, root, Some(b"real-key"));
+
+        // Verifying with the wrong key: the checkpoint tag fails to validate,
+        // so its root is not trusted and a violation is recorded.
+        let report =
+            TamperDetector::verify_integrity_with_checkpoint(&honest, &checkpoint, Some(b"wrong"))
+                .unwrap();
+        assert!(!report.is_valid);
     }
 
     #[test]

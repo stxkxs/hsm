@@ -8,24 +8,56 @@ use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2, PasswordHash, PasswordVerifier,
 };
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use zeroize::ZeroizeOnDrop;
 
 use crate::error::{BackupError, Result};
 
-/// Represents an encrypted backup of keys
+/// Length in bytes of the raw Argon2 KDF salt used to derive the AES key.
+pub(crate) const KDF_SALT_LEN: usize = 16;
+
+/// Derive a raw 32-byte AES-256 key from a password and salt using Argon2.
+///
+/// This is a raw key-derivation function: the Argon2 output bytes are written
+/// directly into the returned buffer and used as the AES key. Unlike the PHC
+/// encoded hash, this output is never serialized into the backup file, so the
+/// backup file alone cannot be decrypted without the password.
+pub(crate) fn derive_aes_key(
+    argon2: &Argon2<'static>,
+    password: &[u8],
+    salt: &[u8],
+) -> Result<[u8; 32]> {
+    let mut key = [0u8; 32];
+    argon2
+        .hash_password_into(password, salt, &mut key)
+        .map_err(|e| BackupError::KeyDerivation(e.to_string()))?;
+    Ok(key)
+}
+
+/// Represents an encrypted backup of keys.
+///
+/// Security note: this structure intentionally does NOT contain the AES
+/// encryption key or any value from which it can be recovered without the
+/// password. The AES key is derived on demand from the user password and the
+/// raw `kdf_salt` via Argon2. The `verifier_hash` is a *separate* Argon2 PHC
+/// string computed against its own independent salt and is used only for
+/// password verification; it is never used as (or to derive) the AES key.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct EncryptedBackup {
     /// Version of the backup format
     pub version: u32,
-    /// Argon2 password hash (PHC string format)
-    pub password_hash: String,
-    /// Salt used for key derivation (base64)
-    pub salt: String,
-    /// AES-GCM nonce (base64)
+    /// Separate Argon2 password verifier (PHC string format).
+    ///
+    /// Computed with its own salt, distinct from `kdf_salt`. Used only to
+    /// check that a supplied password is correct; never used as key material.
+    pub verifier_hash: String,
+    /// Raw salt used to derive the AES-256 encryption key via Argon2.
+    pub kdf_salt: Vec<u8>,
+    /// AES-GCM nonce
     pub nonce: Vec<u8>,
-    /// Encrypted key data (base64)
+    /// Encrypted key data
     pub encrypted_data: Vec<u8>,
     /// Timestamp of backup creation
     pub timestamp: i64,
@@ -71,31 +103,26 @@ impl KeyExporter {
             return Err(BackupError::WeakPassword);
         }
 
-        // Generate salt for password hashing
-        let salt = SaltString::generate(&mut OsRng);
+        // Generate a raw salt used ONLY to derive the AES encryption key.
+        // This salt is stored in the backup; the derived key never is.
+        let mut kdf_salt = [0u8; KDF_SALT_LEN];
+        OsRng.fill_bytes(&mut kdf_salt);
 
-        // Derive encryption key from password using Argon2
-        let password_hash = self
+        // Derive the 32-byte AES-256 key from the password using Argon2 as a
+        // raw KDF. The output bytes are used directly as the key and are never
+        // serialized, so the backup file cannot be decrypted without the
+        // password.
+        let encryption_key = derive_aes_key(&self.argon2, password, &kdf_salt)?;
+
+        // Compute a SEPARATE password verifier using an independent salt. This
+        // PHC string is stored for convenience password checks; it shares no
+        // salt with the KDF and therefore cannot be used to recover the key.
+        let verifier_salt = SaltString::generate(&mut OsRng);
+        let verifier_hash = self
             .argon2
-            .hash_password(password, &salt)
-            .map_err(|e| BackupError::KeyDerivation(e.to_string()))?;
-
-        // Extract the raw hash for use as encryption key
-        let key_bytes = password_hash
-            .hash
-            .ok_or_else(|| BackupError::KeyDerivation("No hash generated".to_string()))?;
-
-        // Use the first 32 bytes for AES-256
-        let key_material = key_bytes.as_bytes();
-        if key_material.len() < 32 {
-            return Err(BackupError::KeyDerivation(
-                "Insufficient key material".to_string(),
-            ));
-        }
-
-        let encryption_key: [u8; 32] = key_material[..32]
-            .try_into()
-            .map_err(|_| BackupError::KeyDerivation("Key size mismatch".to_string()))?;
+            .hash_password(password, &verifier_salt)
+            .map_err(|e| BackupError::KeyDerivation(e.to_string()))?
+            .to_string();
 
         // Create cipher
         let cipher = Aes256Gcm::new(&encryption_key.into());
@@ -121,8 +148,8 @@ impl KeyExporter {
 
         Ok(EncryptedBackup {
             version: 1,
-            password_hash: password_hash.to_string(),
-            salt: salt.to_string(),
+            verifier_hash,
+            kdf_salt: kdf_salt.to_vec(),
             nonce: nonce_bytes.to_vec(),
             encrypted_data,
             timestamp,
@@ -136,9 +163,12 @@ impl KeyExporter {
         serde_json::to_vec_pretty(backup).map_err(|e| BackupError::Serialization(e.to_string()))
     }
 
-    /// Verify password against backup
+    /// Verify password against backup.
+    ///
+    /// Checks the supplied password against the stored verifier hash. This does
+    /// not derive or expose the AES encryption key.
     pub fn verify_password(&self, backup: &EncryptedBackup, password: &[u8]) -> Result<bool> {
-        let parsed_hash = PasswordHash::new(&backup.password_hash)
+        let parsed_hash = PasswordHash::new(&backup.verifier_hash)
             .map_err(|e| BackupError::InvalidFormat(e.to_string()))?;
 
         match self.argon2.verify_password(password, &parsed_hash) {
@@ -174,8 +204,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(backup.version, 1);
-        assert!(backup.encrypted_data.len() > 0);
+        assert!(!backup.encrypted_data.is_empty());
         assert_eq!(backup.namespace, Some("test".to_string()));
+        assert_eq!(backup.kdf_salt.len(), KDF_SALT_LEN);
     }
 
     #[test]
@@ -215,7 +246,7 @@ mod tests {
         let backup = exporter.export_keys(keys, password, None).unwrap();
         let json = exporter.serialize_backup(&backup).unwrap();
 
-        assert!(json.len() > 0);
+        assert!(!json.is_empty());
         assert!(String::from_utf8_lossy(&json).contains("version"));
     }
 
@@ -229,10 +260,72 @@ mod tests {
             .export_to_json(keys, password, Some("test".to_string()))
             .unwrap();
 
-        assert!(json.len() > 0);
+        assert!(!json.is_empty());
 
         let parsed: EncryptedBackup = serde_json::from_slice(&json).unwrap();
         assert_eq!(parsed.version, 1);
         assert_eq!(parsed.namespace, Some("test".to_string()));
+    }
+
+    /// Regression test for the "backup contains its own decryption key" defect.
+    ///
+    /// Previously the AES-256 key was the first 32 bytes of the stored Argon2
+    /// PHC hash, so the serialized backup carried its own key and could be
+    /// decrypted with no password. This test derives the real AES key, then
+    /// asserts that those raw key bytes do NOT appear anywhere in the
+    /// serialized backup JSON. It fails on the old code and passes on the fix.
+    #[test]
+    fn test_serialized_backup_does_not_contain_aes_key() {
+        let exporter = KeyExporter::new();
+        let keys = b"super_secret_private_key_material";
+        let password = b"strong_password_123";
+
+        let backup = exporter.export_keys(keys, password, None).unwrap();
+
+        // Re-derive the actual AES key from password + stored salt.
+        let key = derive_aes_key(&exporter.argon2, password, &backup.kdf_salt).unwrap();
+
+        let json = exporter.serialize_backup(&backup).unwrap();
+
+        // The raw 32-byte key must not be byte-recoverable from the file.
+        assert!(
+            !contains_subslice(&json, &key),
+            "serialized backup leaks the raw AES key bytes"
+        );
+
+        // Defense in depth: the legacy field name must be gone, and the
+        // verifier hash (which uses a different salt) must not be the key.
+        let json_str = String::from_utf8_lossy(&json);
+        assert!(!json_str.contains("password_hash"));
+        assert!(json_str.contains("verifier_hash"));
+        assert!(json_str.contains("kdf_salt"));
+    }
+
+    /// The verifier hash uses a salt distinct from the KDF salt, so deriving
+    /// an AES key from the verifier salt must NOT reproduce the real key.
+    #[test]
+    fn test_verifier_salt_is_distinct_from_kdf_salt() {
+        let exporter = KeyExporter::new();
+        let password = b"strong_password_123";
+        let backup = exporter.export_keys(b"data", password, None).unwrap();
+
+        let parsed = PasswordHash::new(&backup.verifier_hash).unwrap();
+        let verifier_salt = parsed.salt.unwrap();
+        let mut verifier_salt_bytes = [0u8; KDF_SALT_LEN];
+        let decoded = verifier_salt.decode_b64(&mut verifier_salt_bytes).unwrap();
+
+        assert_ne!(
+            decoded,
+            backup.kdf_salt.as_slice(),
+            "verifier salt must differ from KDF salt"
+        );
+    }
+
+    /// Helper: does `haystack` contain `needle` as a contiguous subslice?
+    fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
+        if needle.is_empty() || needle.len() > haystack.len() {
+            return false;
+        }
+        haystack.windows(needle.len()).any(|w| w == needle)
     }
 }

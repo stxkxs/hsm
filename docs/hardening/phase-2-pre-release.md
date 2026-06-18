@@ -1,7 +1,21 @@
 # Phase 2: Pre-Release Security Fixes
 
+> **STATUS: ✅ RESOLVED.** All 8 fixes below are implemented. Retained as a
+> historical hardening record, not an open work list. Verified 2026-06-17:
+>
+> | Fix | Implemented in |
+> | --- | --- |
+> | 1. RBAC roles from cert extensions | `crates/auth/src/mtls/authenticator.rs:277` — `extract_roles` reads OID `1.3.6.1.4.1.99999.1`, CN only as logged fallback |
+> | 2. Webhook anti-SSRF URL validation | `crates/webhooks/src/config.rs:112` — `validate_url` requires https; `is_private_ip` (144) rejects loopback/link-local/private ranges |
+> | 3. RSA blind-signature constant-time compare | `crates/crypto-engine/src/blind/rsa_blind.rs:252` — `ct_eq` over key-size-padded bytes |
+> | 4. Secure file deletion | `crates/storage/src/encrypted_fs.rs:387` — overwrite with random bytes + `sync`, then remove |
+> | 5. Backup password strength | `crates/backup/src/export.rs:70` — rejects `< 16` bytes with `WeakPassword` |
+> | 6. Redacted `SecretValue` Debug | `crates/secrets/src/secret.rs:275` — manual `Debug` prints `<redacted>` |
+> | 7. Reject wildcard CORS | `crates/grpc-api/src/grpc_web.rs:103` — `validate` errors on `*` origin |
+> | 8. KMIP error sanitization | `crates/kmip-server/src/server.rs:165` — generic "Invalid message format"; detail only in `warn!` |
+
 ## Overview
-8 high-severity fixes required before public release.
+8 high-severity fixes that were resolved before public release.
 
 ---
 

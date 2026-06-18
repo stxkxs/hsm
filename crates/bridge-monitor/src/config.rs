@@ -3,7 +3,6 @@
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::Duration;
 
 /// Monitor configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

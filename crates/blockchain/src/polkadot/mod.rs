@@ -6,7 +6,7 @@
 //! - Acala, Moonbeam, Astar, and other parachains
 
 use crate::error::{BlockchainError, Result};
-use sha2::{Digest, Sha512};
+use blake2::{Blake2b512, Digest as _};
 
 /// Polkadot address (SS58 encoded)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -174,8 +174,18 @@ fn sign_ecdsa(private_key: &[u8], message: &[u8]) -> Result<Vec<u8>> {
     use k256::ecdsa::{signature::Signer, Signature, SigningKey};
     use sha2::Sha256;
 
+    // Checked length conversion: a secp256k1 scalar is exactly 32 bytes.
+    // `private_key.into()` would panic on a wrong-length slice, so validate
+    // first and return an error instead.
+    let key_bytes: &[u8; 32] = private_key.try_into().map_err(|_| {
+        BlockchainError::InvalidPrivateKey(format!(
+            "ECDSA private key must be 32 bytes, got {}",
+            private_key.len()
+        ))
+    })?;
+
     let hash = Sha256::digest(message);
-    let signing_key = SigningKey::from_bytes(private_key.into())
+    let signing_key = SigningKey::from_bytes(key_bytes.into())
         .map_err(|e| BlockchainError::InvalidPrivateKey(e.to_string()))?;
 
     let signature: Signature = signing_key.sign(&hash);
@@ -231,19 +241,41 @@ fn ss58_decode(address: &str) -> Result<(Vec<u8>, u16)> {
         (prefix, 2)
     };
 
+    if data.len() < offset + 2 {
+        return Err(BlockchainError::InvalidAddress(
+            "Address too short".to_string(),
+        ));
+    }
+
+    // Validate the Blake2b-512 checksum (first 2 bytes of the digest over
+    // "SS58PRE" || prefix-and-pubkey). A wrong checksum means a corrupted or
+    // forged address and must be rejected.
+    let body = &data[..data.len() - 2];
+    let provided = &data[data.len() - 2..];
+    let expected = ss58_checksum(body);
+    if provided != &expected[..2] {
+        return Err(BlockchainError::InvalidAddress(
+            "SS58 checksum mismatch".to_string(),
+        ));
+    }
+
     let public_key = data[offset..data.len() - 2].to_vec();
 
     Ok((public_key, prefix))
 }
 
-/// Calculate SS58 checksum
+/// Calculate the SS58 checksum.
+///
+/// SS58 uses `Blake2b-512` over `b"SS58PRE" || data`, and takes the first two
+/// bytes of the digest as the checksum. (The previous implementation used
+/// SHA-512, which produces a checksum no Substrate/Polkadot tooling accepts —
+/// HIGH #6.)
 fn ss58_checksum(data: &[u8]) -> [u8; 64] {
-    let prefix = b"SS58PRE";
-    let mut input = Vec::with_capacity(prefix.len() + data.len());
-    input.extend_from_slice(prefix);
-    input.extend_from_slice(data);
+    let mut hasher = Blake2b512::new();
+    hasher.update(b"SS58PRE");
+    hasher.update(data);
+    let hash = hasher.finalize();
 
-    let hash = Sha512::digest(&input);
     let mut result = [0u8; 64];
     result.copy_from_slice(&hash);
     result
@@ -257,5 +289,117 @@ mod tests {
     fn test_network_prefix() {
         assert_eq!(Network::Polkadot.prefix(), 0);
         assert_eq!(Network::Kusama.prefix(), 2);
+    }
+
+    /// Canonical SS58 KAT for the well-known "Alice" dev account
+    /// (public key `d435...da27d`). These are the published canonical addresses
+    /// produced by Substrate/subkey/polkadot.js. Previously the checksum used
+    /// SHA-512 instead of Blake2b-512, producing addresses no tooling accepts
+    /// (HIGH #6).
+    #[test]
+    fn test_ss58_alice_known_answer() {
+        let alice = hex::decode("d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d")
+            .unwrap();
+
+        // Substrate generic (prefix 42).
+        let substrate = SubstrateAddress::from_public_key(&alice, Network::Substrate).unwrap();
+        assert_eq!(
+            substrate.ss58,
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+        );
+
+        // Polkadot (prefix 0).
+        let polkadot = SubstrateAddress::from_public_key(&alice, Network::Polkadot).unwrap();
+        assert_eq!(
+            polkadot.ss58,
+            "15oF4uVJwmo4TdGW7VfQxNLavjCXviqxT9S1MgbjMNHr6Sp5"
+        );
+
+        // Kusama (prefix 2).
+        let kusama = SubstrateAddress::from_public_key(&alice, Network::Kusama).unwrap();
+        assert_eq!(
+            kusama.ss58,
+            "HNZata7iMYWmk5RvZRTiAsSDhV8366zq2YGb3tLH5Upf74F"
+        );
+    }
+
+    /// Decoding a canonical SS58 address recovers the correct public key and
+    /// network prefix, and round-trips back to the same string.
+    #[test]
+    fn test_ss58_decode_round_trip() {
+        let addr = "15oF4uVJwmo4TdGW7VfQxNLavjCXviqxT9S1MgbjMNHr6Sp5";
+        let decoded = SubstrateAddress::from_ss58(addr).unwrap();
+        assert_eq!(
+            hex::encode(&decoded.public_key),
+            "d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d"
+        );
+        assert_eq!(decoded.network, 0);
+
+        let reencoded =
+            SubstrateAddress::from_public_key(&decoded.public_key, Network::Polkadot).unwrap();
+        assert_eq!(reencoded.ss58, addr);
+    }
+
+    /// A tampered SS58 address (last checksum byte flipped) must be rejected.
+    #[test]
+    fn test_ss58_rejects_bad_checksum() {
+        // Valid Alice substrate address with the final character altered so the
+        // checksum no longer matches.
+        let good = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+        // Flip the last character to a different valid base58 character.
+        let mut chars: Vec<char> = good.chars().collect();
+        let last = chars.len() - 1;
+        chars[last] = if chars[last] == 'Y' { 'Z' } else { 'Y' };
+        let bad: String = chars.into_iter().collect();
+
+        assert!(SubstrateAddress::from_ss58(&bad).is_err());
+    }
+
+    /// A wrong-length ECDSA private key must return an error, not panic.
+    /// Previously `private_key.into()` panicked on any slice that was not
+    /// exactly 32 bytes (MEDIUM #18).
+    #[test]
+    fn test_sign_ecdsa_rejects_wrong_length_key() {
+        // Too short.
+        let short = [0x01u8; 16];
+        let err = sign_payload(&short, b"msg", SignatureScheme::Ecdsa);
+        assert!(matches!(err, Err(BlockchainError::InvalidPrivateKey(_))));
+
+        // Too long.
+        let long = [0x01u8; 33];
+        let err = sign_payload(&long, b"msg", SignatureScheme::Ecdsa);
+        assert!(matches!(err, Err(BlockchainError::InvalidPrivateKey(_))));
+
+        // Empty.
+        let err = sign_payload(&[], b"msg", SignatureScheme::Ecdsa);
+        assert!(matches!(err, Err(BlockchainError::InvalidPrivateKey(_))));
+    }
+
+    /// A valid 32-byte ECDSA key produces a verifiable signature (round-trip).
+    #[test]
+    fn test_sign_ecdsa_valid_key_round_trip() {
+        use k256::ecdsa::{signature::Verifier, Signature, SigningKey, VerifyingKey};
+        use sha2::{Digest, Sha256};
+
+        // A fixed, valid non-zero scalar.
+        let mut key = [0u8; 32];
+        key[31] = 0x42;
+        let message = b"polkadot ecdsa round trip";
+
+        let sig_bytes = sign_payload(&key, message, SignatureScheme::Ecdsa).unwrap();
+
+        let signing_key = SigningKey::from_bytes((&key).into()).unwrap();
+        let verifying_key: VerifyingKey = *signing_key.verifying_key();
+        let hash = Sha256::digest(message);
+        let signature = Signature::from_slice(&sig_bytes).unwrap();
+        assert!(verifying_key.verify(&hash, &signature).is_ok());
+    }
+
+    /// A wrong-length Ed25519 key likewise errors rather than panics.
+    #[test]
+    fn test_sign_ed25519_rejects_wrong_length_key() {
+        let short = [0x01u8; 16];
+        let err = sign_payload(&short, b"msg", SignatureScheme::Ed25519);
+        assert!(matches!(err, Err(BlockchainError::InvalidPrivateKey(_))));
     }
 }

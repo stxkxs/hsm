@@ -69,6 +69,11 @@ impl EcdsaKeyShare {
     }
 
     /// Get the secret share bytes (internal use only).
+    ///
+    /// Only referenced from test code: the production threshold-ECDSA signing path
+    /// fails closed (see `engine::ThresholdEcdsaEngine::presign`) and never needs to
+    /// extract raw share bytes, so this is gated to `cfg(test)` to stay dead-code clean.
+    #[cfg(test)]
     pub(crate) fn secret_share_bytes(&self) -> &[u8] {
         &self.secret_share
     }
@@ -224,6 +229,12 @@ pub struct EcdsaPreSignature {
 
 impl EcdsaPreSignature {
     /// Create a new pre-signature.
+    ///
+    /// Only used by tests (e.g. the fail-closed regression that fabricates a
+    /// pre-signature to prove `sign_share`/`aggregate` refuse it). The production
+    /// `presign` path fails closed before any pre-signature is constructed, so this
+    /// constructor is gated to `cfg(test)` to stay dead-code clean.
+    #[cfg(test)]
     pub(crate) fn new(
         participant_id: ParticipantId,
         r: Vec<u8>,

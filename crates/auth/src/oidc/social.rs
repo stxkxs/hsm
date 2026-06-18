@@ -956,10 +956,18 @@ impl SocialLoginManager {
 
     /// Clean up expired states
     pub fn cleanup_expired_states(&self) -> usize {
-        let before = self.pending_states.len();
-        self.pending_states
-            .retain(|_, state| !state.is_expired(self.state_ttl));
-        before - self.pending_states.len()
+        // Count removals inside `retain` rather than diffing two `len()`
+        // snapshots: a concurrent insert between the snapshots can grow the map
+        // and underflow the `usize` subtraction.
+        let mut removed = 0usize;
+        self.pending_states.retain(|_, state| {
+            let keep = !state.is_expired(self.state_ttl);
+            if !keep {
+                removed += 1;
+            }
+            keep
+        });
+        removed
     }
 
     /// Get GitHub user emails (requires separate API call)
@@ -1138,5 +1146,39 @@ mod tests {
 
         assert_eq!(user.display_name(), "Test User");
         assert_eq!(user.common_name(), "google:123456");
+    }
+
+    #[test]
+    fn test_cleanup_expired_states_concurrent_no_underflow() {
+        use std::sync::Arc;
+        use std::thread;
+
+        // Zero TTL makes every pending state immediately expired.
+        let manager =
+            Arc::new(SocialLoginManager::new().with_state_ttl(std::time::Duration::from_secs(0)));
+        manager.register_provider(SocialLoginConfig::google(
+            "id",
+            "secret",
+            "https://example.com/callback",
+        ));
+
+        // Concurrently create new OAuth states while cleaning up. The old
+        // `before - after` length diff would underflow (panic in debug) when a
+        // concurrent `initiate_auth` insert grew the map between snapshots.
+        let mut handles = Vec::new();
+        for _ in 0..4 {
+            let m = Arc::clone(&manager);
+            handles.push(thread::spawn(move || {
+                for _ in 0..200 {
+                    let _ = m.initiate_auth(SocialProvider::Google, None);
+                    let _ = m.cleanup_expired_states();
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        let _ = manager.cleanup_expired_states();
     }
 }

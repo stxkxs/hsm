@@ -56,13 +56,22 @@ impl ChildNumber {
         }
     }
 
-    /// Convert to bip32 ChildNumber
-    fn to_bip32(&self) -> bip32_crate::ChildNumber {
-        if self.hardened {
-            bip32_crate::ChildNumber::new(self.index, true).expect("valid index")
-        } else {
-            bip32_crate::ChildNumber::new(self.index, false).expect("valid index")
+    /// Convert to bip32 ChildNumber.
+    ///
+    /// The index must be in the non-hardened range `[0, 2^31)`; the hardened
+    /// flag is what selects hardened derivation. An index `>= 2^31` is invalid
+    /// (it would collide with the hardened bit) and returns an error instead of
+    /// panicking.
+    fn to_bip32(&self) -> Result<bip32_crate::ChildNumber> {
+        if self.index >= 0x8000_0000 {
+            return Err(BlockchainError::InvalidDerivationPath(format!(
+                "Derivation index out of range (must be < 2^31): {}",
+                self.index
+            )));
         }
+        bip32_crate::ChildNumber::new(self.index, self.hardened).map_err(|e| {
+            BlockchainError::InvalidDerivationPath(format!("Invalid derivation index: {}", e))
+        })
     }
 }
 
@@ -130,6 +139,16 @@ impl DerivationPath {
             let index: u32 = index_str.parse().map_err(|_| {
                 BlockchainError::InvalidDerivationPath(format!("Invalid index: {}", part))
             })?;
+
+            // The index is the value below the hardened bit and must be in
+            // [0, 2^31). The trailing "'"/"h" marker is what selects hardening;
+            // an index that already has the high bit set is invalid.
+            if index >= 0x8000_0000 {
+                return Err(BlockchainError::InvalidDerivationPath(format!(
+                    "Derivation index out of range (must be < 2^31): {}",
+                    part
+                )));
+            }
 
             components.push(if hardened {
                 ChildNumber::hardened(index)
@@ -225,7 +244,7 @@ impl ExtendedPrivateKey {
 
     /// Derive a child key at the given index
     pub fn derive_child(&self, child: ChildNumber) -> Result<Self> {
-        let child_key = self.inner.derive_child(child.to_bip32())?;
+        let child_key = self.inner.derive_child(child.to_bip32()?)?;
         Ok(Self { inner: child_key })
     }
 
@@ -309,7 +328,7 @@ impl ExtendedPublicKey {
                 "Cannot derive hardened child from public key".to_string(),
             ));
         }
-        let child_key = self.inner.derive_child(child.to_bip32())?;
+        let child_key = self.inner.derive_child(child.to_bip32()?)?;
         Ok(Self { inner: child_key })
     }
 
@@ -340,6 +359,33 @@ mod tests {
         assert_eq!(path.components()[2], ChildNumber::hardened(0));
         assert_eq!(path.components()[3], ChildNumber::normal(0));
         assert_eq!(path.components()[4], ChildNumber::normal(0));
+    }
+
+    #[test]
+    fn test_derivation_path_rejects_out_of_range_index() {
+        // 2^31 is out of range for the index field (it collides with the
+        // hardened bit). Previously this parsed successfully and then panicked
+        // in to_bip32().expect() during derivation (MEDIUM #24).
+        assert!(DerivationPath::from_str("m/2147483648").is_err());
+        assert!(DerivationPath::from_str("m/2147483648'").is_err());
+        // 2^32-1 likewise out of range.
+        assert!(DerivationPath::from_str("m/4294967295").is_err());
+        // 2^31 - 1 is the largest valid index.
+        let ok = DerivationPath::from_str("m/2147483647'").unwrap();
+        assert_eq!(ok.components()[0], ChildNumber::hardened(2147483647));
+    }
+
+    #[test]
+    fn test_to_bip32_out_of_range_does_not_panic() {
+        // Constructing a ChildNumber with an out-of-range index directly (not via
+        // from_str) must surface as an error during derivation, not a panic.
+        let seed = hex::decode("000102030405060708090a0b0c0d0e0f").unwrap();
+        let master = ExtendedPrivateKey::from_seed(&seed).unwrap();
+        let bad = ChildNumber {
+            index: 0x8000_0000,
+            hardened: true,
+        };
+        assert!(master.derive_child(bad).is_err());
     }
 
     #[test]

@@ -59,7 +59,10 @@ clap = { version = "4.5", features = ["derive", "env"] }
 
 [dev-dependencies]
 tempfile = "3.24"
-tokio = { version = "1.49", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.49", features = ["rt-multi-thread", "macros", "test-util"] }
 
 # Integration test dependencies
 hsm-secrets = { path = "../secrets" }
+
+# TLS handshake timeout / connection-cap regression tests
+rcgen = "0.14"

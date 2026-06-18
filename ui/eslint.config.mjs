@@ -4,7 +4,7 @@ import next from "eslint-config-next";
 
 const nextConfigs = Array.isArray(next) ? next : [next];
 
-export default [
+const config = [
   ...nextConfigs,
   {
     ignores: [".next/**", "out/**", "node_modules/**", "cypress/**"],
@@ -20,3 +20,5 @@ export default [
     },
   },
 ];
+
+export default config;

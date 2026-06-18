@@ -14,7 +14,23 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 const KEY_FILE_EXT: &str = "enc";
 
 /// File extension for metadata files
+///
+/// Retained only to recognize and clean up legacy split-file records written by
+/// an earlier two-rename layout. New writes store metadata inline in the `.enc`
+/// record (see [`COMBINED_RECORD_MAGIC`]) so a key and its metadata are made
+/// durable with a SINGLE atomic rename.
 const META_FILE_EXT: &str = "meta";
+
+/// Magic prefix identifying a combined (metadata + ciphertext) key record.
+///
+/// Finding #29: the original layout wrote the key and its metadata to two
+/// separate files with two independent renames. A crash between the renames
+/// left a (new-key, old-meta) window with no WAL/recovery. The combined record
+/// packs metadata and ciphertext into a single file persisted with ONE rename,
+/// so a key is either fully present (with matching metadata) or absent — never
+/// torn. The 4-byte magic distinguishes the new format from any legacy
+/// raw-`EncryptedData` `.enc` file so `load_key` stays backward compatible.
+const COMBINED_RECORD_MAGIC: &[u8; 4] = b"HSK1";
 
 /// Async encrypted file storage implementation
 ///
@@ -94,9 +110,81 @@ impl AsyncFileStorage {
             .join(format!("key-{}.{}", key_id, META_FILE_EXT))
     }
 
+    /// Encode a combined key record: magic + framed metadata + ciphertext.
+    ///
+    /// Layout (all integers little-endian):
+    /// ```text
+    /// | "HSK1" (4) | meta_len: u32 (4) | metadata (meta_len) | ciphertext |
+    /// ```
+    /// This single self-describing blob lets a key and its integrity metadata be
+    /// made durable with ONE atomic rename (finding #29).
+    fn encode_combined_record(meta_bytes: &[u8], encrypted_bytes: &[u8]) -> StorageResult<Vec<u8>> {
+        let meta_len: u32 = meta_bytes
+            .len()
+            .try_into()
+            .map_err(|_| StorageError::Serialization("metadata too large to frame".to_string()))?;
+        let mut record = Vec::with_capacity(4 + 4 + meta_bytes.len() + encrypted_bytes.len());
+        record.extend_from_slice(COMBINED_RECORD_MAGIC);
+        record.extend_from_slice(&meta_len.to_le_bytes());
+        record.extend_from_slice(meta_bytes);
+        record.extend_from_slice(encrypted_bytes);
+        Ok(record)
+    }
+
+    /// Decode a combined key record produced by [`Self::encode_combined_record`].
+    ///
+    /// Returns `Some((metadata, ciphertext))` if `bytes` is a well-formed
+    /// combined record, or `None` if it does not carry the combined-record magic
+    /// (i.e. a legacy raw-`EncryptedData` `.enc` file). A record that carries the
+    /// magic but is truncated/garbled is reported as corruption rather than
+    /// silently mis-parsed.
+    fn decode_combined_record(bytes: &[u8]) -> StorageResult<Option<(KeyMetadata, Vec<u8>)>> {
+        if bytes.len() < 4 || &bytes[..4] != COMBINED_RECORD_MAGIC {
+            return Ok(None);
+        }
+        if bytes.len() < 8 {
+            return Err(StorageError::CorruptionDetected(
+                "combined record truncated before metadata length".to_string(),
+            ));
+        }
+        let meta_len = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
+        let meta_start: usize = 8;
+        let meta_end = meta_start
+            .checked_add(meta_len)
+            .filter(|&end| end <= bytes.len())
+            .ok_or_else(|| {
+                StorageError::CorruptionDetected(
+                    "combined record metadata length exceeds file size".to_string(),
+                )
+            })?;
+        let metadata: KeyMetadata =
+            postcard::from_bytes(&bytes[meta_start..meta_end]).map_err(|e| {
+                StorageError::Serialization(format!("Failed to deserialize metadata: {}", e))
+            })?;
+        let ciphertext = bytes[meta_end..].to_vec();
+        Ok(Some((metadata, ciphertext)))
+    }
+
+    /// fsync a directory so a preceding rename/create within it is durable.
+    ///
+    /// A rename is only crash-atomic once the directory entry change itself is
+    /// persisted; without fsyncing the parent, a crash can lose the rename even
+    /// though the file contents were `sync_all`'d.
+    async fn fsync_dir(path: &Path) -> StorageResult<()> {
+        // Opening a directory for read and calling sync_all flushes its entries.
+        let dir = File::open(path).await?;
+        dir.sync_all().await?;
+        Ok(())
+    }
+
     /// Store a key asynchronously with atomic write
     ///
-    /// Uses write-rename pattern for atomicity
+    /// Finding #29: the key's ciphertext AND its integrity metadata are packed
+    /// into a SINGLE combined record (see [`COMBINED_RECORD_MAGIC`]) and made
+    /// durable with ONE `fsync` + ONE atomic rename, followed by an `fsync` of
+    /// the parent directory. A crash can therefore only leave the key fully
+    /// present (with matching inline metadata) or fully absent — never the
+    /// torn (new-key, old-meta) state the previous two-rename layout allowed.
     pub async fn store_key(
         &self,
         key_id: &KeyId,
@@ -115,49 +203,41 @@ impl AsyncFileStorage {
             StorageError::Serialization(format!("Failed to serialize encrypted data: {}", e))
         })?;
 
-        // Create metadata
+        // Create metadata over the ciphertext.
         let metadata = KeyMetadata::new(&encrypted_bytes);
+        let meta_bytes = postcard::to_allocvec(&metadata).map_err(|e| {
+            StorageError::Serialization(format!("Failed to serialize metadata: {}", e))
+        })?;
 
-        // Write to temporary files first (atomic write pattern)
+        // Build the single combined record (metadata framed ahead of ciphertext).
+        let record = Self::encode_combined_record(&meta_bytes, &encrypted_bytes)?;
+
         let key_path = self.get_key_file_path(namespace, key_id);
-        let meta_path = self.get_meta_file_path(namespace, key_id);
-        // Distinct temp names per file. Using a bare "tmp" extension would map both
-        // key-<id>.enc and key-<id>.meta to the same key-<id>.tmp, so the first rename
-        // below consumes it and the second fails with ENOENT.
         let temp_key_path = key_path.with_extension(format!("{KEY_FILE_EXT}.tmp"));
-        let temp_meta_path = meta_path.with_extension(format!("{META_FILE_EXT}.tmp"));
 
-        // Write encrypted key to temporary file
+        // Write the combined record to a temp file and fsync its contents.
         let mut key_file = OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
             .open(&temp_key_path)
             .await?;
-
-        key_file.write_all(&encrypted_bytes).await?;
-        key_file.sync_all().await?; // Ensure data is on disk
+        key_file.write_all(&record).await?;
+        key_file.sync_all().await?;
         drop(key_file);
 
-        // Write metadata to temporary file
-        let meta_bytes = postcard::to_allocvec(&metadata).map_err(|e| {
-            StorageError::Serialization(format!("Failed to serialize metadata: {}", e))
-        })?;
-
-        let mut meta_file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&temp_meta_path)
-            .await?;
-
-        meta_file.write_all(&meta_bytes).await?;
-        meta_file.sync_all().await?;
-        drop(meta_file);
-
-        // Atomic rename
+        // Single atomic rename publishes key + metadata together.
         fs::rename(&temp_key_path, &key_path).await?;
-        fs::rename(&temp_meta_path, &meta_path).await?;
+
+        // fsync the parent directory so the rename itself is durable across a crash.
+        Self::fsync_dir(&keys_path).await?;
+
+        // Remove any stale legacy split-metadata file so a future loader cannot
+        // pick up out-of-date metadata. The combined record is authoritative.
+        let legacy_meta_path = self.get_meta_file_path(namespace, key_id);
+        if fs::try_exists(&legacy_meta_path).await.unwrap_or(false) {
+            let _ = fs::remove_file(&legacy_meta_path).await;
+        }
 
         // Set restrictive file permissions (Unix only)
         #[cfg(unix)]
@@ -166,49 +246,64 @@ impl AsyncFileStorage {
             let mut perms = fs::metadata(&key_path).await?.permissions();
             perms.set_mode(0o600);
             fs::set_permissions(&key_path, perms).await?;
-
-            let mut perms = fs::metadata(&meta_path).await?.permissions();
-            perms.set_mode(0o600);
-            fs::set_permissions(&meta_path, perms).await?;
         }
 
         Ok(())
     }
 
     /// Load a key asynchronously
+    ///
+    /// Finding #29: new records are combined (inline metadata + ciphertext) and
+    /// are read with a single file open. The inline metadata is always present
+    /// and verified, so there is no (new-key, old-meta) torn-read window.
+    /// Legacy split-file records (raw `EncryptedData` `.enc` plus an optional
+    /// separate `.meta`) are still read for backward compatibility; a legacy
+    /// record whose `.meta` is missing/partial is treated as consistent
+    /// (verification skipped) rather than failing, since such records predate
+    /// the inline-metadata format and are recoverable from the ciphertext alone.
     pub async fn load_key(&self, key_id: &KeyId, namespace: &str) -> StorageResult<Vec<u8>> {
         let key_path = self.get_key_file_path(namespace, key_id);
-        let meta_path = self.get_meta_file_path(namespace, key_id);
 
-        // Read encrypted data
-        let mut encrypted_bytes = Vec::new();
+        // Read the on-disk record (combined or legacy).
+        let mut file_bytes = Vec::new();
         File::open(&key_path)
             .await?
-            .read_to_end(&mut encrypted_bytes)
+            .read_to_end(&mut file_bytes)
             .await?;
 
-        // Read and verify metadata
-        if meta_path.exists() {
+        // Prefer the combined format: metadata is inline and authoritative.
+        if let Some((metadata, encrypted_bytes)) = Self::decode_combined_record(&file_bytes)? {
+            // Verify integrity against the inline metadata.
+            metadata.verify(&encrypted_bytes)?;
+
+            let encrypted: EncryptedData = postcard::from_bytes(&encrypted_bytes).map_err(|e| {
+                StorageError::Serialization(format!("Failed to deserialize encrypted data: {}", e))
+            })?;
+            return self.master_key.decrypt(&encrypted);
+        }
+
+        // Legacy split-file path: the `.enc` is a raw serialized EncryptedData,
+        // with integrity metadata (if any) in a separate `.meta` file.
+        let encrypted_bytes = file_bytes;
+        let meta_path = self.get_meta_file_path(namespace, key_id);
+        if fs::try_exists(&meta_path).await.unwrap_or(false) {
             let mut meta_bytes = Vec::new();
             File::open(&meta_path)
                 .await?
                 .read_to_end(&mut meta_bytes)
                 .await?;
 
-            let metadata: KeyMetadata = postcard::from_bytes(&meta_bytes).map_err(|e| {
-                StorageError::Serialization(format!("Failed to deserialize metadata: {}", e))
-            })?;
-
-            // Verify integrity
-            metadata.verify(&encrypted_bytes)?;
+            // A missing/partial legacy metadata file is treated as recoverable:
+            // only verify when the metadata deserializes cleanly.
+            if let Ok(metadata) = postcard::from_bytes::<KeyMetadata>(&meta_bytes) {
+                metadata.verify(&encrypted_bytes)?;
+            }
         }
 
-        // Deserialize encrypted data
         let encrypted: EncryptedData = postcard::from_bytes(&encrypted_bytes).map_err(|e| {
             StorageError::Serialization(format!("Failed to deserialize encrypted data: {}", e))
         })?;
 
-        // Decrypt
         self.master_key.decrypt(&encrypted)
     }
 
@@ -536,5 +631,129 @@ mod tests {
         assert_eq!(loaded, new_data);
 
         drop(temp_dir);
+    }
+
+    // ---- Regression tests for finding #29: single-rename combined record ----
+
+    /// The combined record is persisted as a SINGLE `.enc` file carrying the
+    /// magic header, with NO separate `.meta` file. This proves there is no
+    /// second rename that could leave a (new-key, old-meta) crash window: the
+    /// key and its integrity metadata live in one atomically-renamed file.
+    #[tokio::test]
+    async fn test_store_writes_single_combined_record_no_separate_meta() {
+        let temp_dir = TempDir::new().unwrap();
+        let kek = [42u8; 32];
+        let storage = AsyncFileStorage::create_with_new_key(temp_dir.path().to_path_buf(), &kek)
+            .await
+            .unwrap();
+        storage.create_namespace("test").await.unwrap();
+
+        let key_id = KeyId::new("combined-key");
+        let data = b"secret key material";
+        storage.store_key(&key_id, data, "test").await.unwrap();
+
+        // The .enc file exists and begins with the combined-record magic.
+        let key_path = storage.get_key_file_path("test", &key_id);
+        let bytes = std::fs::read(&key_path).unwrap();
+        assert!(
+            bytes.starts_with(COMBINED_RECORD_MAGIC),
+            "key file must be a combined record (magic prefix)"
+        );
+
+        // There is NO separate .meta file — metadata is inline.
+        let meta_path = storage.get_meta_file_path("test", &key_id);
+        assert!(
+            !meta_path.exists(),
+            "combined layout must not write a separate .meta file"
+        );
+
+        // No leftover temp file.
+        let temp_key_path = key_path.with_extension(format!("{KEY_FILE_EXT}.tmp"));
+        assert!(!temp_key_path.exists(), "temp file must be renamed away");
+
+        // Round-trips correctly using only the single file.
+        let loaded = storage.load_key(&key_id, "test").await.unwrap();
+        assert_eq!(loaded, data);
+    }
+
+    /// Loading must NOT depend on any external metadata file: deleting the
+    /// (nonexistent) legacy `.meta` is irrelevant because the metadata is inline.
+    /// This is the crux of finding #29 — there is no window where the key exists
+    /// but its metadata is stale/absent. We assert the key loads from the `.enc`
+    /// file alone.
+    #[tokio::test]
+    async fn test_load_succeeds_from_combined_record_alone() {
+        let temp_dir = TempDir::new().unwrap();
+        let kek = [42u8; 32];
+        let storage = AsyncFileStorage::create_with_new_key(temp_dir.path().to_path_buf(), &kek)
+            .await
+            .unwrap();
+        storage.create_namespace("test").await.unwrap();
+
+        let key_id = KeyId::new("k");
+        let data = b"payload bytes that round-trip";
+        storage.store_key(&key_id, data, "test").await.unwrap();
+
+        // Even after explicitly ensuring no .meta exists, load works.
+        let meta_path = storage.get_meta_file_path("test", &key_id);
+        let _ = std::fs::remove_file(&meta_path);
+        assert!(!meta_path.exists());
+
+        let loaded = storage.load_key(&key_id, "test").await.unwrap();
+        assert_eq!(loaded, data);
+    }
+
+    /// Negative test: tampering with the ciphertext portion of a combined record
+    /// is detected by the inline metadata's checksum and rejected — proving the
+    /// inline metadata is actually verified (not shape-only).
+    #[tokio::test]
+    async fn test_tampered_combined_record_is_rejected() {
+        let temp_dir = TempDir::new().unwrap();
+        let kek = [42u8; 32];
+        let storage = AsyncFileStorage::create_with_new_key(temp_dir.path().to_path_buf(), &kek)
+            .await
+            .unwrap();
+        storage.create_namespace("test").await.unwrap();
+
+        let key_id = KeyId::new("victim");
+        storage
+            .store_key(&key_id, b"original secret", "test")
+            .await
+            .unwrap();
+
+        let key_path = storage.get_key_file_path("test", &key_id);
+        let mut bytes = std::fs::read(&key_path).unwrap();
+        // Flip a byte in the trailing ciphertext (last byte) without touching the
+        // framed metadata, so the checksum over the ciphertext no longer matches.
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0xFF;
+        std::fs::write(&key_path, &bytes).unwrap();
+
+        let result = storage.load_key(&key_id, "test").await;
+        assert!(
+            matches!(result, Err(StorageError::CorruptionDetected(_))),
+            "tampered combined record must be rejected as corruption, got {result:?}"
+        );
+    }
+
+    /// A combined record whose framed metadata length is impossible (exceeds the
+    /// file) is reported as corruption, not silently mis-parsed.
+    #[test]
+    fn test_decode_combined_record_rejects_bogus_length() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(COMBINED_RECORD_MAGIC);
+        bytes.extend_from_slice(&u32::MAX.to_le_bytes()); // absurd meta_len
+        bytes.extend_from_slice(b"short");
+        let result = AsyncFileStorage::decode_combined_record(&bytes);
+        assert!(matches!(result, Err(StorageError::CorruptionDetected(_))));
+    }
+
+    /// A non-combined (legacy-style) buffer is recognized as such (returns None),
+    /// so the loader falls through to the legacy path rather than erroring.
+    #[test]
+    fn test_decode_combined_record_passes_through_legacy() {
+        let legacy = b"\x00\x01\x02\x03 not a combined record";
+        let result = AsyncFileStorage::decode_combined_record(legacy).unwrap();
+        assert!(result.is_none());
     }
 }

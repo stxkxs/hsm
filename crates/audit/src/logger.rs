@@ -1,3 +1,4 @@
+use crate::checkpoint::{Checkpoint, CheckpointError};
 use crate::event::{AuditEvent, AuditEventBuilder, EventType};
 use crate::hash_chain::{HashChain, HashChainError};
 use crate::merkle_tree::MerkleTree;
@@ -20,6 +21,9 @@ pub enum AuditError {
 
     #[error("Logger is disabled")]
     Disabled,
+
+    #[error("Checkpoint verification failed: {0}")]
+    Checkpoint(#[from] CheckpointError),
 }
 
 /// Configuration for the audit logger
@@ -33,6 +37,13 @@ pub struct AuditConfig {
 
     /// Whether to rebuild Merkle tree on startup
     pub rebuild_merkle_on_start: bool,
+
+    /// Optional key for checkpoint integrity tags (HMAC-SHA256). When `None`,
+    /// checkpoints use a plain keyless hash that detects accidental corruption
+    /// and naive truncation but is not secure against an attacker who can
+    /// rewrite the checkpoint file. Provision a key (e.g. derived from the HSM
+    /// master key) for any deployment with a real threat model.
+    pub checkpoint_key: Option<Vec<u8>>,
 }
 
 impl Default for AuditConfig {
@@ -41,6 +52,7 @@ impl Default for AuditConfig {
             storage: StorageConfig::default(),
             enabled: true,
             rebuild_merkle_on_start: true,
+            checkpoint_key: None,
         }
     }
 }
@@ -89,6 +101,19 @@ impl AuditLogger {
             self.merkle_tree.write().update(&event.current_hash);
         }
 
+        // Tail-truncation guard: if a checkpoint exists, the rebuilt live tip
+        // must not be behind it. A tip behind the checkpoint means events
+        // committed by the checkpoint were deleted from the log; fail closed.
+        if let Some(checkpoint) = self.storage.read_checkpoint()? {
+            let live_seq = self.hash_chain.current_sequence();
+            let live_root = self.merkle_tree.read().get_root().ok();
+            checkpoint.verify_against_live(
+                live_seq,
+                live_root.as_deref(),
+                self.config.checkpoint_key.as_deref(),
+            )?;
+        }
+
         Ok(())
     }
 
@@ -104,7 +129,11 @@ impl AuditLogger {
         // Get next sequence number
         let sequence = self.hash_chain.current_sequence() + 1;
 
-        // Build event with sequence and prev_hash
+        // Build event with sequence and prev_hash. The hash chain's `append`
+        // recomputes prev_hash/current_hash from its own state; because we are
+        // holding `log_mutex` the chain state cannot change between here and
+        // the append, so the event we persist is byte-identical to the one the
+        // chain will store.
         let event = builder
             .sequence(sequence)
             .prev_hash(self.hash_chain.last_hash())
@@ -112,14 +141,33 @@ impl AuditLogger {
             .build()
             .map_err(AuditError::EventBuild)?;
 
-        // Append to hash chain
-        let hash = self.hash_chain.append(event.clone())?;
+        // Durability first: persist to storage BEFORE advancing any in-memory
+        // state. If the write fails we return the error without touching the
+        // hash chain or Merkle tree, so the in-memory sequence/last_hash do not
+        // advance and no persisted gap is created. A subsequent log attempt
+        // reuses the same sequence number.
+        self.storage.write_event(&event)?;
+
+        // Append to hash chain (advances sequence + last_hash) only after the
+        // durable write succeeded.
+        let hash = self.hash_chain.append(event)?;
 
         // Update Merkle tree
-        self.merkle_tree.write().update(&hash);
+        let merkle_root = {
+            let mut tree = self.merkle_tree.write();
+            tree.update(&hash);
+            tree.get_root().ok()
+        };
 
-        // Persist to storage
-        self.storage.write_event(&event)?;
+        // Persist a signed-root checkpoint committing to this sequence + root.
+        // This is what lets a later restart detect tail truncation. The event
+        // itself is already durable, so a checkpoint write failure does not
+        // lose the event; we surface the error so the caller knows the
+        // tamper-evidence commitment did not land.
+        if let Some(root) = merkle_root {
+            let checkpoint = Checkpoint::new(sequence, root, self.config.checkpoint_key.as_deref());
+            self.storage.write_checkpoint(&checkpoint)?;
+        }
 
         Ok(sequence)
     }
@@ -259,6 +307,7 @@ mod tests {
             },
             enabled: true,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         }
     }
 
@@ -444,6 +493,72 @@ mod tests {
     }
 
     #[test]
+    fn test_startup_rejects_truncated_tail_via_checkpoint() {
+        use std::io::Write as _;
+
+        let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path().to_path_buf();
+        let key = b"unit-test-checkpoint-key".to_vec();
+
+        // Write 10 events with a keyed checkpoint.
+        {
+            let config = AuditConfig {
+                storage: StorageConfig {
+                    base_dir: base_dir.clone(),
+                    ..Default::default()
+                },
+                enabled: true,
+                rebuild_merkle_on_start: false,
+                checkpoint_key: Some(key.clone()),
+            };
+            let logger = AuditLogger::new(config).unwrap();
+            for i in 1..=10 {
+                logger
+                    .log_success(EventType::Sign, format!("op_{i}"), "default", "c", None)
+                    .unwrap();
+            }
+            logger.flush().unwrap();
+        }
+
+        // Attacker truncates the on-disk log to the first 6 events but cannot
+        // forge the checkpoint (no key). The remaining prefix is a valid hash
+        // chain on its own.
+        let log_path = base_dir.join("audit.log");
+        let contents = std::fs::read_to_string(&log_path).unwrap();
+        let kept: Vec<&str> = contents.lines().take(6).collect();
+        let mut f = std::fs::File::create(&log_path).unwrap();
+        for line in &kept {
+            writeln!(f, "{line}").unwrap();
+        }
+        f.flush().unwrap();
+        drop(f);
+
+        // Reopening with rebuild must FAIL closed: the checkpoint commits to
+        // sequence 10 but the live tip is only 6.
+        let config = AuditConfig {
+            storage: StorageConfig {
+                base_dir: base_dir.clone(),
+                ..Default::default()
+            },
+            enabled: true,
+            rebuild_merkle_on_start: true,
+            checkpoint_key: Some(key.clone()),
+        };
+        let result = AuditLogger::new(config);
+        assert!(
+            result.is_err(),
+            "startup must reject a log whose tip is behind the signed checkpoint"
+        );
+        match result.err().unwrap() {
+            AuditError::Checkpoint(CheckpointError::TipBehindCheckpoint { checkpoint, live }) => {
+                assert_eq!(checkpoint, 10);
+                assert_eq!(live, 6);
+            }
+            other => panic!("expected TipBehindCheckpoint, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn test_disabled_logger() {
         let temp_dir = TempDir::new().unwrap();
         let config = AuditConfig {
@@ -453,6 +568,7 @@ mod tests {
             },
             enabled: false,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();
@@ -475,6 +591,7 @@ mod tests {
                 },
                 enabled: true,
                 rebuild_merkle_on_start: false,
+                checkpoint_key: None,
             };
 
             let logger = AuditLogger::new(config).unwrap();
@@ -503,6 +620,7 @@ mod tests {
                 },
                 enabled: true,
                 rebuild_merkle_on_start: true,
+                checkpoint_key: None,
             };
 
             let logger = AuditLogger::new(config).unwrap();
@@ -535,6 +653,48 @@ mod tests {
 
         let event = logger.get_event(1).unwrap();
         assert!(event.metadata.is_some());
+    }
+
+    #[test]
+    fn test_storage_write_failure_does_not_advance_chain() {
+        let config = create_test_config();
+        let logger = AuditLogger::new(config).unwrap();
+
+        // First event succeeds.
+        let seq1 = logger
+            .log_success(EventType::Sign, "op_1", "default", "client_1", None)
+            .unwrap();
+        assert_eq!(seq1, 1);
+        assert_eq!(logger.current_sequence(), 1);
+        let last_hash_before = logger.hash_chain().last_hash();
+
+        // Inject a storage write failure: the next log must fail and must NOT
+        // advance the in-memory hash chain or Merkle tree.
+        logger.storage().set_fail_writes(true);
+        let result = logger.log_success(EventType::Sign, "op_2", "default", "client_1", None);
+        assert!(result.is_err(), "log must fail when storage write fails");
+
+        // Chain tip unchanged - no persisted gap, no phantom in-memory entry.
+        assert_eq!(logger.current_sequence(), 1);
+        assert_eq!(logger.event_count(), 1);
+        assert_eq!(logger.hash_chain().last_hash(), last_hash_before);
+
+        // Recovery: re-enable writes; the next event reuses sequence 2 and the
+        // chain stays continuous and verifiable.
+        logger.storage().set_fail_writes(false);
+        let seq2 = logger
+            .log_success(EventType::Sign, "op_2", "default", "client_1", None)
+            .unwrap();
+        assert_eq!(seq2, 2);
+        assert_eq!(logger.current_sequence(), 2);
+        assert!(logger.verify_integrity().is_ok());
+
+        // The persisted log must contain exactly the two successful events,
+        // with no gap from the failed write.
+        let persisted = logger.storage().read_current_events().unwrap();
+        assert_eq!(persisted.len(), 2);
+        assert_eq!(persisted[0].sequence, 1);
+        assert_eq!(persisted[1].sequence, 2);
     }
 
     #[test]

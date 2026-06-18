@@ -508,14 +508,18 @@ impl EncryptedSecretStore {
 
     /// Decrypt secret data using AES-256-GCM.
     fn decrypt_data(&self, encrypted: &[u8]) -> Result<SecretData, SecretError> {
-        let decrypted = hsm_crypto_engine::symmetric::aes_gcm::AesGcmEngine::decrypt_aes256(
-            &self.encryption_key,
-            encrypted,
-            None,
-        )
-        .map_err(|e| SecretError::Decryption(format!("Decryption failed: {}", e)))?;
+        // Wrap the plaintext in `Zeroizing` so the intermediate decrypted buffer
+        // is wiped when it goes out of scope, regardless of success or error.
+        let decrypted = zeroize::Zeroizing::new(
+            hsm_crypto_engine::symmetric::aes_gcm::AesGcmEngine::decrypt_aes256(
+                &self.encryption_key,
+                encrypted,
+                None,
+            )
+            .map_err(|e| SecretError::Decryption(format!("Decryption failed: {}", e)))?,
+        );
 
-        serde_json::from_slice(&decrypted)
+        serde_json::from_slice(decrypted.as_slice())
             .map_err(|e| SecretError::Decryption(format!("Deserialization failed: {}", e)))
     }
 
@@ -1228,12 +1232,15 @@ mod tests {
             .await
             .unwrap();
 
-        // Access the raw encrypted data and verify it's not plaintext
-        let encrypted_data = store.encrypted_data.read();
-        let raw_encrypted = encrypted_data.get(&(secret.id.clone(), 1)).unwrap();
+        // Access the raw encrypted data and verify it's not plaintext.
+        // Clone the bytes out and drop the read guard before any later await.
+        let raw_encrypted = {
+            let encrypted_data = store.encrypted_data.read();
+            encrypted_data.get(&(secret.id.clone(), 1)).unwrap().clone()
+        };
 
         // The raw bytes should not contain the plaintext password
-        let raw_str = String::from_utf8_lossy(raw_encrypted);
+        let raw_str = String::from_utf8_lossy(&raw_encrypted);
         assert!(
             !raw_str.contains(plaintext_password),
             "Plaintext password found in encrypted data!"
