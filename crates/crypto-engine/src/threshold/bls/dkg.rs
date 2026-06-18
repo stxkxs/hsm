@@ -1007,8 +1007,12 @@ mod tests {
         let sig_share2 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
 
         let participants = vec![shares[0].participant_id, shares[1].participant_id];
-        let signature =
-            ThresholdBlsEngine::aggregate(&[sig_share1, sig_share2], &participants).unwrap();
+        let signature = ThresholdBlsEngine::aggregate(
+            &[sig_share1, sig_share2],
+            &participants,
+            shares[0].config.threshold,
+        )
+        .unwrap();
 
         // Verify against the group public key
         let valid = ThresholdBlsEngine::verify(&group_pk, message, &signature).unwrap();
@@ -1036,7 +1040,12 @@ mod tests {
 
             let participants: Vec<_> = subset.iter().map(|&i| shares[i].participant_id).collect();
 
-            let signature = ThresholdBlsEngine::aggregate(&sig_shares, &participants).unwrap();
+            let signature = ThresholdBlsEngine::aggregate(
+                &sig_shares,
+                &participants,
+                shares[0].config.threshold,
+            )
+            .unwrap();
             let valid = ThresholdBlsEngine::verify(&group_pk, message, &signature).unwrap();
 
             assert!(
@@ -1066,7 +1075,9 @@ mod tests {
             .map(|&i| shares[i].participant_id)
             .collect();
 
-        let signature = ThresholdBlsEngine::aggregate(&sig_shares, &participants).unwrap();
+        let signature =
+            ThresholdBlsEngine::aggregate(&sig_shares, &participants, shares[0].config.threshold)
+                .unwrap();
         let valid = ThresholdBlsEngine::verify(&group_pk, message, &signature).unwrap();
 
         assert!(valid, "3-of-5 signature should verify");
@@ -1160,13 +1171,21 @@ mod tests {
         let sig1_share1 = ThresholdBlsEngine::sign_share(&shares[0], message).unwrap();
         let sig1_share2 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
         let participants = vec![shares[0].participant_id, shares[1].participant_id];
-        let signature1 =
-            ThresholdBlsEngine::aggregate(&[sig1_share1, sig1_share2], &participants).unwrap();
+        let signature1 = ThresholdBlsEngine::aggregate(
+            &[sig1_share1, sig1_share2],
+            &participants,
+            shares[0].config.threshold,
+        )
+        .unwrap();
 
         let sig2_share1 = ThresholdBlsEngine::sign_share(&shares[0], message).unwrap();
         let sig2_share2 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
-        let signature2 =
-            ThresholdBlsEngine::aggregate(&[sig2_share1, sig2_share2], &participants).unwrap();
+        let signature2 = ThresholdBlsEngine::aggregate(
+            &[sig2_share1, sig2_share2],
+            &participants,
+            shares[0].config.threshold,
+        )
+        .unwrap();
 
         // BLS signatures are deterministic
         assert_eq!(signature1.bytes, signature2.bytes);

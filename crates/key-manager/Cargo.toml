@@ -12,6 +12,10 @@ hsm-crypto-engine = { path = "../crypto-engine" }
 # Blockchain HD wallet support
 hsm-blockchain = { path = "../blockchain" }
 
+# BIP-32 extended key reconstruction (faithful XPrv rebuild from stored
+# private-key + chain-code components, used by HD child derivation)
+bip32 = { version = "0.5", default-features = false, features = ["alloc", "secp256k1"] }
+
 # Cryptographic primitives for key import
 ed25519-dalek = { version = "2.2", features = ["rand_core"] }
 p256 = { version = "0.13", features = ["ecdsa"] }
@@ -47,8 +51,9 @@ tracing = "0.1"
 thiserror = "2.0"
 anyhow = "1.0"
 
-# SHA-256 for fingerprints
+# SHA-256 + RIPEMD-160 for BIP-32 HASH160 fingerprints
 sha2 = "0.10"
+ripemd = "0.1"
 
 # Storage backends (optional)
 hsm-storage = { path = "../storage", optional = true }
@@ -62,6 +67,8 @@ tempfile = "3.24"
 tokio = { version = "1.49", features = ["full", "test-util"] }
 proptest = "1.9"
 criterion = "0.8"
+# Capturing tracing ERROR events to prove delete_key no longer error-logs
+tracing-subscriber = { version = "0.3", features = ["registry"] }
 
 [[bench]]
 name = "key_manager_benches"

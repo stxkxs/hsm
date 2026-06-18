@@ -10,7 +10,38 @@ use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 use std::time::{SystemTime, UNIX_EPOCH};
+use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+/// Constant-time comparison of two OTP code strings.
+///
+/// Compares the raw UTF-8 bytes with `subtle::ConstantTimeEq` so the comparison
+/// time does not depend on which position first differs. Returns `false` for
+/// length mismatch (length is not secret for fixed-width OTP codes).
+fn ct_eq_str(a: &str, b: &str) -> bool {
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    if a.len() != b.len() {
+        return false;
+    }
+    a.ct_eq(b).into()
+}
+
+/// Constant-time comparison of two hex-encoded hashes.
+///
+/// Both inputs are decoded from hex to their raw bytes and compared with
+/// `subtle::ConstantTimeEq`, so neither the byte position of a difference nor
+/// the value of the candidate hash leaks via comparison timing.
+fn ct_eq_hex_hash(stored_hex: &str, candidate_hex: &str) -> bool {
+    let (stored, candidate) = match (hex::decode(stored_hex), hex::decode(candidate_hex)) {
+        (Ok(s), Ok(c)) => (s, c),
+        _ => return false,
+    };
+    if stored.len() != candidate.len() {
+        return false;
+    }
+    stored.ct_eq(&candidate).into()
+}
 
 /// OTP algorithm type
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -241,17 +272,21 @@ impl TotpValidator {
     pub fn verify_at(&self, code: &str, timestamp: u64, tolerance: u32) -> bool {
         let current_counter = timestamp / self.config.period as u64;
 
-        // Check current and surrounding time steps
+        // Check current and surrounding time steps. We accumulate matches across
+        // the entire tolerance window WITHOUT an early return: returning as soon
+        // as a match is found would leak, via timing, how far into the window the
+        // matching step was. Each candidate is compared in constant time.
+        let mut matched = false;
         for i in 0..=tolerance {
-            if self.generate_otp(current_counter.saturating_sub(i as u64)) == code {
-                return true;
-            }
-            if i > 0 && self.generate_otp(current_counter + i as u64) == code {
-                return true;
+            let candidate = self.generate_otp(current_counter.saturating_sub(i as u64));
+            matched |= ct_eq_str(&candidate, code);
+            if i > 0 {
+                let candidate = self.generate_otp(current_counter + i as u64);
+                matched |= ct_eq_str(&candidate, code);
             }
         }
 
-        false
+        matched
     }
 
     /// Generate OTP for a counter value
@@ -362,13 +397,25 @@ impl HotpValidator {
 
     /// Verify an HOTP code with look-ahead window
     pub fn verify(&mut self, code: &str, look_ahead: u32) -> bool {
+        // Scan the whole look-ahead window without early return, comparing each
+        // candidate in constant time. We record the matching offset and only
+        // advance the counter after the loop so the comparison loop's timing does
+        // not reveal where in the window the match occurred.
+        let mut matched_offset: Option<u32> = None;
         for i in 0..=look_ahead {
-            if self.generate_at(self.counter + i as u64) == code {
-                self.counter = self.counter + i as u64 + 1;
-                return true;
+            let candidate = self.generate_at(self.counter + i as u64);
+            if ct_eq_str(&candidate, code) {
+                matched_offset = Some(i);
             }
         }
-        false
+
+        match matched_offset {
+            Some(i) => {
+                self.counter = self.counter + i as u64 + 1;
+                true
+            }
+            None => false,
+        }
     }
 
     /// Get current counter
@@ -514,11 +561,18 @@ impl OtpManager {
 
         let code_hash = hash_recovery_code(code);
 
-        if let Some(pos) = registration
-            .recovery_code_hashes
-            .iter()
-            .position(|h| h == &code_hash)
-        {
+        // Compare against each stored hash in constant time (decode hex to bytes,
+        // then `ct_eq`) so the comparison does not short-circuit on the first
+        // differing byte. We scan all entries and record the matching index
+        // afterwards to avoid leaking which code matched via timing.
+        let mut matched_pos: Option<usize> = None;
+        for (pos, stored) in registration.recovery_code_hashes.iter().enumerate() {
+            if ct_eq_hex_hash(stored, &code_hash) {
+                matched_pos = Some(pos);
+            }
+        }
+
+        if let Some(pos) = matched_pos {
             registration.recovery_code_hashes.remove(pos);
             registration.last_used_at = Some(current_timestamp() as i64);
             Ok(true)
@@ -730,5 +784,70 @@ mod tests {
         // Verify code
         let new_code = validator.generate();
         assert!(manager.verify(user_id, &new_code).unwrap());
+    }
+
+    #[test]
+    fn test_ct_eq_str_matches_eq_semantics() {
+        assert!(ct_eq_str("123456", "123456"));
+        assert!(!ct_eq_str("123456", "123457"));
+        assert!(!ct_eq_str("123456", "12345")); // length mismatch
+        assert!(!ct_eq_str("000000", "999999"));
+    }
+
+    #[test]
+    fn test_ct_eq_hex_hash() {
+        let a = hash_recovery_code("ABCD-EFGH-1234");
+        let b = hash_recovery_code("ABCD-EFGH-1234");
+        let c = hash_recovery_code("WXYZ-1111-2222");
+        assert!(ct_eq_hex_hash(&a, &b));
+        assert!(!ct_eq_hex_hash(&a, &c));
+        // Non-hex input must not panic and must compare unequal.
+        assert!(!ct_eq_hex_hash("not-hex", &a));
+    }
+
+    #[test]
+    fn test_recovery_code_ct_verification() {
+        let manager = OtpManager::new("TestApp");
+        let user_id = "user-rc";
+
+        let secret = OtpSecret::from_bytes(b"12345678901234567890".to_vec());
+        let config = OtpConfig::totp("TestApp", "rc@example.com");
+        let validator = TotpValidator::new(secret.clone(), config.clone());
+        let recovery_codes = vec!["AAAA-BBBB-CCCC".to_string(), "DDDD-EEEE-FFFF".to_string()];
+        let code = validator.generate();
+        manager
+            .complete_registration(user_id, &secret, config, &code, &recovery_codes)
+            .unwrap();
+
+        // Wrong code rejected.
+        assert!(!manager
+            .verify_recovery_code(user_id, "ZZZZ-ZZZZ-ZZZZ")
+            .unwrap());
+        // Correct code (normalized) accepted.
+        assert!(manager
+            .verify_recovery_code(user_id, "AAAA-BBBB-CCCC")
+            .unwrap());
+        // Reuse of consumed code rejected.
+        assert!(!manager
+            .verify_recovery_code(user_id, "AAAA-BBBB-CCCC")
+            .unwrap());
+        // The other code still works.
+        assert!(manager
+            .verify_recovery_code(user_id, "dddd-eeee-ffff")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_totp_verify_constant_time_window_still_correct() {
+        let secret = OtpSecret::from_bytes(b"12345678901234567890".to_vec());
+        let config = OtpConfig::totp("Test", "t@example.com");
+        let validator = TotpValidator::new(secret, config);
+
+        // Code from a step within the tolerance window must verify.
+        let ts = 1_000_000u64;
+        let prev = validator.generate_at(ts - 30);
+        assert!(validator.verify_at(&prev, ts, 1));
+        // A wholly wrong code must not verify.
+        assert!(!validator.verify_at("000000", ts, 1));
     }
 }

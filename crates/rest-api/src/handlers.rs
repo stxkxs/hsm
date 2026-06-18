@@ -5,10 +5,10 @@
 use crate::error::{ApiError, Result};
 use crate::middleware::AppState;
 use crate::types::{
-    AuditLogResponse, ComponentStatus, DecryptRequest, DecryptResponse, DevLoginRequest,
-    EncryptRequest, EncryptResponse, GenerateKeyRequest, GenerateKeyResponse, HealthResponse,
-    KeyAlgorithm, KeyMetadataResponse, KeyPurpose, ListKeysResponse, LoginResponse, MeResponse,
-    ReadyResponse, SignRequest, SignResponse, UserInfo, VerifyRequest, VerifyResponse,
+    AuditEntry, AuditLogResponse, ComponentStatus, DecryptRequest, DecryptResponse,
+    DevLoginRequest, EncryptRequest, EncryptResponse, GenerateKeyRequest, GenerateKeyResponse,
+    HealthResponse, KeyAlgorithm, KeyMetadataResponse, KeyPurpose, ListKeysResponse, LoginResponse,
+    MeResponse, ReadyResponse, SignRequest, SignResponse, UserInfo, VerifyRequest, VerifyResponse,
 };
 use axum::{
     extract::{Path, Query, State},
@@ -16,7 +16,8 @@ use axum::{
     Extension, Json,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use hsm_auth::ClientIdentity;
+use hsm_audit::EventType;
+use hsm_auth::{ClientIdentity, Permission};
 use hsm_crypto_engine::{
     asymmetric::{ecdsa, ed25519, rsa},
     KeyMaterial,
@@ -24,6 +25,128 @@ use hsm_crypto_engine::{
 use hsm_key_manager::{KeyFilter, KeyId, KeySpec, KeyState, KeyType, KeyUsagePolicy};
 use serde::Deserialize;
 use std::collections::HashMap;
+
+// ============================================================================
+// Authorization & Audit Helpers
+//
+// These tie the REST handlers into the three authorization layers implemented
+// in `hsm_auth` (RBAC, namespace isolation, per-key ACLs) and the
+// tamper-evident audit log in `hsm_audit`. Prior to this wiring the REST API
+// enforced authentication ONLY — any authenticated client could perform any
+// operation in any namespace on any key, and nothing was audited.
+// ============================================================================
+
+/// Enforce that at least one of the caller's roles grants `permission`.
+///
+/// Returns `ApiError::Forbidden` (HTTP 403) on denial. This is authorization
+/// layer 2 (RBAC).
+fn require_rbac(state: &AppState, identity: &ClientIdentity, permission: Permission) -> Result<()> {
+    state
+        .rbac
+        .require_any(&identity.roles, &permission)
+        .map_err(|_| {
+            ApiError::Forbidden(format!(
+                "role(s) {:?} lack permission {}",
+                identity.roles, permission
+            ))
+        })
+}
+
+/// Resolve the namespace an operation runs in and enforce namespace isolation
+/// (authorization layer 1).
+///
+/// The operating namespace is NEVER taken at face value from the request: a
+/// caller may only act in a namespace they have access to. When the request
+/// omits a namespace, the caller's own `identity.namespace` is used. When the
+/// request names a namespace, `NamespaceManager::require_access` must pass
+/// (which, for the default manager, requires it to equal the identity's
+/// namespace unless explicit cross-namespace grants exist).
+fn resolve_namespace(
+    state: &AppState,
+    identity: &ClientIdentity,
+    requested: Option<&str>,
+) -> Result<String> {
+    let ns = requested.unwrap_or(identity.namespace.as_str());
+    state
+        .namespaces
+        .require_access(identity, ns)
+        .map_err(|_| ApiError::Forbidden(format!("no access to namespace {}", ns)))?;
+    Ok(ns.to_string())
+}
+
+/// Enforce the per-key ACL for `permission` (authorization layer 3).
+///
+/// Keys with no ACL row are unrestricted; restricted keys default-deny.
+fn require_acl(
+    state: &AppState,
+    identity: &ClientIdentity,
+    key_id: &str,
+    permission: Permission,
+) -> Result<()> {
+    state
+        .acls
+        .require_access_with_permission(key_id, identity, &permission)
+        .map_err(|_| ApiError::Forbidden(format!("ACL denies access to key {}", key_id)))
+}
+
+/// Record an audit event fail-closed.
+///
+/// If an audit logger is attached and the write fails, the operation is failed
+/// (`ApiError::Internal`) so that no crypto or key-lifecycle action completes
+/// without a durable, tamper-evident record. When no logger is attached (unit
+/// tests), this is a no-op.
+async fn audit_success(
+    state: &AppState,
+    event_type: EventType,
+    operation: &str,
+    namespace: &str,
+    client_id: &str,
+    key_id: Option<String>,
+) -> Result<()> {
+    if let Some(audit) = state.audit.as_ref() {
+        audit
+            .log_success(
+                event_type,
+                operation.to_string(),
+                namespace.to_string(),
+                client_id.to_string(),
+                key_id,
+            )
+            .await
+            .map_err(|e| ApiError::Internal(format!("audit write failed: {}", e)))?;
+    }
+    Ok(())
+}
+
+/// Record a failed-operation audit event (best-effort).
+///
+/// Failures here are logged but do not mask the original error returned to the
+/// caller.
+async fn audit_failure(
+    state: &AppState,
+    event_type: EventType,
+    operation: &str,
+    namespace: &str,
+    client_id: &str,
+    key_id: Option<String>,
+    reason: &str,
+) {
+    if let Some(audit) = state.audit.as_ref() {
+        if let Err(e) = audit
+            .log_failure(
+                event_type,
+                operation.to_string(),
+                namespace.to_string(),
+                client_id.to_string(),
+                key_id,
+                reason.to_string(),
+            )
+            .await
+        {
+            tracing::error!(error = %e, "failed to write failure audit event");
+        }
+    }
+}
 
 // ============================================================================
 // Type Conversions
@@ -271,6 +394,10 @@ pub async fn generate_key(
         "Generating new key"
     );
 
+    // Authorization: RBAC (layer 2) + namespace isolation (layer 1).
+    require_rbac(&state, &identity, Permission::GenerateKey)?;
+    let namespace = resolve_namespace(&state, &identity, Some(&request.namespace))?;
+
     // Convert to key-manager types
     let key_type = to_key_type(&request.algorithm)?;
     let policy = to_usage_policy(&request.purpose);
@@ -278,22 +405,50 @@ pub async fn generate_key(
     // Create key spec
     let spec = KeySpec {
         key_type,
-        namespace: request.namespace.clone(),
+        namespace: namespace.clone(),
         policy,
         labels: request.labels.clone(),
     };
 
     // Generate key using key manager
-    let key_id = state
-        .key_manager
-        .generate_key(spec)
-        .map_err(|e| ApiError::Internal(format!("Key generation failed: {}", e)))?;
+    let key_id = match state.key_manager.generate_key(spec) {
+        Ok(id) => id,
+        Err(e) => {
+            audit_failure(
+                &state,
+                EventType::KeyGeneration,
+                "generate_key",
+                &namespace,
+                &identity.common_name,
+                None,
+                &e.to_string(),
+            )
+            .await;
+            return Err(ApiError::Internal(format!("Key generation failed: {}", e)));
+        }
+    };
 
     // Get the key to retrieve public key
     let key = state
         .key_manager
-        .get_key(&key_id, &request.namespace)
+        .get_key(&key_id, &namespace)
         .map_err(|e| ApiError::Internal(format!("Failed to retrieve key: {}", e)))?;
+
+    // Create a per-key ACL row so subsequent operations are governed by layer 3.
+    // Created unrestricted (any client with the right RBAC permission and
+    // namespace access may use it); operators can later restrict it.
+    state.acls.create_acl(key_id.to_string(), false);
+
+    // Audit fail-closed BEFORE returning success.
+    audit_success(
+        &state,
+        EventType::KeyGeneration,
+        "generate_key",
+        &namespace,
+        &identity.common_name,
+        Some(key_id.to_string()),
+    )
+    .await?;
 
     // Encode public key
     let public_key = key.public_material.as_ref().map(|pk| BASE64.encode(pk));
@@ -323,19 +478,27 @@ pub async fn get_key(
         "Getting key metadata"
     );
 
+    // Authorization: RBAC ViewMetadata + namespace isolation (caller's own ns).
+    require_rbac(&state, &identity, Permission::ViewMetadata)?;
+    let namespace = resolve_namespace(&state, &identity, None)?;
+
     // Parse key ID
     let key_id = KeyId::from_string(&key_id)
         .map_err(|_| ApiError::BadRequest("Invalid key ID format".to_string()))?;
 
-    // Try to get metadata from default namespace first, then try common namespaces
+    // Per-key ACL (layer 3).
+    require_acl(
+        &state,
+        &identity,
+        &key_id.to_string(),
+        Permission::ViewMetadata,
+    )?;
+
+    // Look up metadata strictly within the caller's namespace — never a
+    // cross-tenant "default" fallback.
     let metadata = state
         .key_manager
-        .get_metadata(&key_id, "default")
-        .or_else(|_| {
-            state
-                .key_manager
-                .get_metadata(&key_id, &identity.common_name)
-        })
+        .get_metadata(&key_id, &namespace)
         .map_err(|e| ApiError::NotFound(format!("Key not found: {}", e)))?;
 
     // Determine purpose based on key type (signing keys are Ed25519, ECDSA, RSA)
@@ -372,16 +535,50 @@ pub async fn delete_key(
         "Deleting key"
     );
 
+    // Authorization: DeleteKey is privileged (Admin only) + namespace isolation.
+    require_rbac(&state, &identity, Permission::DeleteKey)?;
+    let namespace = resolve_namespace(&state, &identity, None)?;
+
     // Parse key ID
     let key_id = KeyId::from_string(&key_id)
         .map_err(|_| ApiError::BadRequest("Invalid key ID format".to_string()))?;
 
-    // Delete from default namespace
-    state
-        .key_manager
-        .delete_key(&key_id, "default")
-        .or_else(|_| state.key_manager.delete_key(&key_id, &identity.common_name))
-        .map_err(|e| ApiError::NotFound(format!("Key not found: {}", e)))?;
+    // Per-key ACL (layer 3).
+    require_acl(
+        &state,
+        &identity,
+        &key_id.to_string(),
+        Permission::DeleteKey,
+    )?;
+
+    // Delete strictly within the caller's namespace.
+    if let Err(e) = state.key_manager.delete_key(&key_id, &namespace) {
+        audit_failure(
+            &state,
+            EventType::KeyDeletion,
+            "delete_key",
+            &namespace,
+            &identity.common_name,
+            Some(key_id.to_string()),
+            &e.to_string(),
+        )
+        .await;
+        return Err(ApiError::NotFound(format!("Key not found: {}", e)));
+    }
+
+    // Drop the per-key ACL row now that the key is gone.
+    state.acls.delete_acl(&key_id.to_string());
+
+    // Audit fail-closed before returning success.
+    audit_success(
+        &state,
+        EventType::KeyDeletion,
+        "delete_key",
+        &namespace,
+        &identity.common_name,
+        Some(key_id.to_string()),
+    )
+    .await?;
 
     metrics::counter!("rest_api.keys.deleted").increment(1);
 
@@ -400,32 +597,65 @@ pub async fn rotate_key(
         "Rotating key"
     );
 
+    // Authorization: RBAC RotateKey + namespace isolation (caller's own ns).
+    require_rbac(&state, &identity, Permission::RotateKey)?;
+    let namespace = resolve_namespace(&state, &identity, None)?;
+
     // Parse key ID
     let key_id_parsed = KeyId::from_string(&key_id)
         .map_err(|_| ApiError::BadRequest("Invalid key ID format".to_string()))?;
 
-    // Try to get original key metadata first
-    let original_metadata = state
+    // Per-key ACL (layer 3).
+    require_acl(
+        &state,
+        &identity,
+        &key_id_parsed.to_string(),
+        Permission::RotateKey,
+    )?;
+
+    // Look up original key metadata strictly within the caller's namespace.
+    state
         .key_manager
-        .get_metadata(&key_id_parsed, "default")
-        .or_else(|_| {
-            state
-                .key_manager
-                .get_metadata(&key_id_parsed, &identity.common_name)
-        })
+        .get_metadata(&key_id_parsed, &namespace)
         .map_err(|e| ApiError::NotFound(format!("Key not found: {}", e)))?;
 
     // Rotate key
-    let new_key_id = state
-        .key_manager
-        .rotate_key(&key_id_parsed, &original_metadata.namespace)
-        .map_err(|e| ApiError::Internal(format!("Key rotation failed: {}", e)))?;
+    let new_key_id = match state.key_manager.rotate_key(&key_id_parsed, &namespace) {
+        Ok(id) => id,
+        Err(e) => {
+            audit_failure(
+                &state,
+                EventType::KeyRotation,
+                "rotate_key",
+                &namespace,
+                &identity.common_name,
+                Some(key_id_parsed.to_string()),
+                &e.to_string(),
+            )
+            .await;
+            return Err(ApiError::Internal(format!("Key rotation failed: {}", e)));
+        }
+    };
 
     // Get the new key
     let new_key = state
         .key_manager
-        .get_key(&new_key_id, &original_metadata.namespace)
+        .get_key(&new_key_id, &namespace)
         .map_err(|e| ApiError::Internal(format!("Failed to retrieve rotated key: {}", e)))?;
+
+    // Provision an ACL row for the new key version.
+    state.acls.create_acl(new_key_id.to_string(), false);
+
+    // Audit fail-closed before returning success.
+    audit_success(
+        &state,
+        EventType::KeyRotation,
+        "rotate_key",
+        &namespace,
+        &identity.common_name,
+        Some(new_key_id.to_string()),
+    )
+    .await?;
 
     // Determine purpose based on key type
     let purpose = match new_key.key_type {
@@ -466,7 +696,12 @@ pub async fn list_keys(
     Extension(identity): Extension<ClientIdentity>,
     Query(query): Query<ListKeysQuery>,
 ) -> Result<Json<ListKeysResponse>> {
-    let namespace = query.namespace.as_deref().unwrap_or("default");
+    // Authorization: RBAC ViewMetadata + namespace isolation. The query may
+    // name a namespace but the caller must have access to it; otherwise their
+    // own namespace is used. A caller can NEVER list another tenant's keys by
+    // passing `?namespace=other`.
+    require_rbac(&state, &identity, Permission::ViewMetadata)?;
+    let namespace = resolve_namespace(&state, &identity, query.namespace.as_deref())?;
 
     tracing::info!(
         client = %identity.common_name,
@@ -477,7 +712,7 @@ pub async fn list_keys(
     // List keys from key manager
     let metadata_list = state
         .key_manager
-        .list_keys(namespace, KeyFilter::default())
+        .list_keys(&namespace, KeyFilter::default())
         .map_err(|e| ApiError::Internal(format!("Failed to list keys: {}", e)))?;
 
     // Apply limit
@@ -534,6 +769,10 @@ pub async fn sign_data(
         "Signing data"
     );
 
+    // Authorization: RBAC Sign + namespace isolation + per-key ACL.
+    require_rbac(&state, &identity, Permission::Sign)?;
+    let namespace = resolve_namespace(&state, &identity, None)?;
+
     // Decode the data
     let data = BASE64
         .decode(&request.data)
@@ -543,15 +782,17 @@ pub async fn sign_data(
     let key_id_parsed = KeyId::from_string(&key_id)
         .map_err(|_| ApiError::BadRequest("Invalid key ID format".to_string()))?;
 
-    // Get the key
+    require_acl(
+        &state,
+        &identity,
+        &key_id_parsed.to_string(),
+        Permission::Sign,
+    )?;
+
+    // Get the key strictly within the caller's namespace.
     let key = state
         .key_manager
-        .get_key(&key_id_parsed, "default")
-        .or_else(|_| {
-            state
-                .key_manager
-                .get_key(&key_id_parsed, &identity.common_name)
-        })
+        .get_key(&key_id_parsed, &namespace)
         .map_err(|e| ApiError::NotFound(format!("Key not found: {}", e)))?;
 
     // Get private key material
@@ -561,38 +802,58 @@ pub async fn sign_data(
         .ok_or_else(|| ApiError::BadRequest("Key has no private material".to_string()))?;
 
     // Sign based on key type
-    let (signature, algorithm) = match key.key_type {
-        KeyType::Ed25519 => {
-            let sig = ed25519::Ed25519Engine::sign(private_key, &data)
-                .map_err(|e| ApiError::Internal(format!("Signing failed: {}", e)))?;
-            (sig, "ED25519")
-        }
-        KeyType::EcdsaP256 => {
-            let sig = ecdsa::EcdsaEngine::sign_p256(private_key, &data)
-                .map_err(|e| ApiError::Internal(format!("Signing failed: {}", e)))?;
-            (sig, "ECDSA_P256")
-        }
-        KeyType::EcdsaP384 => {
-            let sig = ecdsa::EcdsaEngine::sign_p384(private_key, &data)
-                .map_err(|e| ApiError::Internal(format!("Signing failed: {}", e)))?;
-            (sig, "ECDSA_P384")
-        }
+    let sign_result: std::result::Result<(Vec<u8>, &'static str), ApiError> = match key.key_type {
+        KeyType::Ed25519 => ed25519::Ed25519Engine::sign(private_key, &data)
+            .map(|sig| (sig, "ED25519"))
+            .map_err(|e| ApiError::Internal(format!("Signing failed: {}", e))),
+        KeyType::EcdsaP256 => ecdsa::EcdsaEngine::sign_p256(private_key, &data)
+            .map(|sig| (sig, "ECDSA_P256"))
+            .map_err(|e| ApiError::Internal(format!("Signing failed: {}", e))),
+        KeyType::EcdsaP384 => ecdsa::EcdsaEngine::sign_p384(private_key, &data)
+            .map(|sig| (sig, "ECDSA_P384"))
+            .map_err(|e| ApiError::Internal(format!("Signing failed: {}", e))),
         KeyType::Rsa2048 | KeyType::Rsa3072 | KeyType::Rsa4096 => {
-            let sig = rsa::RsaEngine::sign_pkcs1v15_sha256(private_key, &data)
-                .map_err(|e| ApiError::Internal(format!("Signing failed: {}", e)))?;
-            (sig, "RSA_PKCS1_V15")
+            rsa::RsaEngine::sign_pkcs1v15_sha256(private_key, &data)
+                .map(|sig| (sig, "RSA_PKCS1_V15"))
+                .map_err(|e| ApiError::Internal(format!("Signing failed: {}", e)))
         }
-        _ => {
-            return Err(ApiError::BadRequest(
-                "Key type does not support signing".to_string(),
-            ))
+        _ => Err(ApiError::BadRequest(
+            "Key type does not support signing".to_string(),
+        )),
+    };
+
+    let (signature, algorithm) = match sign_result {
+        Ok(v) => v,
+        Err(e) => {
+            audit_failure(
+                &state,
+                EventType::Sign,
+                "sign",
+                &namespace,
+                &identity.common_name,
+                Some(key_id_parsed.to_string()),
+                &e.to_string(),
+            )
+            .await;
+            return Err(e);
         }
     };
 
     // Increment operation counter
     let _ = state
         .key_manager
-        .increment_operations(&key_id_parsed, "default");
+        .increment_operations(&key_id_parsed, &namespace);
+
+    // Audit fail-closed before returning the signature.
+    audit_success(
+        &state,
+        EventType::Sign,
+        "sign",
+        &namespace,
+        &identity.common_name,
+        Some(key_id_parsed.to_string()),
+    )
+    .await?;
 
     metrics::counter!("rest_api.crypto.sign").increment(1);
 
@@ -615,6 +876,11 @@ pub async fn verify_signature(
         "Verifying signature"
     );
 
+    // Authorization: verification reads the public key. Require ViewMetadata
+    // (read access) + namespace isolation + per-key ACL.
+    require_rbac(&state, &identity, Permission::ViewMetadata)?;
+    let namespace = resolve_namespace(&state, &identity, None)?;
+
     // Decode the data and signature
     let data = BASE64
         .decode(&request.data)
@@ -628,15 +894,17 @@ pub async fn verify_signature(
     let key_id_parsed = KeyId::from_string(&key_id)
         .map_err(|_| ApiError::BadRequest("Invalid key ID format".to_string()))?;
 
-    // Get the key
+    require_acl(
+        &state,
+        &identity,
+        &key_id_parsed.to_string(),
+        Permission::ViewMetadata,
+    )?;
+
+    // Get the key strictly within the caller's namespace.
     let key = state
         .key_manager
-        .get_key(&key_id_parsed, "default")
-        .or_else(|_| {
-            state
-                .key_manager
-                .get_key(&key_id_parsed, &identity.common_name)
-        })
+        .get_key(&key_id_parsed, &namespace)
         .map_err(|e| ApiError::NotFound(format!("Key not found: {}", e)))?;
 
     // Get public key material
@@ -667,14 +935,57 @@ pub async fn verify_signature(
         }
     };
 
+    // Verification is read-only; record it best-effort (do not fail the op on
+    // an audit-write error for a non-mutating call).
+    audit_failure_ignore_ok(
+        &state,
+        EventType::Verify,
+        "verify",
+        &namespace,
+        &identity.common_name,
+        Some(key_id_parsed.to_string()),
+        valid,
+    )
+    .await;
+
     metrics::counter!("rest_api.crypto.verify").increment(1);
 
     Ok(Json(VerifyResponse { valid }))
 }
 
+/// Record a verify outcome best-effort. Logs success when `valid`, otherwise a
+/// failure event noting the signature did not verify. Never fails the request.
+async fn audit_failure_ignore_ok(
+    state: &AppState,
+    event_type: EventType,
+    operation: &str,
+    namespace: &str,
+    client_id: &str,
+    key_id: Option<String>,
+    valid: bool,
+) {
+    if state.audit.is_none() {
+        return;
+    }
+    if valid {
+        let _ = audit_success(state, event_type, operation, namespace, client_id, key_id).await;
+    } else {
+        audit_failure(
+            state,
+            event_type,
+            operation,
+            namespace,
+            client_id,
+            key_id,
+            "signature did not verify",
+        )
+        .await;
+    }
+}
+
 /// Encrypt data
 pub async fn encrypt_data(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Extension(identity): Extension<ClientIdentity>,
     Path(key_id): Path<String>,
     Json(request): Json<EncryptRequest>,
@@ -684,6 +995,20 @@ pub async fn encrypt_data(
         key_id = %key_id,
         "Encrypting data"
     );
+
+    // Authorization: RBAC Encrypt + namespace isolation + per-key ACL.
+    require_rbac(&state, &identity, Permission::Encrypt)?;
+    let namespace = resolve_namespace(&state, &identity, None)?;
+
+    // Parse and ACL-check the target key id.
+    let key_id_parsed = KeyId::from_string(&key_id)
+        .map_err(|_| ApiError::BadRequest("Invalid key ID format".to_string()))?;
+    require_acl(
+        &state,
+        &identity,
+        &key_id_parsed.to_string(),
+        Permission::Encrypt,
+    )?;
 
     // Decode the plaintext
     let plaintext = BASE64
@@ -712,12 +1037,38 @@ pub async fn encrypt_data(
         .map_err(|e| ApiError::BadRequest(format!("Invalid base64 AAD: {}", e)))?;
 
     // Encrypt (returns nonce || ciphertext || tag combined)
-    let ciphertext_with_nonce = AesGcmEngine::encrypt_aes256(&key, &plaintext, aad.as_deref())
-        .map_err(|e| ApiError::Internal(format!("Encryption failed: {}", e)))?;
+    let ciphertext_with_nonce = match AesGcmEngine::encrypt_aes256(&key, &plaintext, aad.as_deref())
+    {
+        Ok(c) => c,
+        Err(e) => {
+            audit_failure(
+                &state,
+                EventType::Encrypt,
+                "encrypt",
+                &namespace,
+                &identity.common_name,
+                Some(key_id_parsed.to_string()),
+                &e.to_string(),
+            )
+            .await;
+            return Err(ApiError::Internal(format!("Encryption failed: {}", e)));
+        }
+    };
 
     // Extract nonce (first 12 bytes) and ciphertext+tag (rest)
     let nonce = &ciphertext_with_nonce[..12];
     let ciphertext_and_tag = &ciphertext_with_nonce[12..];
+
+    // Audit fail-closed before returning ciphertext.
+    audit_success(
+        &state,
+        EventType::Encrypt,
+        "encrypt",
+        &namespace,
+        &identity.common_name,
+        Some(key_id_parsed.to_string()),
+    )
+    .await?;
 
     metrics::counter!("rest_api.crypto.encrypt").increment(1);
 
@@ -733,7 +1084,7 @@ pub async fn encrypt_data(
 /// Note: Decryption requires symmetric key storage, which is not yet implemented
 /// in the REST API. Use the gRPC API for decryption operations.
 pub async fn decrypt_data(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Extension(identity): Extension<ClientIdentity>,
     Path(key_id): Path<String>,
     Json(_request): Json<DecryptRequest>,
@@ -743,6 +1094,19 @@ pub async fn decrypt_data(
         key_id = %key_id,
         "Decrypting data"
     );
+
+    // Authorize before doing anything, even though the operation itself is not
+    // yet implemented (fail-closed: an unauthorized caller gets 403, not 501).
+    require_rbac(&state, &identity, Permission::Decrypt)?;
+    let _namespace = resolve_namespace(&state, &identity, None)?;
+    let key_id_parsed = KeyId::from_string(&key_id)
+        .map_err(|_| ApiError::BadRequest("Invalid key ID format".to_string()))?;
+    require_acl(
+        &state,
+        &identity,
+        &key_id_parsed.to_string(),
+        Permission::Decrypt,
+    )?;
 
     Err(ApiError::NotImplemented(
         "Decryption is not yet available via REST API. Use the gRPC API for decryption operations."
@@ -772,8 +1136,12 @@ pub struct AuditLogQuery {
 }
 
 /// Get audit log
+///
+/// Requires the `ViewAuditLogs` permission (Admin or Auditor roles). Returns
+/// the tamper-evident events recorded by the [`AsyncAuditLogger`], filtered by
+/// the optional query parameters.
 pub async fn get_audit_log(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Extension(identity): Extension<ClientIdentity>,
     Query(query): Query<AuditLogQuery>,
 ) -> Result<Json<AuditLogResponse>> {
@@ -783,15 +1151,93 @@ pub async fn get_audit_log(
         "Fetching audit log"
     );
 
-    // Note: Full audit integration would require adding the audit module to dependencies
-    // and implementing proper log retrieval. For now, return empty.
-    let response = AuditLogResponse {
-        entries: vec![],
-        total: 0,
-        next_cursor: None,
+    // Authorization: only Auditor/Admin may read the audit trail.
+    require_rbac(&state, &identity, Permission::ViewAuditLogs)?;
+
+    // Without an attached logger there is nothing to read.
+    let Some(audit) = state.audit.as_ref() else {
+        return Ok(Json(AuditLogResponse {
+            entries: vec![],
+            total: 0,
+            next_cursor: None,
+        }));
     };
 
-    Ok(Json(response))
+    // Read the full recorded range, then filter. Sequences are 1-based.
+    let last = audit.current_sequence();
+    let mut events = if last == 0 {
+        Vec::new()
+    } else {
+        audit
+            .get_events_range(1, last)
+            .map_err(|e| ApiError::Internal(format!("audit read failed: {}", e)))?
+    };
+
+    // Apply optional filters.
+    if let Some(event_type) = query.event_type.as_deref() {
+        // Match against the serde snake_case representation of the event type.
+        events.retain(|e| {
+            serde_json::to_value(&e.event_type)
+                .ok()
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .map(|s| s == event_type)
+                .unwrap_or(false)
+        });
+    }
+    if let Some(actor) = query.actor.as_deref() {
+        events.retain(|e| e.client_id == actor);
+    }
+    if let Some(start) = query.start.as_deref() {
+        if let Ok(start_ts) = chrono::DateTime::parse_from_rfc3339(start) {
+            events.retain(|e| e.timestamp >= start_ts);
+        }
+    }
+    if let Some(end) = query.end.as_deref() {
+        if let Ok(end_ts) = chrono::DateTime::parse_from_rfc3339(end) {
+            events.retain(|e| e.timestamp <= end_ts);
+        }
+    }
+
+    let total = events.len() as u64;
+
+    let limit = query.limit.unwrap_or(100) as usize;
+    let entries: Vec<AuditEntry> = events
+        .into_iter()
+        .take(limit)
+        .map(audit_event_to_entry)
+        .collect();
+
+    Ok(Json(AuditLogResponse {
+        entries,
+        total,
+        next_cursor: None,
+    }))
+}
+
+/// Convert an `hsm_audit::AuditEvent` into the REST `AuditEntry` shape.
+fn audit_event_to_entry(event: hsm_audit::AuditEvent) -> AuditEntry {
+    use hsm_audit::OperationResult;
+
+    let (result, details) = match &event.result {
+        OperationResult::Success => ("success".to_string(), None),
+        OperationResult::Failure { reason } => ("failure".to_string(), Some(reason.clone())),
+    };
+
+    let event_type = serde_json::to_value(&event.event_type)
+        .ok()
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "unknown".to_string());
+
+    AuditEntry {
+        id: event.sequence.to_string(),
+        timestamp: event.timestamp.to_rfc3339(),
+        event_type,
+        actor: event.client_id,
+        resource: event.key_id,
+        action: event.operation,
+        result,
+        details,
+    }
 }
 
 #[cfg(test)]

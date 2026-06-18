@@ -1,3 +1,4 @@
+use crate::checkpoint::{Checkpoint, CheckpointError};
 use crate::event::AuditEvent;
 use parking_lot::RwLock;
 use std::fs::{File, OpenOptions};
@@ -19,6 +20,9 @@ pub enum StorageError {
 
     #[error("Invalid log file format")]
     InvalidFormat,
+
+    #[error("Checkpoint error: {0}")]
+    Checkpoint(#[from] CheckpointError),
 }
 
 /// Configuration for log storage
@@ -54,6 +58,11 @@ pub struct AuditStorage {
     current_file: Arc<RwLock<Option<BufWriter<File>>>>,
     current_path: Arc<RwLock<PathBuf>>,
     current_size: Arc<RwLock<u64>>,
+    /// Test-only fault injection: when set, `write_event` returns an IO error
+    /// without writing anything. Used to exercise the durable-write-first
+    /// ordering in the loggers.
+    #[cfg(test)]
+    fail_writes: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AuditStorage {
@@ -69,6 +78,8 @@ impl AuditStorage {
             current_file: Arc::new(RwLock::new(None)),
             current_path: Arc::new(RwLock::new(current_path.clone())),
             current_size: Arc::new(RwLock::new(0)),
+            #[cfg(test)]
+            fail_writes: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
 
         storage.open_current_file()?;
@@ -101,8 +112,22 @@ impl AuditStorage {
         Ok(())
     }
 
+    /// Test-only: enable or disable injected write failures.
+    #[cfg(test)]
+    pub(crate) fn set_fail_writes(&self, fail: bool) {
+        self.fail_writes
+            .store(fail, std::sync::atomic::Ordering::SeqCst);
+    }
+
     /// Write an event to storage
     pub fn write_event(&self, event: &AuditEvent) -> Result<(), StorageError> {
+        #[cfg(test)]
+        if self.fail_writes.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(StorageError::Io(std::io::Error::other(
+                "injected write failure",
+            )));
+        }
+
         // Check if rotation is needed
         if *self.current_size.read() >= self.config.max_file_size {
             self.rotate()?;
@@ -238,6 +263,56 @@ impl AuditStorage {
     /// Force a log rotation
     pub fn force_rotation(&self) -> Result<(), StorageError> {
         self.rotate()
+    }
+
+    /// Path to the checkpoint file.
+    fn checkpoint_path(&self) -> PathBuf {
+        self.config.base_dir.join("checkpoint.json")
+    }
+
+    /// Persist a checkpoint atomically (write-temp-then-rename).
+    ///
+    /// The checkpoint commits to the latest sequence + Merkle root so that a
+    /// later restart can detect tail truncation of the log. The write is
+    /// atomic: a crash mid-write leaves the previous checkpoint intact rather
+    /// than a half-written one.
+    pub fn write_checkpoint(&self, checkpoint: &Checkpoint) -> Result<(), StorageError> {
+        let path = self.checkpoint_path();
+        let tmp = path.with_extension("json.tmp");
+
+        let json = checkpoint.to_json()?;
+        {
+            let mut f = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&tmp)?;
+            f.write_all(json.as_bytes())?;
+            f.write_all(b"\n")?;
+            f.flush()?;
+            f.sync_all()?;
+        }
+        std::fs::rename(&tmp, &path)?;
+        Ok(())
+    }
+
+    /// Read the latest persisted checkpoint, if any.
+    ///
+    /// Returns `Ok(None)` when no checkpoint exists yet (fresh log). A present
+    /// but unparseable checkpoint is surfaced as an error so the caller can
+    /// fail closed rather than silently ignoring it.
+    pub fn read_checkpoint(&self) -> Result<Option<Checkpoint>, StorageError> {
+        let path = self.checkpoint_path();
+        if !path.exists() {
+            return Ok(None);
+        }
+        let contents = std::fs::read_to_string(&path)?;
+        let line = contents.trim();
+        if line.is_empty() {
+            return Ok(None);
+        }
+        let checkpoint = Checkpoint::from_json(line)?;
+        Ok(Some(checkpoint))
     }
 }
 

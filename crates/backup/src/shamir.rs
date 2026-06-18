@@ -119,9 +119,10 @@
 //!     shares[4].clone(),
 //! ];
 //!
-//! // Recover the master key
+//! // Recover the master key (returned as a `Zeroizing<Vec<u8>>` that wipes
+//! // the plaintext key material on drop, and derefs to `[u8]`).
 //! let recovered = recover_master_key(&collected_shares).unwrap();
-//! assert_eq!(recovered, master_key);
+//! assert_eq!(recovered.as_slice(), master_key);
 //! ```
 //!
 //! ## Share serialization for storage
@@ -193,11 +194,56 @@
 //! - No single share reveals any information about the secret
 //! - System is information-theoretically secure (not just computationally)
 
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use sharks::{Share, Sharks};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::error::{BackupError, Result};
+
+type HmacSha256 = Hmac<Sha256>;
+
+/// Domain-separation label for the per-share-set authenticated commitment.
+///
+/// The commitment is `HMAC-SHA256(key = secret, msg = COMMITMENT_DOMAIN)`.
+/// Keying the MAC with the secret itself binds the commitment to the exact
+/// reconstructed value: a wrong share subset reconstructs a *different* secret
+/// whose commitment will not match, so recovery is rejected instead of
+/// silently returning wrong key material.
+const COMMITMENT_DOMAIN: &[u8] = b"hsm-backup/shamir/commitment/v1";
+
+/// Computes the authenticated commitment for a secret.
+///
+/// Returns the 32-byte HMAC-SHA256 tag keyed by the secret over a fixed
+/// domain-separation label. The secret is never revealed by the commitment
+/// (HMAC is a PRF), and reconstructing any value other than the original
+/// produces a different tag.
+fn compute_commitment(secret: &[u8]) -> [u8; 32] {
+    // HMAC accepts keys of any length; keying with the secret binds the
+    // commitment to the exact secret value.
+    let mut mac =
+        HmacSha256::new_from_slice(secret).expect("HMAC-SHA256 accepts keys of any length");
+    mac.update(COMMITMENT_DOMAIN);
+    let tag = mac.finalize().into_bytes();
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&tag);
+    out
+}
+
+/// Verifies a reconstructed secret against an authenticated commitment in
+/// constant time.
+///
+/// Recomputes `HMAC-SHA256(key = candidate, msg = COMMITMENT_DOMAIN)` and uses
+/// the MAC's constant-time `verify_slice` to compare against the stored
+/// commitment. Returns `true` only if the candidate is exactly the secret the
+/// commitment was generated for.
+fn verify_commitment(candidate: &[u8], commitment: &[u8]) -> bool {
+    let mut mac =
+        HmacSha256::new_from_slice(candidate).expect("HMAC-SHA256 accepts keys of any length");
+    mac.update(COMMITMENT_DOMAIN);
+    mac.verify_slice(commitment).is_ok()
+}
 
 /// Configuration for Shamir's Secret Sharing
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -242,6 +288,17 @@ pub struct SerializableShare {
     pub threshold: u8,
     /// Total number of shares
     pub total_shares: u8,
+    /// Authenticated commitment to the original secret
+    /// (`HMAC-SHA256(key = secret, msg = COMMITMENT_DOMAIN)`, 32 bytes).
+    ///
+    /// Every share in a set carries the same commitment. On recovery the
+    /// reconstructed secret is verified against this value before being
+    /// returned, so a wrong/forged subset of shares cannot silently produce
+    /// wrong-but-plausible key material. Defaults to empty for backward
+    /// compatibility with shares produced before commitments existed; an empty
+    /// commitment is treated as *unverifiable* and recovery fails closed.
+    #[serde(default)]
+    pub commitment: Vec<u8>,
 }
 
 /// Shamir's Secret Sharing manager
@@ -317,6 +374,11 @@ impl ShamirSecretSharing {
             return Err(BackupError::ShareGenerationFailed);
         }
 
+        // Authenticated commitment binding every share to the exact secret.
+        // Verified on recovery so a wrong share subset is rejected rather than
+        // silently reconstructing wrong key material.
+        let commitment = compute_commitment(secret);
+
         // Convert to serializable format
         let serializable_shares: Vec<SerializableShare> = shares
             .into_iter()
@@ -328,6 +390,7 @@ impl ShamirSecretSharing {
                     data: share_bytes,
                     threshold: self.config.threshold,
                     total_shares: self.config.share_count,
+                    commitment: commitment.to_vec(),
                 }
             })
             .collect();
@@ -349,15 +412,25 @@ impl ShamirSecretSharing {
         let reconstructed = self.recover_secret(test_shares)?;
 
         // Verify reconstruction matches original
-        if reconstructed != original {
+        if reconstructed.as_slice() != original {
             return Err(BackupError::ShareValidationFailed);
         }
 
         Ok(())
     }
 
-    /// Recover a secret from shares
-    pub fn recover_secret(&self, shares: &[SerializableShare]) -> Result<Vec<u8>> {
+    /// Recover a secret from shares.
+    ///
+    /// The reconstructed secret is verified against the authenticated
+    /// commitment carried by the shares before being returned. If the
+    /// commitment is missing, inconsistent across shares, or does not match the
+    /// reconstructed value (e.g. a wrong or forged share subset was supplied),
+    /// recovery fails closed with [`BackupError::ShareValidationFailed`] rather
+    /// than returning wrong-but-plausible key material.
+    ///
+    /// The returned secret is wrapped in [`Zeroizing`] so the plaintext key
+    /// material is wiped from memory on drop.
+    pub fn recover_secret(&self, shares: &[SerializableShare]) -> Result<Zeroizing<Vec<u8>>> {
         if shares.is_empty() {
             return Err(BackupError::InsufficientShares);
         }
@@ -366,14 +439,27 @@ impl ShamirSecretSharing {
             return Err(BackupError::InsufficientShares);
         }
 
-        // Verify all shares have consistent metadata
+        // Verify all shares have consistent metadata, including a consistent
+        // authenticated commitment. The commitment is the trust anchor: it is
+        // not trusted as a recovery *gate*, but the reconstructed secret must
+        // verify against it, so all shares must agree on it.
         let first_threshold = shares[0].threshold;
         let first_total = shares[0].total_shares;
+        let first_commitment = &shares[0].commitment;
 
         for share in shares.iter() {
             if share.threshold != first_threshold || share.total_shares != first_total {
                 return Err(BackupError::InconsistentShares);
             }
+            if &share.commitment != first_commitment {
+                return Err(BackupError::InconsistentShares);
+            }
+        }
+
+        // A missing commitment cannot be verified: fail closed rather than
+        // silently trust an unauthenticated reconstruction.
+        if first_commitment.len() != 32 {
+            return Err(BackupError::ShareValidationFailed);
         }
 
         // Convert to sharks Share format
@@ -387,11 +473,21 @@ impl ShamirSecretSharing {
 
         let sharks_shares = sharks_shares?;
 
-        // Recover the secret
-        let secret = self
-            .sharks
-            .recover(&sharks_shares)
-            .map_err(|e| BackupError::RecoveryFailed(e.to_string()))?;
+        // Recover the secret. Wrap immediately in `Zeroizing` so the raw buffer
+        // returned by `sharks.recover` is wiped on drop, including on the
+        // error/mismatch paths below.
+        let secret = Zeroizing::new(
+            self.sharks
+                .recover(&sharks_shares)
+                .map_err(|e| BackupError::RecoveryFailed(e.to_string()))?,
+        );
+
+        // Verify the reconstructed secret against the authenticated commitment.
+        // This is the security gate: it rejects wrong/forged share subsets that
+        // would otherwise reconstruct a different (wrong) secret.
+        if !verify_commitment(&secret, first_commitment) {
+            return Err(BackupError::ShareValidationFailed);
+        }
 
         Ok(secret)
     }
@@ -448,8 +544,13 @@ pub fn split_master_key(
     shamir.split_secret(master_key)
 }
 
-/// Recover a master key from shares
-pub fn recover_master_key(shares: &[SerializableShare]) -> Result<Vec<u8>> {
+/// Recover a master key from shares.
+///
+/// The reconstructed key is verified against the authenticated commitment
+/// carried by the shares (see [`ShamirSecretSharing::recover_secret`]) and
+/// returned wrapped in [`Zeroizing`] so the plaintext key material is wiped on
+/// drop.
+pub fn recover_master_key(shares: &[SerializableShare]) -> Result<Zeroizing<Vec<u8>>> {
     if shares.is_empty() {
         return Err(BackupError::InsufficientShares);
     }
@@ -493,15 +594,15 @@ mod tests {
 
         // Recover with exactly threshold shares
         let recovered = shamir.recover_secret(&shares[0..3]).unwrap();
-        assert_eq!(recovered, secret);
+        assert_eq!(recovered.as_slice(), secret);
 
         // Recover with more than threshold shares
         let recovered = shamir.recover_secret(&shares[0..4]).unwrap();
-        assert_eq!(recovered, secret);
+        assert_eq!(recovered.as_slice(), secret);
 
         // Recover with all shares
         let recovered = shamir.recover_secret(&shares).unwrap();
-        assert_eq!(recovered, secret);
+        assert_eq!(recovered.as_slice(), secret);
     }
 
     #[test]
@@ -564,7 +665,7 @@ mod tests {
         let shares = split_master_key(master_key, 3, 5).unwrap();
 
         let recovered = recover_master_key(&shares[0..3]).unwrap();
-        assert_eq!(recovered, master_key);
+        assert_eq!(recovered.as_slice(), master_key);
     }
 
     #[test]
@@ -585,7 +686,7 @@ mod tests {
         for combo in combos {
             let combo_owned: Vec<SerializableShare> = combo.iter().map(|&s| s.clone()).collect();
             let recovered = shamir.recover_secret(&combo_owned).unwrap();
-            assert_eq!(recovered, secret);
+            assert_eq!(recovered.as_slice(), secret);
         }
     }
 
@@ -596,5 +697,159 @@ mod tests {
 
         let result = shamir.split_secret(&[]);
         assert!(matches!(result, Err(BackupError::EmptyData)));
+    }
+
+    /// NEGATIVE test for finding #21: a wrong/forged share subset must be
+    /// rejected, while the correct subset succeeds.
+    ///
+    /// Two independent secrets are split with the SAME (threshold, total)
+    /// metadata. Mixing shares from the two sets passes the (unauthenticated)
+    /// threshold-and-metadata gate but reconstructs a *wrong* secret. The
+    /// authenticated commitment must catch this and reject recovery instead of
+    /// silently returning wrong key material.
+    #[test]
+    fn test_wrong_share_subset_rejected() {
+        let config = ShamirConfig::new(3, 5).unwrap();
+        let shamir = ShamirSecretSharing::new(config);
+
+        let secret_a = b"correct_master_key_aaaaaaaaaaaaa!";
+        let secret_b = b"DIFFERENT_master_key_bbbbbbbbbbb!";
+
+        let shares_a = shamir.split_secret(secret_a).unwrap();
+        let shares_b = shamir.split_secret(secret_b).unwrap();
+
+        // Sanity: both share sets carry the same metadata, so the metadata gate
+        // alone cannot distinguish a mixed subset.
+        assert_eq!(shares_a[0].threshold, shares_b[0].threshold);
+        assert_eq!(shares_a[0].total_shares, shares_b[0].total_shares);
+
+        // The correct subset (all from set A) succeeds and matches secret A.
+        let recovered = shamir.recover_secret(&shares_a[0..3]).unwrap();
+        assert_eq!(recovered.as_slice(), secret_a);
+
+        // A mixed subset has an inconsistent commitment across shares -> reject.
+        let mixed = vec![
+            shares_a[0].clone(),
+            shares_a[1].clone(),
+            shares_b[2].clone(),
+        ];
+        let result = shamir.recover_secret(&mixed);
+        assert!(
+            matches!(result, Err(BackupError::InconsistentShares)),
+            "mixed share subset must be rejected, got {result:?}"
+        );
+
+        // Forge the mixed share's commitment to match set A so it passes the
+        // consistency gate, but the share DATA still belongs to set B. The
+        // reconstructed secret will be wrong, and commitment verification over
+        // the reconstructed value must reject it (fail closed).
+        let mut forged = shares_b[2].clone();
+        forged.commitment = shares_a[0].commitment.clone();
+        let forged_subset = vec![shares_a[0].clone(), shares_a[1].clone(), forged];
+        let result = shamir.recover_secret(&forged_subset);
+        assert!(
+            matches!(result, Err(BackupError::ShareValidationFailed)),
+            "forged-commitment wrong subset must fail closed, got {result:?}"
+        );
+    }
+
+    /// Finding #21: shares with a missing commitment (e.g. legacy shares
+    /// produced before commitments existed, deserialized with `serde(default)`)
+    /// cannot be authenticated and must fail closed rather than silently
+    /// trusting an unverified reconstruction.
+    #[test]
+    fn test_missing_commitment_fails_closed() {
+        let config = ShamirConfig::new(3, 5).unwrap();
+        let shamir = ShamirSecretSharing::new(config);
+
+        let secret = b"legacy_master_key_without_commit";
+        let mut shares = shamir.split_secret(secret).unwrap();
+
+        // Simulate legacy shares with no commitment.
+        for share in &mut shares {
+            share.commitment = Vec::new();
+        }
+
+        let result = shamir.recover_secret(&shares[0..3]);
+        assert!(
+            matches!(result, Err(BackupError::ShareValidationFailed)),
+            "missing commitment must fail closed, got {result:?}"
+        );
+    }
+
+    /// Finding #21: tampering with a single share's commitment (forged
+    /// authenticator) is detected as inconsistent metadata.
+    #[test]
+    fn test_tampered_commitment_detected() {
+        let config = ShamirConfig::new(3, 5).unwrap();
+        let shamir = ShamirSecretSharing::new(config);
+
+        let secret = b"master_key_to_protect_from_forge";
+        let mut shares = shamir.split_secret(secret).unwrap();
+
+        // Flip a bit in one share's commitment.
+        shares[1].commitment[0] ^= 0x01;
+
+        let result = shamir.recover_secret(&shares[0..3]);
+        assert!(
+            matches!(result, Err(BackupError::InconsistentShares)),
+            "tampered commitment must be rejected, got {result:?}"
+        );
+    }
+
+    /// Finding #21: if ALL shares carry the same forged commitment (so the
+    /// consistency gate passes) but it does not match the real secret, recovery
+    /// must still fail closed via commitment verification over the
+    /// reconstructed value.
+    #[test]
+    fn test_uniformly_forged_commitment_fails_closed() {
+        let config = ShamirConfig::new(3, 5).unwrap();
+        let shamir = ShamirSecretSharing::new(config);
+
+        let secret = b"master_key_real_value_aaaaaaaaaa";
+        let mut shares = shamir.split_secret(secret).unwrap();
+
+        // Replace every share's commitment with a commitment for a DIFFERENT
+        // secret. Consistency passes (all equal) but verification fails.
+        let bogus = compute_commitment(b"some_other_value_entirely_bbbbbb").to_vec();
+        for share in &mut shares {
+            share.commitment = bogus.clone();
+        }
+
+        let result = shamir.recover_secret(&shares[0..3]);
+        assert!(
+            matches!(result, Err(BackupError::ShareValidationFailed)),
+            "uniformly forged commitment must fail closed, got {result:?}"
+        );
+    }
+
+    /// Finding #22: the recovered secret is returned as `Zeroizing<Vec<u8>>`,
+    /// which derefs to `[u8]` and wipes on drop. Behavioral assertion that the
+    /// API stays usable as a byte slice.
+    #[test]
+    fn test_recovered_secret_is_zeroizing() {
+        let config = ShamirConfig::new(2, 3).unwrap();
+        let shamir = ShamirSecretSharing::new(config);
+
+        let secret = b"zeroizing_return_type_check_data";
+        let shares = shamir.split_secret(secret).unwrap();
+
+        let recovered: Zeroizing<Vec<u8>> = shamir.recover_secret(&shares[0..2]).unwrap();
+        // Usable as a slice via Deref.
+        assert_eq!(&recovered[..], secret);
+        assert_eq!(recovered.len(), secret.len());
+    }
+
+    /// The commitment is a keyed HMAC tag, not the plaintext: it must not equal
+    /// the secret, two distinct secrets yield distinct tags, and only the exact
+    /// secret verifies.
+    #[test]
+    fn test_commitment_does_not_reveal_secret() {
+        let c1 = compute_commitment(b"secret-one");
+        let c2 = compute_commitment(b"secret-two");
+        assert_ne!(c1, c2);
+        assert_ne!(&c1[..], b"secret-one");
+        assert!(verify_commitment(b"secret-one", &c1));
+        assert!(!verify_commitment(b"secret-two", &c1));
     }
 }

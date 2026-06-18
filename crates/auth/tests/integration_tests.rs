@@ -48,6 +48,7 @@ fn test_full_authorization_flow() {
 }
 
 #[test]
+#[allow(deprecated)] // exercises the deprecated validate_session path on purpose
 fn test_session_lifecycle() {
     let sessions = SessionManager::new(3600);
 

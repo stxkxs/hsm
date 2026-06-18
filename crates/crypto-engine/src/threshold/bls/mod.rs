@@ -57,7 +57,8 @@
 //!
 //! // Aggregate signature shares
 //! let participants = vec![shares[0].participant_id, shares[1].participant_id];
-//! let signature = ThresholdBlsEngine::aggregate(&[share1, share2], &participants).unwrap();
+//! let signature =
+//!     ThresholdBlsEngine::aggregate(&[share1, share2], &participants, config.threshold).unwrap();
 //!
 //! // Verify against group public key
 //! assert!(ThresholdBlsEngine::verify(&group_key, message, &signature).unwrap());

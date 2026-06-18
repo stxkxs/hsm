@@ -344,7 +344,7 @@ fn test_all_violation_types() {
     let violation_types: std::collections::HashSet<_> = report
         .violations
         .iter()
-        .map(|v| std::mem::discriminant(v))
+        .map(std::mem::discriminant)
         .collect();
 
     assert!(violation_types.len() >= 3);

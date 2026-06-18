@@ -13,6 +13,7 @@ fn test_hash_chain_integrity() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -50,6 +51,7 @@ fn test_tamper_detection_single_event() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -92,6 +94,7 @@ fn test_chain_break_detection() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -127,6 +130,7 @@ fn test_sequence_gap_detection() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -162,6 +166,7 @@ fn test_merkle_tree_integrity() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -203,6 +208,7 @@ fn test_merkle_root_changes_on_update() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -245,6 +251,7 @@ fn test_persistence_integrity() {
             },
             enabled: true,
             rebuild_merkle_on_start: false,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();
@@ -275,6 +282,7 @@ fn test_persistence_integrity() {
             },
             enabled: true,
             rebuild_merkle_on_start: true,
+            checkpoint_key: None,
         };
 
         let logger = AuditLogger::new(config).unwrap();
@@ -307,6 +315,7 @@ fn test_verification_report() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -351,6 +360,7 @@ fn test_mixed_event_types() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();
@@ -440,6 +450,7 @@ fn test_concurrent_logging() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = Arc::new(AuditLogger::new(config).unwrap());
@@ -486,6 +497,7 @@ fn test_log_rotation_integrity() {
         },
         enabled: true,
         rebuild_merkle_on_start: false,
+        checkpoint_key: None,
     };
 
     let logger = AuditLogger::new(config).unwrap();

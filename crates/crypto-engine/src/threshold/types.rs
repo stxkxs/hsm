@@ -685,6 +685,14 @@ pub enum ThresholdError {
     /// Aggregation failed.
     #[error("Signature aggregation failed: {0}")]
     AggregationFailed(String),
+
+    /// Operation is intentionally not implemented and must fail closed.
+    ///
+    /// Used where a protocol is not production-ready (e.g. threshold ECDSA
+    /// signing, which does not yet compute the modular inverse of the nonce)
+    /// and must never silently emit a cryptographically invalid result.
+    #[error("Operation not implemented: {0}")]
+    NotImplemented(String),
 }
 
 #[cfg(test)]

@@ -7,8 +7,6 @@ pub use log::{LogEntry, RaftLog};
 pub use state::RaftState;
 
 use crate::config::NodeId;
-use crate::error::Result;
-use crate::node::Command;
 use serde::{Deserialize, Serialize};
 
 /// Raft message types

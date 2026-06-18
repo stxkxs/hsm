@@ -8,7 +8,7 @@
 //!
 //! Goal: Prevent accidental logging or display of sensitive cryptographic material
 
-use hsm_crypto_engine::asymmetric::{ecdsa::EcdsaEngine, ed25519::Ed25519Engine, rsa::RsaEngine};
+use hsm_crypto_engine::asymmetric::{ed25519::Ed25519Engine, rsa::RsaEngine};
 use hsm_crypto_engine::{CryptoError, KeyMaterial};
 use std::panic;
 
@@ -60,21 +60,15 @@ fn test_error_messages_no_key_leakage() {
     let pattern_key = KeyMaterial::from_bytes(vec![0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE]);
     let pattern_key_256 = KeyMaterial::from_bytes(vec![0xDE; 256]);
 
-    match RsaEngine::sign_pkcs1v15_sha256(&pattern_key, message) {
-        Err(e) => {
-            let error_string = e.to_string();
-            assert!(!error_string.to_uppercase().contains("DEADBEEF"));
-            assert!(!error_string.to_uppercase().contains("CAFEBABE"));
-        }
-        Ok(_) => {}
+    if let Err(e) = RsaEngine::sign_pkcs1v15_sha256(&pattern_key, message) {
+        let error_string = e.to_string();
+        assert!(!error_string.to_uppercase().contains("DEADBEEF"));
+        assert!(!error_string.to_uppercase().contains("CAFEBABE"));
     }
 
-    match RsaEngine::sign_pkcs1v15_sha256(&pattern_key_256, message) {
-        Err(e) => {
-            let error_string = e.to_string();
-            assert!(!error_string.contains("DEDEDE"));
-        }
-        Ok(_) => {}
+    if let Err(e) = RsaEngine::sign_pkcs1v15_sha256(&pattern_key_256, message) {
+        let error_string = e.to_string();
+        assert!(!error_string.contains("DEDEDE"));
     }
 }
 
@@ -134,7 +128,7 @@ fn test_derived_keys_no_leakage() {
     assert_eq!(derived_key.as_bytes().len(), 64);
 
     // Use the key in an operation
-    let (_, public_key) = Ed25519Engine::generate_keypair().unwrap();
+    let (_, _public_key) = Ed25519Engine::generate_keypair().unwrap();
     let message = b"test";
 
     // Even if operation fails, error should not leak the derived key
@@ -193,7 +187,7 @@ fn test_panic_no_key_leakage() {
         // panic!("Debug: {:?}", key); // This won't compile - good!
 
         // Safe panic - no key material
-        if key.as_bytes().len() > 0 {
+        if !key.as_bytes().is_empty() {
             // Normal operation - no panic
             "ok"
         } else {
@@ -209,8 +203,8 @@ fn test_panic_no_key_leakage() {
 fn test_large_key_error_no_leakage() {
     // Create a recognizable pattern in a large key
     let mut key_bytes = vec![0x13; 4096];
-    for i in 0..256 {
-        key_bytes[i] = 0xAB; // Recognizable pattern
+    for byte in key_bytes.iter_mut().take(256) {
+        *byte = 0xAB; // Recognizable pattern
     }
 
     let large_key = KeyMaterial::from_bytes(key_bytes.clone());

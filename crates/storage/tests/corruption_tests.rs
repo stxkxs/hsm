@@ -121,11 +121,7 @@ fn test_corrupted_journal_recovery() {
     let journal_path = temp_dir.path().join("namespaces/test/journal/wal.log");
 
     if journal_path.exists() {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .append(true)
-            .open(&journal_path)
-            .unwrap();
+        let mut file = OpenOptions::new().append(true).open(&journal_path).unwrap();
         file.write_all(&[0xFF; 100]).unwrap();
         drop(file);
     }
@@ -161,11 +157,7 @@ fn test_partial_write_recovery() {
 
     if journal_path.exists() {
         // Append incomplete data
-        let mut file = OpenOptions::new()
-            .write(true)
-            .append(true)
-            .open(&journal_path)
-            .unwrap();
+        let mut file = OpenOptions::new().append(true).open(&journal_path).unwrap();
         file.write_all(&[0, 0, 0, 10]).unwrap(); // Length prefix
         file.write_all(&[1, 2, 3]).unwrap(); // Incomplete data
         drop(file);

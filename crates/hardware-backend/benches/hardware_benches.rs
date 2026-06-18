@@ -25,8 +25,12 @@
 //! - remote_sign: < 2ms
 //! - attest: < 20ms (local attestation)
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+#[cfg(any(feature = "aws-nitro", feature = "intel-sgx", feature = "amd-sev"))]
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+#[cfg(any(feature = "aws-nitro", feature = "intel-sgx", feature = "amd-sev"))]
 use hsm_hardware_backend::{HardwareBackend, PlaintextKey};
+#[cfg(any(feature = "aws-nitro", feature = "intel-sgx", feature = "amd-sev"))]
+use std::hint::black_box;
 
 #[cfg(feature = "aws-nitro")]
 use hsm_hardware_backend::{NitroConfig, NitroEnclaveBackend};
@@ -38,10 +42,12 @@ use hsm_hardware_backend::{SgxBackend, SgxConfig};
 use hsm_hardware_backend::{SevBackend, SevConfig};
 
 // Common test data
+#[cfg(any(feature = "aws-nitro", feature = "intel-sgx", feature = "amd-sev"))]
 fn get_test_key(size: usize) -> PlaintextKey {
     PlaintextKey::new(vec![0x42; size])
 }
 
+#[cfg(any(feature = "aws-nitro", feature = "intel-sgx", feature = "amd-sev"))]
 fn get_test_message(size: usize) -> Vec<u8> {
     vec![0x99; size]
 }

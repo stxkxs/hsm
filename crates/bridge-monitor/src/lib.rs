@@ -1,7 +1,4 @@
 #![deny(unsafe_code)]
-#![allow(dead_code)]
-#![allow(unused_imports)]
-#![allow(unused_variables)]
 //! Bridge Security Monitor
 //!
 //! Provides cross-chain bridge monitoring and security enforcement for HSM.
@@ -111,6 +108,14 @@ impl BridgeMonitor {
 
     /// Start the bridge monitor
     pub async fn start(&self) -> Result<()> {
+        // Honor the bridge enable flag from configuration.
+        if !self.config.bridge.enabled {
+            return Err(BridgeError::Internal(format!(
+                "Bridge '{}' is disabled in configuration",
+                self.config.bridge.name
+            )));
+        }
+
         *self.running.write().await = true;
 
         // Start all watchers
@@ -125,10 +130,38 @@ impl BridgeMonitor {
             });
         }
 
+        // Spawn a maintenance loop that reclaims expired correlations and
+        // releases time-locked transactions at the configured cadence.
+        self.spawn_maintenance();
+
         // Start event processing
         self.process_events().await;
 
         Ok(())
+    }
+
+    /// Spawn the periodic maintenance task driven by configuration.
+    fn spawn_maintenance(&self) {
+        let interval =
+            std::time::Duration::from_secs(self.config.correlation.cleanup_interval_secs.max(1));
+        let correlator = self.correlator.clone();
+        let enforcer = self.enforcer.clone();
+
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            loop {
+                ticker.tick().await;
+                let expired = correlator.cleanup_expired();
+                if expired > 0 {
+                    tracing::debug!("Reclaimed {} expired correlations", expired);
+                }
+                let _ = enforcer.cleanup_expired();
+                let released = enforcer.release_expired(std::time::Instant::now());
+                for event in released {
+                    tracing::info!("Time lock released for correlation {}", event.id);
+                }
+            }
+        });
     }
 
     /// Stop the bridge monitor
@@ -178,7 +211,7 @@ impl BridgeMonitor {
 
                 // Enforce policy
                 let action = self.enforcer.evaluate(&correlated, &detection).await?;
-                self.enforcer.execute(action).await?;
+                self.enforcer.execute(&correlated, action).await?;
             }
         }
 

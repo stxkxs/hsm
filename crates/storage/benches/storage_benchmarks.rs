@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use hsm_storage::*;
+use std::hint::black_box;
 use tempfile::TempDir;
 
 // Helper to create test storage
@@ -214,7 +215,7 @@ fn bench_sharding(c: &mut Criterion) {
 
 // Benchmark: Async storage
 fn bench_async_storage(c: &mut Criterion) {
-    let mut group = c.benchmark_group("async_storage");
+    let group = c.benchmark_group("async_storage");
 
     // Async benchmarks are skipped for now due to runtime overhead
     // In production, async I/O would show benefits under concurrent load

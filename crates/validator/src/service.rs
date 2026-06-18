@@ -56,9 +56,9 @@ pub struct ValidatorService {
     base_dir: PathBuf,
     /// Ethereum slashing protection database
     eth_slashing_db: Arc<SlashingProtectionDb>,
-    /// Babylon EOTS slashing database (optional)
+    /// Babylon EOTS slashing database (present only when Babylon support is enabled)
     #[cfg(feature = "babylon")]
-    babylon_slashing_db: Arc<EotsSlashingDb>,
+    babylon_slashing_db: Option<Arc<EotsSlashingDb>>,
     /// Registered Ethereum validators
     eth_validators: RwLock<HashMap<Vec<u8>, Arc<EthereumValidator>>>,
     /// Registered Babylon validators
@@ -78,6 +78,38 @@ impl ValidatorService {
     /// - `{base_dir}/ethereum/` - Ethereum slashing protection
     /// - `{base_dir}/babylon/` - Babylon EOTS slashing protection (if feature enabled)
     pub async fn new<P: AsRef<Path>>(base_dir: P) -> Result<Self> {
+        // When compiled with Babylon support, `new` enables it by default to
+        // preserve backwards-compatible behaviour. Use `new_with_options` or the
+        // builder to opt out at runtime.
+        #[cfg(feature = "babylon")]
+        let enable_babylon = true;
+
+        Self::new_with_options(
+            base_dir,
+            #[cfg(feature = "babylon")]
+            enable_babylon,
+        )
+        .await
+    }
+
+    /// Create a new validator service with explicit options.
+    ///
+    /// # Arguments
+    ///
+    /// * `base_dir` - Directory for storing slashing protection databases
+    /// * `enable_babylon` - When the `babylon` feature is compiled, controls
+    ///   whether the Babylon EOTS slashing database is opened. When `false`,
+    ///   Babylon validator operations will fail with an error.
+    ///
+    /// # Databases Created
+    ///
+    /// - `{base_dir}/ethereum/` - Ethereum slashing protection
+    /// - `{base_dir}/babylon/` - Babylon EOTS slashing protection
+    ///   (only if the `babylon` feature is compiled and `enable_babylon` is true)
+    pub async fn new_with_options<P: AsRef<Path>>(
+        base_dir: P,
+        #[cfg(feature = "babylon")] enable_babylon: bool,
+    ) -> Result<Self> {
         let base_dir = base_dir.as_ref().to_path_buf();
 
         // Create directories
@@ -88,14 +120,22 @@ impl ValidatorService {
         let eth_slashing_db = Arc::new(SlashingProtectionDb::open(&eth_db_path)?);
 
         #[cfg(feature = "babylon")]
-        let babylon_slashing_db = {
+        let babylon_slashing_db = if enable_babylon {
             let babylon_db_path = base_dir.join("babylon");
             std::fs::create_dir_all(&babylon_db_path)?;
-            Arc::new(EotsSlashingDb::open(&babylon_db_path)?)
+            Some(Arc::new(EotsSlashingDb::open(&babylon_db_path)?))
+        } else {
+            None
         };
+
+        #[cfg(feature = "babylon")]
+        let babylon_enabled = enable_babylon;
+        #[cfg(not(feature = "babylon"))]
+        let babylon_enabled = false;
 
         info!(
             base_dir = %base_dir.display(),
+            babylon_enabled,
             "Validator service initialized"
         );
 
@@ -116,7 +156,7 @@ impl ValidatorService {
         let eth_slashing_db = Arc::new(SlashingProtectionDb::in_memory()?);
 
         #[cfg(feature = "babylon")]
-        let babylon_slashing_db = Arc::new(EotsSlashingDb::in_memory()?);
+        let babylon_slashing_db = Some(Arc::new(EotsSlashingDb::in_memory()?));
 
         Ok(Self {
             base_dir: PathBuf::from("/tmp/validator-service"),
@@ -183,7 +223,13 @@ impl ValidatorService {
         secret_key: &[u8],
         chain_id: &str,
     ) -> Result<Arc<BabylonValidator>> {
-        let eots_key = EotsKey::new(secret_key, chain_id, self.babylon_slashing_db.clone())?;
+        let babylon_db = self.babylon_slashing_db.as_ref().ok_or_else(|| {
+            crate::error::ValidatorError::Internal(
+                "Babylon support is not enabled on this validator service".to_string(),
+            )
+        })?;
+
+        let eots_key = EotsKey::new(secret_key, chain_id, babylon_db.clone())?;
 
         let pubkey = eots_key.public_key().to_vec();
         let validator = Arc::new(BabylonValidator::new(eots_key));
@@ -204,7 +250,13 @@ impl ValidatorService {
     /// Generate a new Babylon validator with a random key.
     #[cfg(feature = "babylon")]
     pub fn generate_babylon_validator(&self, chain_id: &str) -> Result<Arc<BabylonValidator>> {
-        let eots_key = EotsKey::generate(chain_id, self.babylon_slashing_db.clone())?;
+        let babylon_db = self.babylon_slashing_db.as_ref().ok_or_else(|| {
+            crate::error::ValidatorError::Internal(
+                "Babylon support is not enabled on this validator service".to_string(),
+            )
+        })?;
+
+        let eots_key = EotsKey::generate(chain_id, babylon_db.clone())?;
 
         let pubkey = eots_key.public_key().to_vec();
         let validator = Arc::new(BabylonValidator::new(eots_key));
@@ -270,7 +322,9 @@ impl ValidatorService {
         self.eth_slashing_db.flush()?;
 
         #[cfg(feature = "babylon")]
-        self.babylon_slashing_db.flush()?;
+        if let Some(db) = &self.babylon_slashing_db {
+            db.flush()?;
+        }
 
         Ok(())
     }
@@ -284,6 +338,9 @@ impl ValidatorService {
 /// Builder for creating a ValidatorService with custom configuration.
 pub struct ValidatorServiceBuilder {
     base_dir: PathBuf,
+    /// Whether to enable Babylon EOTS support. Only meaningful when the
+    /// `babylon` feature is compiled (it is the only thing that can set it).
+    #[cfg(feature = "babylon")]
     enable_babylon: bool,
 }
 
@@ -292,6 +349,7 @@ impl ValidatorServiceBuilder {
     pub fn new<P: AsRef<Path>>(base_dir: P) -> Self {
         Self {
             base_dir: base_dir.as_ref().to_path_buf(),
+            #[cfg(feature = "babylon")]
             enable_babylon: false,
         }
     }
@@ -304,8 +362,17 @@ impl ValidatorServiceBuilder {
     }
 
     /// Build the service.
+    ///
+    /// When the `babylon` feature is compiled, the resulting service has Babylon
+    /// EOTS support enabled only if [`with_babylon`](Self::with_babylon) was
+    /// called on this builder.
     pub async fn build(self) -> Result<ValidatorService> {
-        ValidatorService::new(&self.base_dir).await
+        ValidatorService::new_with_options(
+            &self.base_dir,
+            #[cfg(feature = "babylon")]
+            self.enable_babylon,
+        )
+        .await
     }
 }
 
@@ -427,6 +494,42 @@ mod tests {
 
         // Second signature at same height fails
         let result = validator.sign_finality_vote(height, &[0xcd; 32]);
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "babylon")]
+    #[test]
+    fn test_builder_with_babylon_enables_babylon() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = tokio_test::block_on(async {
+            ValidatorServiceBuilder::new(dir.path())
+                .with_babylon()
+                .build()
+                .await
+                .unwrap()
+        });
+
+        // With Babylon enabled, generating a Babylon validator must succeed.
+        let validator = service
+            .generate_babylon_validator("babylon-testnet")
+            .unwrap();
+        assert_eq!(validator.public_key().len(), 33);
+    }
+
+    #[cfg(feature = "babylon")]
+    #[test]
+    fn test_builder_without_babylon_disables_babylon() {
+        let dir = tempfile::tempdir().unwrap();
+        // Builder without `with_babylon()` must not enable Babylon support.
+        let service = tokio_test::block_on(async {
+            ValidatorServiceBuilder::new(dir.path())
+                .build()
+                .await
+                .unwrap()
+        });
+
+        // Generating a Babylon validator must fail because support is disabled.
+        let result = service.generate_babylon_validator("babylon-testnet");
         assert!(result.is_err());
     }
 

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::error::{BackupError, Result};
-use crate::export::EncryptedBackup;
+use crate::export::{derive_aes_key, EncryptedBackup};
 
 /// Represents imported key data
 #[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
@@ -53,29 +53,20 @@ impl KeyImporter {
             return Err(BackupError::UnsupportedVersion(backup.version));
         }
 
-        // Verify password
-        let password_hash = PasswordHash::new(&backup.password_hash)
+        // Verify the supplied password against the separate verifier hash.
+        // This gives a clear InvalidPassword error early; the AEAD tag check
+        // below is the cryptographic guarantee.
+        let verifier = PasswordHash::new(&backup.verifier_hash)
             .map_err(|e| BackupError::InvalidFormat(e.to_string()))?;
 
         self.argon2
-            .verify_password(password, &password_hash)
+            .verify_password(password, &verifier)
             .map_err(|_| BackupError::InvalidPassword)?;
 
-        // Derive the encryption key from the password hash
-        let key_bytes = password_hash
-            .hash
-            .ok_or_else(|| BackupError::KeyDerivation("No hash in backup".to_string()))?;
-
-        let key_material = key_bytes.as_bytes();
-        if key_material.len() < 32 {
-            return Err(BackupError::KeyDerivation(
-                "Insufficient key material".to_string(),
-            ));
-        }
-
-        let encryption_key: [u8; 32] = key_material[..32]
-            .try_into()
-            .map_err(|_| BackupError::KeyDerivation("Key size mismatch".to_string()))?;
+        // Re-derive the AES-256 key from the supplied password and the stored
+        // KDF salt. The key is NOT read from any stored hash; the backup file
+        // alone does not contain it.
+        let encryption_key = derive_aes_key(&self.argon2, password, &backup.kdf_salt)?;
 
         // Create cipher
         let cipher = Aes256Gcm::new(&encryption_key.into());
@@ -122,9 +113,14 @@ impl KeyImporter {
             return Err(BackupError::UnsupportedVersion(backup.version));
         }
 
-        // Verify password hash format
-        PasswordHash::new(&backup.password_hash)
+        // Verify the verifier hash format
+        PasswordHash::new(&backup.verifier_hash)
             .map_err(|e| BackupError::InvalidFormat(e.to_string()))?;
+
+        // Verify KDF salt is present
+        if backup.kdf_salt.is_empty() {
+            return Err(BackupError::InvalidFormat("Missing KDF salt".to_string()));
+        }
 
         // Verify nonce size
         if backup.nonce.len() != 12 {
@@ -141,10 +137,10 @@ impl KeyImporter {
 
     /// Check if password is correct without full decryption
     pub fn check_password(&self, backup: &EncryptedBackup, password: &[u8]) -> Result<bool> {
-        let password_hash = PasswordHash::new(&backup.password_hash)
+        let verifier = PasswordHash::new(&backup.verifier_hash)
             .map_err(|e| BackupError::InvalidFormat(e.to_string()))?;
 
-        match self.argon2.verify_password(password, &password_hash) {
+        match self.argon2.verify_password(password, &verifier) {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
@@ -181,11 +177,51 @@ mod tests {
         let importer = KeyImporter::new();
 
         let backup = exporter
-            .export_keys(b"data", b"correct_password", None)
+            .export_keys(b"data", b"correct_password1", None)
             .unwrap();
 
-        let result = importer.import_keys(&backup, b"wrong_password");
+        let result = importer.import_keys(&backup, b"wrong_password12");
         assert!(matches!(result, Err(BackupError::InvalidPassword)));
+    }
+
+    /// Regression test: even if an attacker strips the verifier-based password
+    /// check, a wrong password must still fail to decrypt because the AES key
+    /// is derived from the password and the AEAD tag will not validate.
+    ///
+    /// On the old code the key was the first 32 bytes of the stored hash, so
+    /// the data was decryptable regardless of the password. This re-derives a
+    /// key from the WRONG password against the stored KDF salt and asserts the
+    /// AEAD decrypt fails.
+    #[test]
+    fn test_wrong_password_cannot_decrypt_payload() {
+        use aes_gcm::aead::{Aead, KeyInit};
+        use aes_gcm::{Aes256Gcm, Nonce};
+
+        let exporter = KeyExporter::new();
+        let original = b"top_secret_signing_key_bytes";
+        let backup = exporter
+            .export_keys(original, b"the_real_password1", None)
+            .unwrap();
+
+        // Derive a key directly from the wrong password + stored salt,
+        // bypassing any verifier check, and try the raw AEAD decryption.
+        let argon2 = Argon2::default();
+        let wrong_key = derive_aes_key(&argon2, b"the_wrong_password", &backup.kdf_salt).unwrap();
+        let cipher = Aes256Gcm::new(&wrong_key.into());
+        let nonce = Nonce::from_slice(&backup.nonce);
+        let result = cipher.decrypt(nonce, backup.encrypted_data.as_ref());
+        assert!(
+            result.is_err(),
+            "wrong password must not decrypt the payload"
+        );
+
+        // And the correct password must round-trip.
+        let correct_key = derive_aes_key(&argon2, b"the_real_password1", &backup.kdf_salt).unwrap();
+        let cipher = Aes256Gcm::new(&correct_key.into());
+        let recovered = cipher
+            .decrypt(nonce, backup.encrypted_data.as_ref())
+            .unwrap();
+        assert_eq!(recovered, original);
     }
 
     #[test]
@@ -226,7 +262,9 @@ mod tests {
         let backup = exporter.export_keys(b"data", password, None).unwrap();
 
         assert!(importer.check_password(&backup, password).unwrap());
-        assert!(!importer.check_password(&backup, b"wrong").unwrap());
+        assert!(!importer
+            .check_password(&backup, b"wrong_password12")
+            .unwrap());
     }
 
     #[test]

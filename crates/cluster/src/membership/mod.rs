@@ -4,7 +4,6 @@ use crate::config::{ClusterConfig, NodeId, PeerConfig};
 use crate::error::{ClusterError, Result};
 use dashmap::DashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 
@@ -121,9 +120,30 @@ impl MembershipManager {
         Ok(())
     }
 
+    /// Local node identifier this membership manager belongs to.
+    pub fn node_id(&self) -> &NodeId {
+        &self.config.node_id
+    }
+
+    /// Number of consecutive missed heartbeats after which a peer is marked
+    /// unhealthy. Derived from the configured election timeout relative to the
+    /// heartbeat interval, so a peer is considered down once it could not have
+    /// reset our election timer.
+    pub fn failure_threshold(&self) -> u32 {
+        let heartbeat = self.config.raft.heartbeat_interval_ms.max(1);
+        let election = self.config.raft.election_timeout_max_ms;
+        // At least one missed heartbeat; otherwise the number of heartbeats
+        // that fit within a full election timeout.
+        ((election / heartbeat) as u32).max(1)
+    }
+
     /// Start health check loop
     async fn start_health_check(&self) {
-        let interval = std::time::Duration::from_millis(1000);
+        // Drive the cadence from the configured heartbeat interval rather than
+        // a hard-coded value, so the membership view reacts on the same clock
+        // the rest of the Raft layer uses.
+        let interval =
+            std::time::Duration::from_millis(self.config.raft.heartbeat_interval_ms.max(1));
 
         tokio::spawn({
             async move {
@@ -162,8 +182,9 @@ impl MembershipManager {
 
     /// Record failed heartbeat
     pub fn record_failure(&self, node_id: &NodeId) {
+        let threshold = self.failure_threshold();
         self.update_peer(node_id, |peer| {
-            peer.record_failure(3);
+            peer.record_failure(threshold);
         });
 
         // Update connected count

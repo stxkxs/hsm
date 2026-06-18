@@ -305,33 +305,45 @@ impl HdKeyManager {
             .as_ref()
             .ok_or_else(|| Error::InvalidKeyData("Master key has no chain code".to_string()))?;
 
-        // Combine private key and chain code to form the "seed-like" extended key data
-        // BIP-32 master key derivation from seed produces key + chain_code
-        // We stored these separately, so we reconstruct by creating a 64-byte buffer
-        let mut seed_like = [0u8; 64];
-        seed_like[..32].copy_from_slice(master_private.as_bytes());
-        seed_like[32..].copy_from_slice(master_chain_code);
-
-        // Create extended key from seed - this recreates the master extended key
-        let master_ext_key = ExtendedPrivateKey::from_seed(&seed_like).map_err(|e| {
-            Error::InvalidKeyData(format!("Failed to reconstruct master key: {}", e))
-        })?;
+        // Reconstruct the REAL master extended key from its stored components.
+        //
+        // BIP-32 child derivation (CKDpriv) is a function of the parent private
+        // key, the parent chain code, and the child index only. The master key
+        // is the root of the tree (depth = 0, parent fingerprint = 0,
+        // child number = 0), so rebuilding it from (private_key, chain_code)
+        // with those root attributes yields an XPrv that is byte-for-byte
+        // identical to the one originally produced by `from_seed`, and therefore
+        // derives the correct BIP-32/44 child keys.
+        //
+        // NOTE: This intentionally does NOT round-trip through
+        // `ExtendedPrivateKey::from_seed`. `from_seed` is the BIP-32 *master
+        // generation* step (HMAC-SHA512("Bitcoin seed", seed)); feeding it
+        // (private||chain_code) would hash those 64 bytes into an unrelated
+        // master key and silently produce wrong keys/addresses.
+        let master_xprv = reconstruct_master_xprv(master_private.as_bytes(), master_chain_code)?;
 
         // Parse derivation path
         let derivation_path = DerivationPath::from_str(path)
             .map_err(|e| Error::InvalidKeyData(format!("Invalid derivation path: {}", e)))?;
 
-        // Derive child key
-        let child_ext_key = master_ext_key
-            .derive_path(&derivation_path)
-            .map_err(|e| Error::KeyGenerationFailed(format!("Derivation failed: {}", e)))?;
+        // Derive child key directly on the reconstructed XPrv, walking each
+        // path component (CKDpriv), mirroring blockchain::ExtendedPrivateKey.
+        let mut child_xprv = master_xprv;
+        for component in derivation_path.components() {
+            let bip32_child = bip32::ChildNumber::new(component.index, component.hardened)
+                .map_err(|e| Error::InvalidKeyData(format!("Invalid child index: {}", e)))?;
+            child_xprv = child_xprv
+                .derive_child(bip32_child)
+                .map_err(|e| Error::KeyGenerationFailed(format!("Derivation failed: {}", e)))?;
+        }
 
         // Extract child key material
-        let child_private = child_ext_key.private_key_bytes();
-        let child_chain_code = child_ext_key.chain_code().to_vec();
+        let child_private: [u8; 32] = child_xprv.to_bytes();
+        let child_chain_code = child_xprv.attrs().chain_code.to_vec();
 
-        let child_public = child_ext_key.public_key();
-        let child_public_bytes = child_public.to_bytes();
+        // Compressed secp256k1 public key (33 bytes), matching the master key's
+        // public-key encoding produced by blockchain::ExtendedPublicKey.
+        let child_public_bytes = child_xprv.public_key().to_bytes();
 
         // Parse coin type and account from path if present
         let (coin_type, account_index) = self.parse_path_components(path);
@@ -441,20 +453,73 @@ impl HdKeyManager {
         (None, None)
     }
 
-    /// Compute fingerprint (first 4 bytes of HASH160)
+    /// Compute the BIP-32 key fingerprint: the first 4 bytes of
+    /// `HASH160(pubkey) = RIPEMD160(SHA256(pubkey))`, where `pubkey` is the
+    /// 33-byte compressed secp256k1 public key (BIP-32 §"Key identifiers").
     fn compute_fingerprint(&self, public_key: Option<&Vec<u8>>) -> Result<[u8; 4]> {
+        use ripemd::Ripemd160;
         use sha2::{Digest, Sha256};
 
         let public_key = public_key
             .ok_or_else(|| Error::InvalidKeyData("No public key for fingerprint".to_string()))?;
 
         // HASH160 = RIPEMD160(SHA256(pubkey))
-        // For simplicity, we'll use first 4 bytes of SHA256 (sufficient for fingerprint)
-        let hash = Sha256::digest(public_key);
+        let sha = Sha256::digest(public_key);
+        let hash160 = Ripemd160::digest(sha);
+
         let mut fingerprint = [0u8; 4];
-        fingerprint.copy_from_slice(&hash[..4]);
+        fingerprint.copy_from_slice(&hash160[..4]);
         Ok(fingerprint)
     }
+}
+
+/// Faithfully reconstruct the master BIP-32 extended private key (`XPrv`) from
+/// its stored components (32-byte private key + 32-byte chain code).
+///
+/// The master node is the root of the derivation tree, so its extended-key
+/// attributes are fixed by BIP-32: `depth = 0`, `parent_fingerprint = 0`,
+/// `child_number = 0`. We rebuild the `XPrv` from these exact attributes plus
+/// the stored key material, which is byte-for-byte identical to the `XPrv` that
+/// `from_seed` originally produced. BIP-32 child derivation (CKDpriv) then
+/// yields the correct child keys.
+///
+/// This must NOT be done by passing `(private||chain_code)` to `from_seed`,
+/// which is the master-generation HMAC step and would derive an unrelated key.
+fn reconstruct_master_xprv(
+    private_key_bytes: &[u8],
+    chain_code_bytes: &[u8],
+) -> Result<bip32::XPrv> {
+    let private_key: [u8; 32] = private_key_bytes.try_into().map_err(|_| {
+        Error::InvalidKeyData(format!(
+            "Master private key must be 32 bytes, got {}",
+            private_key_bytes.len()
+        ))
+    })?;
+    let chain_code: bip32::ChainCode = chain_code_bytes.try_into().map_err(|_| {
+        Error::InvalidKeyData(format!(
+            "Master chain code must be 32 bytes, got {}",
+            chain_code_bytes.len()
+        ))
+    })?;
+
+    // BIP-32 extended-key serialization places the 32-byte private scalar after
+    // a single leading `0x00` tag byte.
+    let mut key_bytes = [0u8; 33];
+    key_bytes[1..].copy_from_slice(&private_key);
+
+    let extended_key = bip32::ExtendedKey {
+        prefix: bip32::Prefix::XPRV,
+        attrs: bip32::ExtendedKeyAttrs {
+            depth: 0,
+            parent_fingerprint: [0u8; 4],
+            child_number: bip32::ChildNumber::default(),
+            chain_code,
+        },
+        key_bytes,
+    };
+
+    bip32::XPrv::try_from(extended_key)
+        .map_err(|e| Error::InvalidKeyData(format!("Failed to reconstruct master key: {}", e)))
 }
 
 #[cfg(test)]
@@ -598,5 +663,172 @@ mod tests {
         assert_eq!(MnemonicStrength::Words18.word_count(), 18);
         assert_eq!(MnemonicStrength::Words21.word_count(), 21);
         assert_eq!(MnemonicStrength::Words24.word_count(), 24);
+    }
+
+    /// Canonical test mnemonic. DO NOT USE IN PRODUCTION.
+    const TEST_MNEMONIC: &str =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+    fn to_hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    /// KNOWN-ANSWER TEST: derivation through `derive_key` MUST reproduce the
+    /// canonical BIP-32/44 secp256k1 key for the well-known
+    /// "abandon ... about" mnemonic at `m/44'/60'/0'/0/0`.
+    ///
+    /// The buggy implementation re-hashed `(private||chain_code)` through
+    /// `from_seed`, producing the WRONG private key `69f6b5...e7ad` and an
+    /// unrelated Ethereum address. The fixed implementation reconstructs the
+    /// real master XPrv and produces the canonical private key
+    /// `1ab42cc412b618bdea3a599e3c9bae199ebf030895b039e9db1e30dafb12b727`
+    /// and Ethereum address `0x9858EfFD232B4033E47d90003D41EC34EcaEda94`.
+    #[test]
+    fn test_kat_ethereum_derivation_abandon_about() {
+        use hsm_blockchain::ethereum::EthereumAddress;
+
+        let store = create_test_store();
+        let hd_manager = HdKeyManager::new(store.clone());
+
+        let master_id = hd_manager
+            .import_master_key("test", TEST_MNEMONIC, None)
+            .expect("Should import master key");
+
+        let derived_id = hd_manager
+            .derive_key(&master_id, "test", "m/44'/60'/0'/0/0")
+            .expect("Should derive key");
+
+        let derived = store
+            .get("test", &derived_id)
+            .expect("Derived key should exist");
+
+        // --- Private key KAT (this is what the bug corrupted) ---
+        let private_material = derived
+            .private_material
+            .as_ref()
+            .expect("Derived key has private material");
+        assert_eq!(
+            to_hex(private_material.as_bytes()),
+            "1ab42cc412b618bdea3a599e3c9bae199ebf030895b039e9db1e30dafb12b727",
+            "derived private key must match the canonical BIP-32/44 vector; \
+             the buggy from_seed round-trip produced 69f6b5...e7ad"
+        );
+
+        // --- Ethereum address KAT (end-to-end wallet interop) ---
+        let public_material = derived
+            .public_material
+            .as_ref()
+            .expect("Derived key has public material");
+        let address = EthereumAddress::from_public_key(public_material)
+            .expect("Should compute Ethereum address from derived pubkey");
+        assert_eq!(
+            address.to_checksum_string(),
+            "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
+            "derived Ethereum address must match the canonical wallet vector"
+        );
+    }
+
+    /// KAT: a second standard address index must also match the canonical
+    /// vector, proving derivation is correct across the path (not a fluke).
+    /// `m/44'/60'/0'/0/1` => 0x6Fac4D18c912343BF86fa7049364Dd4E424Ab9C0
+    #[test]
+    fn test_kat_ethereum_derivation_index_1() {
+        use hsm_blockchain::ethereum::EthereumAddress;
+
+        let store = create_test_store();
+        let hd_manager = HdKeyManager::new(store.clone());
+
+        let master_id = hd_manager
+            .import_master_key("test", TEST_MNEMONIC, None)
+            .expect("Should import master key");
+
+        let derived_id = hd_manager
+            .derive_key(&master_id, "test", "m/44'/60'/0'/0/1")
+            .expect("Should derive key");
+
+        let derived = store.get("test", &derived_id).expect("Key exists");
+        let public_material = derived.public_material.as_ref().expect("pubkey");
+        let address = EthereumAddress::from_public_key(public_material).expect("address");
+        assert_eq!(
+            address.to_checksum_string(),
+            "0x6Fac4D18c912343BF86fa7049364Dd4E424Ab9C0"
+        );
+    }
+
+    /// Cross-check: deriving the same path twice (independent imports of the
+    /// same mnemonic) MUST yield identical key material. This is deterministic
+    /// HD derivation and guards against any future reconstruction regression.
+    #[test]
+    fn test_hd_derivation_is_deterministic() {
+        let store = create_test_store();
+        let hd_manager = HdKeyManager::new(store.clone());
+
+        let m1 = hd_manager
+            .import_master_key("ns1", TEST_MNEMONIC, None)
+            .expect("import 1");
+        let m2 = hd_manager
+            .import_master_key("ns2", TEST_MNEMONIC, None)
+            .expect("import 2");
+
+        let d1 = hd_manager
+            .derive_key(&m1, "ns1", "m/44'/60'/0'/0/0")
+            .expect("derive 1");
+        let d2 = hd_manager
+            .derive_key(&m2, "ns2", "m/44'/60'/0'/0/0")
+            .expect("derive 2");
+
+        let k1 = store.get("ns1", &d1).expect("k1");
+        let k2 = store.get("ns2", &d2).expect("k2");
+
+        assert_eq!(
+            k1.private_material.as_ref().unwrap().as_bytes(),
+            k2.private_material.as_ref().unwrap().as_bytes(),
+            "HD derivation must be deterministic for identical mnemonic + path"
+        );
+        assert_eq!(k1.public_material, k2.public_material);
+    }
+
+    /// Known-answer test for the BIP-32 key fingerprint.
+    ///
+    /// BIP-32 Test Vector 1 (seed `000102...0f`) has master public key
+    /// `0339a36013301597daef41fbe593a02cc513d0b55527ec2df1050e2e8ff49c85c2`
+    /// and identifier `3442193e008f4f3151ee9d3bb62ad5c16abb84ba`, so the
+    /// 4-byte fingerprint (HASH160[..4]) is `0x3442193e`.
+    ///
+    /// This pins the algorithm to HASH160 = RIPEMD160(SHA256(pubkey)); a plain
+    /// SHA256[..4] would produce `0x60c8022a` and fail this test.
+    #[test]
+    fn test_kat_bip32_fingerprint_hash160() {
+        let store = create_test_store();
+        let hd_manager = HdKeyManager::new(store);
+
+        let pubkey =
+            hex_decode("0339a36013301597daef41fbe593a02cc513d0b55527ec2df1050e2e8ff49c85c2");
+
+        let fingerprint = hd_manager
+            .compute_fingerprint(Some(&pubkey))
+            .expect("fingerprint");
+
+        assert_eq!(
+            fingerprint,
+            [0x34, 0x42, 0x19, 0x3e],
+            "BIP-32 fingerprint must be HASH160(pubkey)[..4]"
+        );
+
+        // Negative assertion: the old (buggy) SHA256[..4] value must NOT match.
+        use sha2::{Digest, Sha256};
+        let sha = Sha256::digest(&pubkey);
+        assert_ne!(
+            fingerprint,
+            [sha[0], sha[1], sha[2], sha[3]],
+            "fingerprint must not be plain SHA256[..4]"
+        );
+    }
+
+    fn hex_decode(s: &str) -> Vec<u8> {
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
     }
 }

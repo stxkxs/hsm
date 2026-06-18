@@ -83,7 +83,11 @@ impl KeyAcl {
         self.required_permissions.remove(permission);
     }
 
-    /// Check if a client is allowed to access this key
+    /// Check if a client is allowed to access this key (client-identity only).
+    ///
+    /// This does NOT enforce `required_permissions`; callers that know the
+    /// operation being attempted should prefer [`KeyAcl::can_access_with_permission`]
+    /// so that the per-key required-permission set is enforced (finding #23).
     pub fn can_access(&self, client_cn: &str) -> bool {
         // Deny list takes precedence
         if self.denied_clients.contains(client_cn) {
@@ -97,6 +101,27 @@ impl KeyAcl {
 
         // If restricted, check allowed list
         self.allowed_clients.contains(client_cn)
+    }
+
+    /// Check if a client may perform `permission` on this key.
+    ///
+    /// Enforces both the client allow/deny lists AND the per-key
+    /// `required_permissions` set: when `required_permissions` is non-empty the
+    /// requested `permission` MUST be a member, otherwise access is denied
+    /// (default-deny for operations the key was not provisioned for). When the
+    /// set is empty, no permission gate is applied beyond the client checks.
+    pub fn can_access_with_permission(&self, client_cn: &str, permission: &Permission) -> bool {
+        // Client allow/deny list (and restriction) checks first.
+        if !self.can_access(client_cn) {
+            return false;
+        }
+
+        // Per-key required-permission gate. Empty set => no gate.
+        if self.required_permissions.is_empty() {
+            return true;
+        }
+
+        self.required_permissions.contains(permission)
     }
 }
 
@@ -185,6 +210,46 @@ impl AclManager {
             Err(AuthError::PermissionDenied(format!(
                 "Client {} does not have access to key {}",
                 identity.common_name, key_id
+            )))
+        }
+    }
+
+    /// Check if a client may perform `permission` on a key, enforcing the key's
+    /// `required_permissions` set (finding #23).
+    ///
+    /// If no ACL row exists for the key this returns `true` (unrestricted),
+    /// matching [`AclManager::can_access`].
+    pub fn can_access_with_permission(
+        &self,
+        key_id: &str,
+        identity: &ClientIdentity,
+        permission: &Permission,
+    ) -> bool {
+        let acls = self.acls.read();
+        if let Some(acl) = acls.get(key_id) {
+            acl.can_access_with_permission(&identity.common_name, permission)
+        } else {
+            // No ACL means unrestricted access.
+            true
+        }
+    }
+
+    /// Require that a client may perform `permission` on a key, enforcing the
+    /// key's `required_permissions` set (finding #23). Returns
+    /// [`AuthError::PermissionDenied`] on denial so it threads cleanly through
+    /// the REST API's `?` error handling.
+    pub fn require_access_with_permission(
+        &self,
+        key_id: &str,
+        identity: &ClientIdentity,
+        permission: &Permission,
+    ) -> Result<()> {
+        if self.can_access_with_permission(key_id, identity, permission) {
+            Ok(())
+        } else {
+            Err(AuthError::PermissionDenied(format!(
+                "Client {} does not have access to key {} for permission {}",
+                identity.common_name, key_id, permission
             )))
         }
     }
@@ -351,5 +416,113 @@ mod tests {
 
         acl.remove_permission(&Permission::Sign);
         assert!(!acl.required_permissions.contains(&Permission::Sign));
+    }
+
+    // --- Finding #23: required_permissions enforcement ----------------------
+
+    /// An ACL with `required_permissions = {Sign}` must REJECT a request for a
+    /// different permission (e.g. Encrypt) even though the client passes the
+    /// allow-list check. Pre-fix `required_permissions` was stored but never
+    /// consulted, so this would have been allowed.
+    #[test]
+    fn test_key_acl_required_permission_rejects_wrong_permission() {
+        let mut acl = KeyAcl::new("key1".to_string());
+        acl.require_permission(Permission::Sign);
+
+        // Client is allowed (unrestricted), but the operation must match the
+        // required permission set.
+        assert!(acl.can_access("client1")); // legacy client-only check still passes
+        assert!(acl.can_access_with_permission("client1", &Permission::Sign));
+        assert!(
+            !acl.can_access_with_permission("client1", &Permission::Encrypt),
+            "Encrypt must be denied when only Sign is in required_permissions"
+        );
+        assert!(
+            !acl.can_access_with_permission("client1", &Permission::DeleteKey),
+            "DeleteKey must be denied when only Sign is in required_permissions"
+        );
+    }
+
+    /// An empty `required_permissions` set imposes no permission gate (only the
+    /// client allow/deny list applies).
+    #[test]
+    fn test_key_acl_empty_required_permissions_allows_any() {
+        let acl = KeyAcl::new("key1".to_string());
+        assert!(acl.required_permissions.is_empty());
+        assert!(acl.can_access_with_permission("anyone", &Permission::Sign));
+        assert!(acl.can_access_with_permission("anyone", &Permission::Decrypt));
+    }
+
+    /// The deny-list still takes precedence even when the requested permission
+    /// is in the required set.
+    #[test]
+    fn test_key_acl_required_permission_respects_deny_list() {
+        let mut acl = KeyAcl::new("key1".to_string());
+        acl.require_permission(Permission::Sign);
+        acl.deny_client("client1");
+
+        assert!(!acl.can_access_with_permission("client1", &Permission::Sign));
+    }
+
+    /// Manager-level enforcement: a key provisioned to require Sign rejects an
+    /// Encrypt request through `require_access_with_permission`, and permits a
+    /// matching Sign request.
+    #[test]
+    fn test_acl_manager_require_access_with_permission() {
+        let manager = AclManager::new();
+        let mut acl = manager.create_acl("key1".to_string(), false);
+        acl.require_permission(Permission::Sign);
+        manager.update_acl(acl);
+
+        let identity = create_test_identity("client1");
+
+        assert!(manager
+            .require_access_with_permission("key1", &identity, &Permission::Sign)
+            .is_ok());
+        assert!(
+            manager
+                .require_access_with_permission("key1", &identity, &Permission::Encrypt)
+                .is_err(),
+            "manager must reject an operation not in required_permissions"
+        );
+    }
+
+    /// A restricted key with a required permission must reject a client that is
+    /// not on the allow-list, regardless of the requested permission.
+    #[test]
+    fn test_acl_manager_required_permission_with_restriction() {
+        let manager = AclManager::new();
+        manager.create_acl("key1".to_string(), true);
+        manager.allow_client("key1", "client1").unwrap();
+        // Add the required permission to the stored ACL.
+        let mut acl = manager.get_acl("key1").unwrap();
+        acl.require_permission(Permission::Sign);
+        manager.update_acl(acl);
+
+        let allowed = create_test_identity("client1");
+        let denied = create_test_identity("client2");
+
+        // Allowed client + matching permission => ok.
+        assert!(manager
+            .require_access_with_permission("key1", &allowed, &Permission::Sign)
+            .is_ok());
+        // Allowed client + wrong permission => denied.
+        assert!(manager
+            .require_access_with_permission("key1", &allowed, &Permission::Decrypt)
+            .is_err());
+        // Disallowed client => denied even for the right permission.
+        assert!(manager
+            .require_access_with_permission("key1", &denied, &Permission::Sign)
+            .is_err());
+    }
+
+    /// No ACL row means unrestricted access for any permission.
+    #[test]
+    fn test_acl_manager_no_acl_allows_any_permission() {
+        let manager = AclManager::new();
+        let identity = create_test_identity("client1");
+        assert!(manager
+            .require_access_with_permission("unknown-key", &identity, &Permission::Sign)
+            .is_ok());
     }
 }

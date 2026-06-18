@@ -778,7 +778,6 @@ impl SessionManager {
 
     /// Clean up expired sessions (concurrent-safe)
     pub fn cleanup_expired(&self) -> usize {
-        let initial_count = self.sessions.len();
         // Collect expired session IDs
         let expired_ids: Vec<String> = self
             .sessions
@@ -787,15 +786,23 @@ impl SessionManager {
             .map(|s| s.id.clone())
             .collect();
 
-        // Remove expired sessions
-        self.sessions.retain(|_, session| session.is_valid());
+        // Remove expired sessions, counting removals inside `retain`. Diffing two
+        // `len()` snapshots can underflow if a concurrent insert grows the map
+        // between the snapshots.
+        let mut removed = 0usize;
+        self.sessions.retain(|_, session| {
+            let keep = session.is_valid();
+            if !keep {
+                removed += 1;
+            }
+            keep
+        });
 
         // Clean up rate limiters for expired sessions
         for id in &expired_ids {
             self.rate_limiters.remove(id);
         }
 
-        let removed = initial_count - self.sessions.len();
         metrics::counter!("auth.session.cleanup").increment(removed as u64);
         removed
     }
@@ -825,10 +832,17 @@ impl SessionManager {
 
     /// Delete all sessions for a client
     pub fn delete_client_sessions(&self, client_cn: &str) -> usize {
-        let initial_count = self.sessions.len();
-        self.sessions
-            .retain(|_, s| s.identity.common_name != client_cn);
-        initial_count - self.sessions.len()
+        // Count removals inside `retain` rather than diffing two `len()`
+        // snapshots, which can underflow under concurrent inserts.
+        let mut removed = 0usize;
+        self.sessions.retain(|_, s| {
+            let keep = s.identity.common_name != client_cn;
+            if !keep {
+                removed += 1;
+            }
+            keep
+        });
+        removed
     }
 }
 

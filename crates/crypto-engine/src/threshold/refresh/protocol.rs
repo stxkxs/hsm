@@ -482,11 +482,19 @@ impl KeyRefreshProtocol {
         &self,
         coefficients: &[Vec<u8>],
     ) -> Result<Vec<Vec<u8>>, ThresholdError> {
-        use blst::{blst_p1, blst_p1_compress, blst_p1_mult};
+        use blst::{
+            blst_p1, blst_p1_compress, blst_p1_mult, blst_scalar, blst_scalar_from_bendian,
+        };
 
         let mut commitments = Vec::with_capacity(coefficients.len());
 
         for coeff_bytes in coefficients {
+            if coeff_bytes.len() != 32 {
+                return Err(ThresholdError::SerializationError(
+                    "BLS coefficient must be 32 bytes".into(),
+                ));
+            }
+
             // For zero coefficient, the commitment is the identity
             if coeff_bytes.iter().all(|&b| b == 0) {
                 // Identity point in compressed G1: first byte 0xc0, rest zeros
@@ -494,24 +502,29 @@ impl KeyRefreshProtocol {
                 identity_bytes.extend(vec![0u8; 47]);
                 commitments.push(identity_bytes);
             } else {
-                // For non-zero coefficients, compute commitment = coeff * G1
-                // We need to use the low-level blst API to multiply the generator by a scalar
-                // SAFETY: blst_p1_generator returns a valid static G1 generator pointer; blst_p1_mult
-                // reads coeff_bytes (a Vec<u8> with explicit bit-length argument) and writes to caller-owned
-                // result; blst_p1_compress writes exactly 48 bytes to compressed (a [u8; 48]).
+                // For non-zero coefficients, compute commitment = coeff * G1.
+                //
+                // `blst_p1_mult` reads the scalar as a *little-endian* byte array, so the
+                // big-endian `coeff_bytes` MUST first be converted via
+                // `blst_scalar_from_bendian` (which fills the little-endian `.b` limbs).
+                // Passing `coeff_bytes` directly would byte-reverse the scalar and produce a
+                // commitment to `reverse(coeff)` instead of `coeff`, so verification against the
+                // field-reduced share (computed with `blst_fr`) would always fail. This mirrors
+                // the correct reference in `bls/dkg.rs::scalar_mult_g1` and `verify_bls_share`.
+                let mut coeff_arr = [0u8; 32];
+                coeff_arr.copy_from_slice(coeff_bytes);
+                // SAFETY: blst_scalar_from_bendian reads exactly 32 bytes from coeff_arr (a [u8; 32]);
+                // blst_p1_generator returns a valid static G1 generator pointer; blst_p1_mult reads
+                // scalar.b (a [u8; 32] inside blst_scalar, bit-length 256 passed explicitly) and writes
+                // to caller-owned result; blst_p1_compress writes exactly 48 bytes to compressed.
                 unsafe {
+                    let mut scalar = blst_scalar::default();
+                    blst_scalar_from_bendian(&mut scalar, coeff_arr.as_ptr());
+
                     let generator = blst::blst_p1_generator();
                     let mut result = blst_p1::default();
+                    blst_p1_mult(&mut result, generator, scalar.b.as_ptr(), 256);
 
-                    // Scalar multiplication: result = coeff * generator
-                    blst_p1_mult(
-                        &mut result,
-                        generator,
-                        coeff_bytes.as_ptr(),
-                        coeff_bytes.len() * 8,
-                    );
-
-                    // Compress the result
                     let mut compressed = [0u8; 48];
                     blst_p1_compress(compressed.as_mut_ptr(), &result);
                     commitments.push(compressed.to_vec());
@@ -666,9 +679,9 @@ impl KeyRefreshProtocol {
             ),
             ThresholdScheme::FrostEd25519 => self.verify_ed25519_share(share, commitments),
             ThresholdScheme::ThresholdBls12381 => {
-                // For BLS, we would need to verify against G1 commitments
-                // Simplified verification for now
-                Ok(true)
+                // Verify share against G1 commitments (Feldman VSS) instead of
+                // unconditionally accepting it. See resharing::verify_bls_share.
+                super::resharing::verify_bls_share(self.participant_id, share, commitments)
             }
         }
     }

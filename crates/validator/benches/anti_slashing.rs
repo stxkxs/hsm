@@ -1,8 +1,9 @@
 //! Benchmarks for anti-slashing operations.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use hsm_validator::slashing_db::SlashingProtectionDb;
 use hsm_validator::types::SigningRoot;
+use std::hint::black_box;
 
 fn random_root() -> SigningRoot {
     let mut bytes = [0u8; 32];

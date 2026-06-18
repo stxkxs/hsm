@@ -208,7 +208,9 @@ pub trait BackupManager {
 #[derive(Default)]
 pub struct SimpleBackupManager {
     keys: HashMap<String, Vec<u8>>,
-    master_key: Option<Vec<u8>>,
+    /// Plaintext master key material is held in a `Zeroizing` buffer so it is
+    /// wiped from memory on drop or replacement.
+    master_key: Option<zeroize::Zeroizing<Vec<u8>>>,
     exporter: KeyExporter,
     importer: KeyImporter,
 }
@@ -231,13 +233,16 @@ impl SimpleBackupManager {
     }
 
     /// Set the master key
+    ///
+    /// The key is held in a `Zeroizing` buffer; any previously held key is
+    /// dropped (and thus wiped) when replaced.
     pub fn set_master_key(&mut self, master_key: Vec<u8>) {
-        self.master_key = Some(master_key);
+        self.master_key = Some(zeroize::Zeroizing::new(master_key));
     }
 
     /// Get the master key
     pub fn get_master_key(&self) -> Option<&[u8]> {
-        self.master_key.as_deref()
+        self.master_key.as_ref().map(|k| k.as_slice())
     }
 
     /// Get keys in a namespace

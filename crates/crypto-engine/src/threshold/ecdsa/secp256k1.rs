@@ -378,7 +378,7 @@ mod tests {
 
         // Create polynomial with random coefficients
         let a1 = Secp256k1ThresholdOps::random_scalar();
-        let coefficients = vec![secret, a1];
+        let coefficients = [secret, a1];
 
         // Compute commitments (C_j = a_j * G)
         let commitments: Vec<ProjectivePoint> = coefficients

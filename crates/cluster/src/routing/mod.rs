@@ -2,7 +2,6 @@
 
 use crate::config::NodeId;
 use crate::error::{ClusterError, Result};
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Routing strategy

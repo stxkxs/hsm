@@ -8,7 +8,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Build
 # -----------------------------------------------------------------------------
-FROM rust:1.91-bookworm AS builder
+FROM rust:1.93-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -76,9 +76,11 @@ RUN cargo build --release --bin hsm-server
 FROM debian:bookworm-slim AS runtime
 
 # Install minimal runtime dependencies
+# wget is used by the HEALTHCHECK below to probe the live /health listener.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libz3-4 \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -100,14 +102,21 @@ USER hsm
 # 9090: Prometheus metrics
 EXPOSE 8443 9090
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/usr/local/bin/hsm-server", "--help"]
-
 # Default configuration via environment variables
 ENV HSM_REST_PORT=8443 \
     HSM_METRICS_PORT=9090 \
     HSM_LOG_LEVEL=info \
     HSM_JSON_LOGS=true
+
+# Health check
+# Probe the live /health listener served on the metrics port (HSM_METRICS_PORT,
+# default 9090). The previous `hsm-server --help` form forked a short-lived CLI
+# process that exited 0 even when the server was unresponsive, so it could never
+# report an unhealthy container. We use the shell form so ${HSM_METRICS_PORT} is
+# expanded at runtime against the actual configured port. Note: in Kubernetes the
+# Pod liveness/readiness probes are authoritative; this HEALTHCHECK exists for
+# plain `docker run`/compose deployments.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --quiet --tries=1 --spider "http://127.0.0.1:${HSM_METRICS_PORT}/health" || exit 1
 
 ENTRYPOINT ["/usr/local/bin/hsm-server"]

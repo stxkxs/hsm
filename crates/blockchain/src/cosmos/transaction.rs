@@ -201,18 +201,92 @@ impl SignDoc {
         })
     }
 
-    /// Serialize to bytes for signing
-    pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        // In a real implementation, this would use protobuf encoding
-        // For now, we use a JSON representation
-        let doc = serde_json::json!({
-            "body_bytes": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &self.body_bytes),
-            "auth_info_bytes": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &self.auth_info_bytes),
-            "chain_id": self.chain_id,
-            "account_number": self.account_number.to_string(),
-        });
+    /// Encode the canonical protobuf `cosmos.tx.v1beta1.SignDoc` sign-bytes.
+    ///
+    /// Proto definition (field numbers are load-bearing for on-chain verification):
+    ///
+    /// ```proto
+    /// message SignDoc {
+    ///   bytes  body_bytes      = 1;
+    ///   bytes  auth_info_bytes = 2;
+    ///   string chain_id        = 3;
+    ///   uint64 account_number  = 4;
+    /// }
+    /// ```
+    ///
+    /// The encoding here (the `SignDoc` *wrapper*) is canonical and
+    /// interoperable. NOTE: the result only verifies on-chain if `body_bytes`
+    /// and `auth_info_bytes` are themselves canonical protobuf encodings of
+    /// `TxBody` / `AuthInfo`. This crate does not yet produce those (see
+    /// [`SignDoc::new`], which JSON-encodes them), so do not feed JSON bytes
+    /// here and expect on-chain acceptance.
+    pub fn to_direct_sign_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        // field 1: body_bytes (bytes), wire type 2 -> tag 0x0a
+        encode_len_delimited(&mut out, 1, &self.body_bytes);
+        // field 2: auth_info_bytes (bytes), wire type 2 -> tag 0x12
+        encode_len_delimited(&mut out, 2, &self.auth_info_bytes);
+        // field 3: chain_id (string), wire type 2 -> tag 0x1a
+        encode_len_delimited(&mut out, 3, self.chain_id.as_bytes());
+        // field 4: account_number (uint64), wire type 0 -> tag 0x20
+        if self.account_number != 0 {
+            encode_varint_field(&mut out, 4, self.account_number);
+        }
+        out
+    }
 
-        serde_json::to_vec(&doc).map_err(|e| BlockchainError::SerializationError(e.to_string()))
+    /// Serialize to bytes for signing.
+    ///
+    /// # Fail-closed
+    ///
+    /// `SIGN_MODE_DIRECT` requires the protobuf `SignDoc` (see
+    /// [`Self::to_direct_sign_bytes`]) computed over *protobuf* `body_bytes` /
+    /// `auth_info_bytes`. Because [`SignDoc::new`] currently JSON-encodes those
+    /// components, returning sign-bytes here would invite signing data that can
+    /// never verify on-chain. This method is therefore deliberately
+    /// fail-closed (GATE, HIGH #9). Callers with genuine protobuf component
+    /// bytes should use [`Self::to_direct_sign_bytes`] /
+    /// [`super::CosmosSigner::sign_direct_protobuf`] explicitly.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        Err(BlockchainError::UnsupportedOperation(
+            "Cosmos SIGN_MODE_DIRECT sign-bytes require canonical protobuf \
+             TxBody/AuthInfo encoding, which is not implemented. Use \
+             SignDoc::to_direct_sign_bytes with protobuf component bytes."
+                .to_string(),
+        ))
+    }
+}
+
+/// Encode a protobuf length-delimited (wire type 2) field.
+fn encode_len_delimited(out: &mut Vec<u8>, field_number: u32, data: &[u8]) {
+    encode_tag(out, field_number, 2);
+    encode_varint(out, data.len() as u64);
+    out.extend_from_slice(data);
+}
+
+/// Encode a protobuf varint (wire type 0) field.
+fn encode_varint_field(out: &mut Vec<u8>, field_number: u32, value: u64) {
+    encode_tag(out, field_number, 0);
+    encode_varint(out, value);
+}
+
+/// Encode a protobuf field tag (`field_number << 3 | wire_type`).
+fn encode_tag(out: &mut Vec<u8>, field_number: u32, wire_type: u32) {
+    encode_varint(out, ((field_number << 3) | wire_type) as u64);
+}
+
+/// Encode a base-128 varint.
+fn encode_varint(out: &mut Vec<u8>, mut value: u64) {
+    loop {
+        let mut byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value != 0 {
+            byte |= 0x80;
+        }
+        out.push(byte);
+        if value == 0 {
+            break;
+        }
     }
 }
 
@@ -290,5 +364,71 @@ mod tests {
     fn test_fee_default() {
         let fee = Fee::default();
         assert_eq!(fee.gas_limit, 200000);
+    }
+
+    /// KAT for the canonical protobuf `SignDoc` wrapper encoding.
+    ///
+    /// Hand-computed wire bytes for:
+    ///   body_bytes=[01 02], auth_info_bytes=[03],
+    ///   chain_id="cosmoshub-4", account_number=1
+    ///
+    /// Expected:
+    ///   0a 02 0102                       (field 1, len 2)
+    ///   12 01 03                         (field 2, len 1)
+    ///   1a 0b 636f736d6f736875622d34     (field 3, len 11, "cosmoshub-4")
+    ///   20 01                            (field 4, varint 1)
+    #[test]
+    fn test_signdoc_protobuf_wrapper_kat() {
+        let doc = SignDoc {
+            body_bytes: vec![0x01, 0x02],
+            auth_info_bytes: vec![0x03],
+            chain_id: "cosmoshub-4".to_string(),
+            account_number: 1,
+        };
+        let bytes = doc.to_direct_sign_bytes();
+        assert_eq!(
+            hex::encode(&bytes),
+            "0a0201021201031a0b636f736d6f736875622d342001"
+        );
+    }
+
+    /// account_number 0 is the proto3 default and must be omitted.
+    #[test]
+    fn test_signdoc_protobuf_omits_default_account_number() {
+        let doc = SignDoc {
+            body_bytes: vec![],
+            auth_info_bytes: vec![],
+            chain_id: "c".to_string(),
+            account_number: 0,
+        };
+        // field1 (empty): 0a 00, field2 (empty): 12 00, field3: 1a 01 63, no field4
+        assert_eq!(hex::encode(doc.to_direct_sign_bytes()), "0a0012001a0163");
+    }
+
+    /// Varint encoding boundary: 300 -> 0xac 0x02.
+    #[test]
+    fn test_varint_encoding() {
+        let mut out = Vec::new();
+        encode_varint(&mut out, 300);
+        assert_eq!(out, vec![0xac, 0x02]);
+
+        let mut out = Vec::new();
+        encode_varint(&mut out, 0);
+        assert_eq!(out, vec![0x00]);
+    }
+
+    /// The legacy JSON `to_bytes` path is fail-closed (GATE, HIGH #9).
+    #[test]
+    fn test_signdoc_to_bytes_fail_closed() {
+        let doc = SignDoc {
+            body_bytes: vec![1, 2, 3],
+            auth_info_bytes: vec![4, 5],
+            chain_id: "cosmoshub-4".to_string(),
+            account_number: 7,
+        };
+        assert!(matches!(
+            doc.to_bytes(),
+            Err(BlockchainError::UnsupportedOperation(_))
+        ));
     }
 }

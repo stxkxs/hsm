@@ -5,6 +5,16 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[features]
+default = []
+# WARNING: The Lasso lookup argument in `lasso.rs` is NOT cryptographically
+# sound. Its "sumcheck" is a placeholder (`claimed_sum == 0`) with no real
+# polynomial-commitment opening verification, so forged proofs would be
+# accepted. `LookupArgument::verify` therefore fails closed (returns an error)
+# unless this non-default feature is explicitly enabled, and even then it must
+# only be used for research/benchmarking — never to make a security decision.
+experimental-lasso = []
+
 [dependencies]
 # Core dependencies
 thiserror = "2.0"

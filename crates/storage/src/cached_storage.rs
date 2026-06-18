@@ -159,6 +159,17 @@ use parking_lot::Mutex;
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use zeroize::Zeroizing;
+
+/// Cached plaintext key material.
+///
+/// Wrapped in [`Zeroizing`] so the plaintext bytes are securely wiped from
+/// memory when the value is dropped (LRU eviction, `clear_cache`, or when the
+/// owning `CachedStorage` is dropped), matching the `SecretVec`/`ZeroizeOnDrop`
+/// model used for the master key. The `Arc` lets the cache hand the value to
+/// the LRU map cheaply; the cache is always the sole owner, so dropping the
+/// entry drops the last reference and triggers the wipe.
+type CachedKeyData = Arc<Zeroizing<Vec<u8>>>;
 
 /// Metadata for cached keys
 #[derive(Debug, Clone)]
@@ -180,8 +191,15 @@ pub struct CachedStorage<B: StorageBackend> {
     /// Underlying storage backend
     backend: Arc<Mutex<B>>,
 
-    /// LRU cache for key data (namespace:key_id -> encrypted data)
-    key_cache: Arc<Mutex<LruCache<String, Arc<Vec<u8>>>>>,
+    /// LRU cache for key data (namespace:key_id -> decrypted key material).
+    ///
+    /// Values are [`CachedKeyData`] (`Arc<Zeroizing<Vec<u8>>>`) so that the
+    /// plaintext key bytes are securely wiped from memory when an entry is
+    /// evicted (LRU overflow), cleared (`clear_cache`), or dropped (when the
+    /// `CachedStorage` is dropped). The `Arc` is shared with no other holders,
+    /// so dropping the last reference (which the cache always is) triggers
+    /// zeroization.
+    key_cache: Arc<Mutex<LruCache<String, CachedKeyData>>>,
 
     /// Lock-free metadata cache
     metadata_cache: Arc<DashMap<String, CachedKeyMetadata>>,
@@ -261,19 +279,29 @@ impl<B: StorageBackend> CachedStorage<B> {
             let mut cache = self.key_cache.lock();
             if let Some(cached_data) = cache.get(&cache_key) {
                 self.hits.fetch_add(1, Ordering::Relaxed);
-                // Clone is intentional: caller receives independent copy for secure zeroization
-                return Ok((**cached_data).clone());
+                // Clone the inner Vec (deref through Arc + Zeroizing). The caller
+                // receives an independent plaintext copy; the cached copy remains
+                // wrapped in Zeroizing and is wiped on eviction/clear/drop.
+                return Ok((***cached_data).to_vec());
             }
         }
 
-        // Cache miss - read from backend
+        // Cache miss - read from backend.
+        //
+        // Finding #17 (lost update): the backend lock is held across the cache
+        // publish so that the backend-read and cache-population form a SINGLE
+        // critical section. If a concurrent `store_key_cached` runs, it must
+        // acquire the same backend lock before it can write+publish, so the two
+        // operations are serialized and the cache can never be left holding a
+        // value older than the backend for this key.
         self.misses.fetch_add(1, Ordering::Relaxed);
         let backend = self.backend.lock();
         let data = backend.load_key(key_id, namespace)?;
-        drop(backend);
 
-        // Update cache
-        let data_arc = Arc::new(data.clone());
+        // Update cache while STILL holding the backend lock. Wrap in Zeroizing
+        // so the plaintext key material is securely wiped on eviction/clear/drop,
+        // matching the SecretVec model.
+        let data_arc = Arc::new(Zeroizing::new(data.clone()));
         let metadata = CachedKeyMetadata {
             size: data.len(),
             cached_at: std::time::SystemTime::now()
@@ -284,6 +312,7 @@ impl<B: StorageBackend> CachedStorage<B> {
 
         self.key_cache.lock().put(cache_key.clone(), data_arc);
         self.metadata_cache.insert(cache_key, metadata);
+        drop(backend);
 
         Ok(data)
     }
@@ -295,14 +324,22 @@ impl<B: StorageBackend> CachedStorage<B> {
         data: &[u8],
         namespace: &str,
     ) -> StorageResult<()> {
-        // Write through to backend
+        // Finding #17 (lost update): hold the backend lock across the cache
+        // publish so the backend-write and cache-update form a SINGLE critical
+        // section. Without this, two concurrent writers for the same key can
+        // interleave as: W1 writes backend(v1), W2 writes backend(v2), W2
+        // publishes cache(v2), W1 publishes cache(v1) — leaving cache=v1 while
+        // backend=v2, a permanently stale cache. Serializing the whole
+        // write+publish under the backend mutex guarantees the cache reflects
+        // the last backend write.
         let mut backend = self.backend.lock();
         backend.store_key(key_id, data, namespace)?;
-        drop(backend);
 
-        // Update cache
+        // Update cache while STILL holding the backend lock. Wrap in Zeroizing
+        // so the plaintext key material is securely wiped on eviction/clear/drop,
+        // matching the SecretVec model.
         let cache_key = Self::make_cache_key(namespace, key_id);
-        let data_arc = Arc::new(data.to_vec());
+        let data_arc = Arc::new(Zeroizing::new(data.to_vec()));
         let metadata = CachedKeyMetadata {
             size: data.len(),
             cached_at: std::time::SystemTime::now()
@@ -313,21 +350,26 @@ impl<B: StorageBackend> CachedStorage<B> {
 
         self.key_cache.lock().put(cache_key.clone(), data_arc);
         self.metadata_cache.insert(cache_key, metadata);
+        drop(backend);
 
         Ok(())
     }
 
     /// Delete a key (invalidate cache)
     pub fn delete_key_cached(&self, key_id: &KeyId, namespace: &str) -> StorageResult<()> {
-        // Delete from backend
+        // Finding #17 (lost update): hold the backend lock across the cache
+        // invalidation so the backend-delete and cache-eviction form a single
+        // critical section, serialized against concurrent store/load for the
+        // same key. Otherwise a store that interleaves between the backend
+        // delete and the cache pop could leave a stale cached value behind.
         let mut backend = self.backend.lock();
         backend.delete_key(key_id, namespace)?;
-        drop(backend);
 
-        // Invalidate cache
+        // Invalidate cache while STILL holding the backend lock.
         let cache_key = Self::make_cache_key(namespace, key_id);
         self.key_cache.lock().pop(&cache_key);
         self.metadata_cache.remove(&cache_key);
+        drop(backend);
 
         Ok(())
     }
@@ -517,5 +559,179 @@ mod tests {
         assert_eq!(stats.hits, 0);
         assert_eq!(stats.misses, 0);
         assert_eq!(stats.cache_size, 0);
+    }
+
+    // ---- Regression test for finding #17: write-through cache lost update ----
+    //
+    // Before the fix, `store_key_cached` dropped the backend Mutex BEFORE
+    // updating the cache. Two concurrent writers for the same key could
+    // interleave so that the backend ended up with one writer's value while the
+    // cache ended up holding the *other* writer's value — a permanently stale
+    // cache (cache != backend). After the fix the backend lock is held across
+    // the cache publish, so the cache always reflects the last backend write.
+    //
+    // This test hammers a single key with many concurrent writers, then asserts
+    // that the value served from the cache equals the value persisted in the
+    // backend. It also runs concurrent loaders to exercise the read path's
+    // critical section. The assertion is a value equality (not a shape check):
+    // a lost update leaves divergent bytes and fails.
+    #[test]
+    fn test_concurrent_writers_keep_cache_consistent_with_backend() {
+        use std::sync::Arc as StdArc;
+        use std::thread;
+
+        let temp_dir = TempDir::new().unwrap();
+        let kek = [42u8; 32];
+        let backend =
+            EncryptedFileStorage::create_with_new_key(temp_dir.path().to_path_buf(), &kek).unwrap();
+        let cached = StdArc::new(CachedStorage::new(backend, 1000));
+        cached.backend().lock().create_namespace("test").unwrap();
+
+        let key_id = KeyId::new("hot-key");
+
+        // Each writer writes a distinct, recoverable value: b"value-<n>".
+        // Whichever writer wins the last backend write, the cache MUST agree.
+        let num_writers = 16;
+        let iterations = 50;
+
+        let mut handles = Vec::new();
+        for w in 0..num_writers {
+            let cached = StdArc::clone(&cached);
+            let key_id = key_id.clone();
+            handles.push(thread::spawn(move || {
+                for i in 0..iterations {
+                    let val = format!("writer-{w}-iter-{i}");
+                    cached
+                        .store_key_cached(&key_id, val.as_bytes(), "test")
+                        .unwrap();
+                }
+            }));
+        }
+        // Concurrent readers to exercise the load-path critical section.
+        for _ in 0..4 {
+            let cached = StdArc::clone(&cached);
+            let key_id = key_id.clone();
+            handles.push(thread::spawn(move || {
+                for _ in 0..iterations {
+                    let _ = cached.load_key_cached(&key_id, "test");
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        // After all writers finish, the cache must equal the backend for this key.
+        let cache_key = CachedStorage::<EncryptedFileStorage>::make_cache_key("test", &key_id);
+        let cached_val: Vec<u8> = {
+            let mut guard = cached.key_cache.lock();
+            (***guard.get(&cache_key).expect("entry should be cached")).clone()
+        };
+        let backend_val = cached
+            .backend()
+            .lock()
+            .load_key(&key_id, "test")
+            .expect("backend must have the key");
+
+        assert_eq!(
+            cached_val, backend_val,
+            "cache diverged from backend after concurrent writers (lost update)"
+        );
+    }
+
+    // ---- Regression tests for finding LOW #28: cached key material zeroization ----
+    //
+    // Before the fix, the cache stored `Arc<Vec<u8>>`, so plaintext key bytes were
+    // freed WITHOUT being wiped on LRU eviction, `clear_cache`, or drop. The cache
+    // now stores `Arc<Zeroizing<Vec<u8>>>`, which wipes the heap buffer on drop.
+    //
+    // These tests do NOT read freed memory (that would be UB). Instead they assert
+    // that the cache value type actually wires up `Zeroize` (a compile-time bound),
+    // that `Zeroizing`'s in-place wipe — the exact operation its `Drop` invokes —
+    // truly zeroes the buffer while it is still alive, and that the cache is the
+    // sole `Arc` owner so dropping the entry triggers that wipe.
+
+    /// The compiler enforces that the value the cache stores wipes on drop.
+    /// This is coupled to the *actual* field type: we build a value of exactly
+    /// the type stored in `key_cache` and require its inner payload to implement
+    /// [`Zeroize`]. Before the fix the cache held `Arc<Vec<u8>>`, whose inner
+    /// `Vec<u8>` does not wipe on drop and would not satisfy the bound — so
+    /// reverting the field type turns this into a build break, not a silent leak.
+    #[test]
+    fn test_cache_value_type_zeroizes_on_drop() {
+        use zeroize::{Zeroize, ZeroizeOnDrop};
+
+        // Helper that only accepts the cache's stored value type if the payload
+        // behind the `Arc` both implements `Zeroize` AND wipes on drop.
+        fn assert_zeroizes_on_drop<T: Zeroize + ZeroizeOnDrop>(_arc: &Arc<T>) {}
+
+        // Construct a value of EXACTLY the type held in `key_cache`, by pulling
+        // a real entry out of a populated cache so the type is inferred from the
+        // field rather than hardcoded.
+        let (_temp, cached) = create_test_cached_storage();
+        cached.backend().lock().create_namespace("test").unwrap();
+        let key_id = KeyId::new("k");
+        cached.store_key_cached(&key_id, b"v", "test").unwrap();
+        let cache_key = CachedStorage::<EncryptedFileStorage>::make_cache_key("test", &key_id);
+        let guard = cached.key_cache.lock();
+        let arc = guard.peek(&cache_key).expect("entry cached");
+        assert_zeroizes_on_drop(arc);
+    }
+
+    /// Proves that the wrapper actually wipes its heap buffer. We call the same
+    /// in-place wipe that `Zeroizing`'s `Drop` invokes, then read the bytes back
+    /// through the still-live value (no freed-memory access) and assert they are
+    /// all zero. Before the fix the cache used a bare `Vec<u8>`, which leaves the
+    /// secret bytes intact on drop.
+    #[test]
+    fn test_zeroizing_wrapper_wipes_buffer_in_place() {
+        use zeroize::Zeroize;
+
+        // Match the exact type stored in the cache.
+        let mut secret: Zeroizing<Vec<u8>> = Zeroizing::new(vec![0xABu8; 64]);
+        assert!(secret.iter().all(|&b| b == 0xAB), "precondition: filled");
+
+        // `Drop for Zeroizing` calls `self.zeroize()`; invoke it directly while
+        // the buffer is alive so we can observe the wipe without UB.
+        secret.zeroize();
+
+        assert!(
+            secret.iter().all(|&b| b == 0),
+            "Zeroizing must wipe the plaintext buffer (drop relies on this)"
+        );
+    }
+
+    /// Proves the cache holds the *sole* `Arc` to each value, so dropping/evicting
+    /// the entry drops the last reference and triggers `Zeroizing::drop` (the wipe).
+    /// If a future change started handing out clones of the `Arc`, the refcount
+    /// would exceed 1 and eviction would no longer wipe — this catches that.
+    #[test]
+    fn test_cache_is_sole_arc_owner_so_drop_zeroizes() {
+        let (_temp, cached) = create_test_cached_storage();
+        cached.backend().lock().create_namespace("test").unwrap();
+
+        let key_id = KeyId::new("secret-key");
+        cached
+            .store_key_cached(&key_id, b"super secret key material", "test")
+            .unwrap();
+        // Populate via the read path too.
+        cached.load_key_cached(&key_id, "test").unwrap();
+
+        let cache_key = CachedStorage::<EncryptedFileStorage>::make_cache_key("test", &key_id);
+        {
+            let mut guard = cached.key_cache.lock();
+            let arc = guard.get(&cache_key).expect("entry should be cached");
+            assert_eq!(
+                Arc::strong_count(arc),
+                1,
+                "cache must be sole Arc owner so the last drop runs Zeroizing::drop"
+            );
+        }
+
+        // Evicting the entry drops the last Arc, which runs Zeroizing's wipe.
+        // We cannot observe the freed bytes safely, but the strong_count==1
+        // invariant above guarantees the wipe executes on eviction/clear/drop.
+        cached.delete_key_cached(&key_id, "test").unwrap();
+        assert!(cached.key_cache.lock().get(&cache_key).is_none());
     }
 }

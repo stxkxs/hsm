@@ -52,6 +52,7 @@ use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Recovery method types
@@ -738,7 +739,9 @@ impl RecoveryManager {
             hex::encode(hasher.finalize())
         };
 
-        if &code_hash != expected_hash {
+        // Constant-time hash comparison: avoid `String ==` which short-circuits
+        // on the first differing byte and leaks a timing oracle on the code hash.
+        if !ct_eq_hex_hash(&code_hash, expected_hash) {
             return Err(AuthError::Unauthorized(
                 "Invalid verification code".to_string(),
             ));
@@ -761,11 +764,18 @@ impl RecoveryManager {
             hex::encode(hasher.finalize())
         };
 
-        if let Some(pos) = user_config
-            .backup_code_hashes
-            .iter()
-            .position(|h| h == &code_hash)
-        {
+        // Constant-time comparison against every stored hash. We scan all entries
+        // (no early `position` short-circuit) and compare decoded bytes with
+        // `ct_eq`, so neither the matching index nor a per-byte difference leaks
+        // via timing.
+        let mut matched_pos: Option<usize> = None;
+        for (pos, stored) in user_config.backup_code_hashes.iter().enumerate() {
+            if ct_eq_hex_hash(stored, &code_hash) {
+                matched_pos = Some(pos);
+            }
+        }
+
+        if let Some(pos) = matched_pos {
             // Remove used code
             user_config.backup_code_hashes.remove(pos);
             Ok(())
@@ -893,11 +903,18 @@ impl RecoveryManager {
 
     /// Cleanup expired requests
     pub fn cleanup_expired(&self) -> usize {
-        let before = self.requests.len();
+        // Count removals inside `retain` rather than diffing two `len()`
+        // snapshots: concurrent inserts between the snapshots can make the
+        // second length larger, underflowing the `usize` subtraction.
+        let mut removed = 0usize;
         self.requests.retain(|_, request| {
-            !request.is_expired() && request.status != RecoveryStatus::Completed
+            let keep = !request.is_expired() && request.status != RecoveryStatus::Completed;
+            if !keep {
+                removed += 1;
+            }
+            keep
         });
-        before - self.requests.len()
+        removed
     }
 
     /// Regenerate backup codes for a user
@@ -934,6 +951,21 @@ impl Default for RecoveryManager {
 }
 
 // Helper functions
+
+/// Constant-time comparison of two hex-encoded hashes.
+///
+/// Both inputs are decoded from hex and compared with `subtle::ConstantTimeEq`,
+/// so the comparison time is independent of where (or whether) the bytes differ.
+fn ct_eq_hex_hash(a_hex: &str, b_hex: &str) -> bool {
+    let (a, b) = match (hex::decode(a_hex), hex::decode(b_hex)) {
+        (Ok(a), Ok(b)) => (a, b),
+        _ => return false,
+    };
+    if a.len() != b.len() {
+        return false;
+    }
+    a.ct_eq(&b).into()
+}
 
 fn mask_email(email: &str) -> String {
     if let Some((local, domain)) = email.split_once('@') {
@@ -1106,5 +1138,64 @@ mod tests {
             .record_guardian_approval(&request_id, "g2", None)
             .unwrap();
         assert!(complete);
+    }
+
+    #[test]
+    fn test_ct_eq_hex_hash() {
+        let a = {
+            let mut h = Sha256::new();
+            h.update(b"hello");
+            hex::encode(h.finalize())
+        };
+        let b = {
+            let mut h = Sha256::new();
+            h.update(b"hello");
+            hex::encode(h.finalize())
+        };
+        let c = {
+            let mut h = Sha256::new();
+            h.update(b"world");
+            hex::encode(h.finalize())
+        };
+        assert!(ct_eq_hex_hash(&a, &b));
+        assert!(!ct_eq_hex_hash(&a, &c));
+        assert!(!ct_eq_hex_hash("nothex", &a));
+    }
+
+    #[test]
+    fn test_verify_code_ct_correct_and_wrong() {
+        let manager = RecoveryManager::with_defaults();
+        manager
+            .configure_user(
+                "user-ct",
+                Some("user@example.com".to_string()),
+                None,
+                vec![],
+                false,
+            )
+            .unwrap();
+
+        let (request_id, code) = manager
+            .initiate_email_recovery("user-ct", None, None)
+            .unwrap();
+
+        // Wrong code rejected (constant-time path).
+        let wrong = if code.as_str() == "000000" {
+            "111111"
+        } else {
+            "000000"
+        };
+        assert!(manager.verify_code(&request_id, wrong).is_err());
+        // Correct code accepted.
+        assert!(manager.verify_code(&request_id, code.as_str()).is_ok());
+    }
+
+    #[test]
+    fn test_cleanup_expired_no_underflow() {
+        let manager = RecoveryManager::with_defaults();
+        // No requests: must return 0 without underflow.
+        assert_eq!(manager.cleanup_expired(), 0);
+        // Calling repeatedly is also safe.
+        assert_eq!(manager.cleanup_expired(), 0);
     }
 }

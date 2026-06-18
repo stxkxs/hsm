@@ -1,7 +1,22 @@
 # Phase 1: Critical Security Fixes (Block Production Deploy)
 
+> **STATUS: ✅ RESOLVED.** All 8 fixes below are implemented in the codebase. This
+> document is retained as a historical hardening record, not an open work list.
+> Verified 2026-06-17 against the current tree (line numbers approximate):
+>
+> | Fix | Implemented in |
+> | --- | --- |
+> | 1. JWT signature verification | `crates/auth/src/oidc/jwt.rs` — `verify_rsa_signature` (~154), `verify_ec_signature` (~220) perform real `rsa`/`p256`/`p384` verification |
+> | 2. mTLS cert signature verification | `crates/auth/src/mtls/cert_validator.rs` — `verify_signature` (~265) verifies via `ring` with OID→algorithm mapping |
+> | 3. PKCS#11 PIN validation | `crates/pkcs11-bridge/src/session.rs` — `login` (176) with `pin_attempts`/`MAX_PIN_ATTEMPTS`, returns `CKR_PIN_INCORRECT`/`CKR_PIN_LOCKED` |
+> | 4. Dev-mode auth bypass guarded | `crates/grpc-api/src/middleware/auth.rs` — dev identity behind `#[cfg(debug_assertions)]`; release returns `AuthenticationFailed` (51, 62, 103, 134) |
+> | 5. REST dev-login route guarded | `crates/rest-api/src/routes.rs:26` — `/auth/dev-login` behind `#[cfg(debug_assertions)]` |
+> | 6. Ethereum tx hash bug | `crates/blockchain/src/ethereum/transaction.rs:102` — hashes `&buf` (RLP list), not `&items` |
+> | 7. Validator DB write errors propagated | `crates/validator/src/slashing_db.rs:493,621` — `update_validator_data(...).map_err(...)?` |
+> | 8. Restrictive storage file permissions | `crates/storage/src/encrypted_fs.rs:101-104` — `OpenOptions` with `#[cfg(unix)] .mode(0o600)` |
+
 ## Overview
-8 critical fixes that must be resolved before any production deployment.
+8 critical fixes that were resolved before production deployment.
 
 ---
 

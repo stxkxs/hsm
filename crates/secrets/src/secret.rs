@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use uuid::Uuid;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 /// A secret stored in the secrets manager.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,11 +194,33 @@ impl SecretMetadata {
 }
 
 /// The actual secret data (encrypted at rest).
-#[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+///
+/// `HashMap` itself does not implement [`Zeroize`], so `Zeroize` is implemented
+/// manually by iterating the map and zeroizing every value (and clearing keys,
+/// which may themselves be sensitive). `Drop` invokes the same path so the
+/// in-memory contents are wiped when a `SecretData` goes out of scope.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SecretData {
     /// Key-value pairs.
-    #[zeroize(skip)] // HashMap doesn't implement Zeroize
     pub data: HashMap<String, SecretValue>,
+}
+
+impl Zeroize for SecretData {
+    fn zeroize(&mut self) {
+        // Zeroize each value in place, then zeroize the key strings before
+        // dropping the (now-empty-of-secrets) map. We drain the map so the
+        // owned key `String`s can be zeroized rather than just deallocated.
+        for (mut key, mut value) in self.data.drain() {
+            value.zeroize();
+            key.zeroize();
+        }
+    }
+}
+
+impl Drop for SecretData {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
 }
 
 impl SecretData {
@@ -279,6 +301,62 @@ impl fmt::Debug for SecretValue {
             SecretValue::Binary(_) => f.write_str("SecretValue::Binary(<redacted>)"),
             SecretValue::Json(_) => f.write_str("SecretValue::Json(<redacted>)"),
         }
+    }
+}
+
+/// Recursively zeroize the sensitive contents of a [`serde_json::Value`].
+///
+/// `serde_json::Value` does not implement [`Zeroize`]; the variant that can
+/// carry secret material on the heap is `String` (object-value and array-item
+/// strings, plus object keys). We overwrite every owned string buffer in place,
+/// then collapse the tree to `Value::Null` so no plaintext remains reachable.
+///
+/// This function deliberately reassigns `*value` to `Null` only; it never
+/// reassigns a node to another `SecretValue`-bearing type, so it cannot trigger
+/// a recursive `Drop`.
+fn zeroize_json(value: &mut serde_json::Value) {
+    use serde_json::Value;
+    match value {
+        Value::String(s) => s.zeroize(),
+        Value::Array(arr) => {
+            for item in arr.iter_mut() {
+                zeroize_json(item);
+            }
+        }
+        Value::Object(map) => {
+            // Object values are zeroized in place. `serde_json::Map` does not
+            // expose owned-key draining, so the key `String`s are dropped (and
+            // their allocations freed) when the map is cleared; we cannot
+            // overwrite their bytes first, but values — the secret-bearing part
+            // — are wiped.
+            for (_k, v) in map.iter_mut() {
+                zeroize_json(v);
+            }
+            map.clear();
+        }
+        // Bool / Number / Null carry no heap-allocated secret bytes to overwrite.
+        _ => {}
+    }
+    *value = Value::Null;
+}
+
+impl Zeroize for SecretValue {
+    fn zeroize(&mut self) {
+        // Wipe the underlying buffers in place. We intentionally do NOT reassign
+        // `*self` to a fresh variant here: doing so would drop the current value,
+        // and because `SecretValue` also implements `Drop` (which calls
+        // `zeroize`), that would recurse indefinitely.
+        match self {
+            SecretValue::String(s) => s.zeroize(),
+            SecretValue::Binary(b) => b.zeroize(),
+            SecretValue::Json(j) => zeroize_json(j),
+        }
+    }
+}
+
+impl Drop for SecretValue {
+    fn drop(&mut self) {
+        self.zeroize();
     }
 }
 
@@ -554,5 +632,109 @@ mod tests {
         assert_eq!(RotationInterval::Seconds(3600).as_seconds(), Some(3600));
         assert_eq!(RotationInterval::Days(1).as_seconds(), Some(86400));
         assert!(RotationInterval::Manual.as_seconds().is_none());
+    }
+
+    // ---- Zeroization regression tests (HIGH #11) ----
+    //
+    // These prove the advertised wiping actually happens. Before the fix,
+    // `SecretValue` implemented neither `Zeroize` nor `Drop`, so secret bytes
+    // were never overwritten; the `SecretData` derive applied `#[zeroize(skip)]`
+    // to its only field, making `zeroize()` a no-op. We assert the buffers are
+    // observably zeroed in place after `zeroize()` (which wipes without
+    // reassigning the variant), rather than relying on shape-only checks.
+
+    #[test]
+    fn test_secret_value_string_is_zeroized_in_place() {
+        let mut v = SecretValue::string("super-secret-password");
+        v.zeroize();
+        match &v {
+            SecretValue::String(s) => {
+                // The String buffer must be fully overwritten with zero bytes.
+                // (zeroize for String pushes 0x00 over the existing capacity.)
+                assert!(
+                    s.as_bytes().iter().all(|&b| b == 0),
+                    "string secret bytes were not zeroed: {:?}",
+                    s.as_bytes()
+                );
+                assert_eq!(s.len(), 0, "string length should be cleared");
+            }
+            other => panic!("zeroize must not change the variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_secret_value_binary_is_zeroized_in_place() {
+        let secret_bytes = vec![0xAB_u8; 64];
+        let mut v = SecretValue::binary(secret_bytes);
+        v.zeroize();
+        match &v {
+            SecretValue::Binary(b) => {
+                assert!(
+                    b.iter().all(|&x| x == 0),
+                    "binary secret bytes were not zeroed: {:?}",
+                    b
+                );
+                assert_eq!(b.len(), 0, "binary length should be cleared");
+            }
+            other => panic!("zeroize must not change the variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_secret_value_json_is_collapsed_to_null() {
+        let mut v = SecretValue::json(serde_json::json!({
+            "api_key": "sk-live-deadbeef",
+            "nested": { "token": "hunter2" },
+            "list": ["a", "b"],
+        }));
+        v.zeroize();
+        match &v {
+            SecretValue::Json(j) => {
+                // The whole tree must collapse to Null so no plaintext string
+                // remains reachable through the value.
+                assert!(j.is_null(), "json secret was not collapsed to null: {}", j);
+            }
+            other => panic!("zeroize must not change the variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_secret_value_implements_zeroize_trait() {
+        // Compile-time proof that SecretValue is wired into the Zeroize trait.
+        fn assert_zeroize<T: zeroize::Zeroize>() {}
+        assert_zeroize::<SecretValue>();
+        assert_zeroize::<SecretData>();
+    }
+
+    #[test]
+    fn test_secret_data_zeroize_wipes_all_values() {
+        let mut data = SecretData::new();
+        data.insert("password", SecretValue::string("p@ssw0rd"));
+        data.insert("token", SecretValue::binary(vec![0xFF_u8; 32]));
+        assert_eq!(data.len(), 2);
+
+        data.zeroize();
+
+        // The map must be emptied (drained) and therefore hold no secret values.
+        assert_eq!(data.len(), 0, "SecretData::zeroize must drain the map");
+        assert!(data.is_empty());
+        assert!(data.get("password").is_none());
+        assert!(data.get("token").is_none());
+    }
+
+    #[test]
+    fn test_secret_data_drop_does_not_panic_or_recurse() {
+        // Constructing and dropping a populated SecretData exercises the Drop ->
+        // zeroize path for both SecretData and each contained SecretValue.
+        // A stack overflow here (infinite Drop recursion) would fail the test.
+        let mut data = SecretData::new();
+        for i in 0..100 {
+            data.insert(
+                format!("key-{i}"),
+                SecretValue::string(format!("secret-value-{i}")),
+            );
+            data.insert(format!("bin-{i}"), SecretValue::binary(vec![i as u8; 16]));
+        }
+        drop(data); // must complete without overflowing the stack
     }
 }

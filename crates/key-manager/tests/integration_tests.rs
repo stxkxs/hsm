@@ -91,8 +91,10 @@ fn test_key_expiration() {
 
     use chrono::{Duration, Utc};
 
-    let mut policy = KeyUsagePolicy::default();
-    policy.expires_at = Some(Utc::now() - Duration::seconds(10)); // Already expired
+    let policy = KeyUsagePolicy {
+        expires_at: Some(Utc::now() - Duration::seconds(10)), // Already expired
+        ..Default::default()
+    };
 
     let spec = KeySpec {
         key_type: KeyType::Ed25519,
@@ -141,11 +143,13 @@ fn test_different_key_types() {
 fn test_key_policy_enforcement() {
     let manager = DefaultKeyManager::new();
 
-    let mut policy = KeyUsagePolicy::default();
-    policy.can_sign = true;
-    policy.can_encrypt = false;
-    policy.can_derive = false;
-    policy.can_export = false;
+    let policy = KeyUsagePolicy {
+        can_sign: true,
+        can_encrypt: false,
+        can_derive: false,
+        can_export: false,
+        ..Default::default()
+    };
 
     let spec = KeySpec {
         key_type: KeyType::Ed25519,

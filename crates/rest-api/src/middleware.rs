@@ -9,7 +9,11 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use hsm_auth::{ClientIdentity, RateLimiter, SessionManager, SessionToken};
+use hsm_audit::AsyncAuditLogger;
+use hsm_auth::{
+    AclManager, ClientIdentity, NamespaceManager, RateLimiter, RbacPolicy, SessionManager,
+    SessionToken,
+};
 use hsm_key_manager::{DefaultKeyManager, KeyManager};
 use std::sync::Arc;
 
@@ -22,6 +26,17 @@ pub struct AppState {
     pub key_manager: Arc<dyn KeyManager>,
     /// Rate limiter for request throttling
     pub rate_limiter: Arc<RateLimiter>,
+    /// RBAC policy engine — maps roles to permissions (authorization layer 2).
+    pub rbac: Arc<RbacPolicy>,
+    /// Namespace manager — enforces tenant isolation (authorization layer 1).
+    pub namespaces: Arc<NamespaceManager>,
+    /// Per-key ACL manager — fine-grained key access control (authorization layer 3).
+    pub acls: Arc<AclManager>,
+    /// Tamper-evident audit logger. When present, every crypto and
+    /// key-lifecycle operation is logged fail-closed before the response is
+    /// returned. `None` only in lightweight unit tests that do not exercise
+    /// the audit path.
+    pub audit: Option<Arc<AsyncAuditLogger>>,
     /// Start time for uptime calculation
     pub start_time: std::time::Instant,
 }
@@ -33,6 +48,10 @@ impl AppState {
             sessions,
             key_manager: Arc::new(DefaultKeyManager::new()),
             rate_limiter: Arc::new(RateLimiter::new()),
+            rbac: Arc::new(RbacPolicy::new()),
+            namespaces: Arc::new(NamespaceManager::new()),
+            acls: Arc::new(AclManager::new()),
+            audit: None,
             start_time: std::time::Instant::now(),
         }
     }
@@ -46,8 +65,21 @@ impl AppState {
             sessions,
             key_manager,
             rate_limiter: Arc::new(RateLimiter::new()),
+            rbac: Arc::new(RbacPolicy::new()),
+            namespaces: Arc::new(NamespaceManager::new()),
+            acls: Arc::new(AclManager::new()),
+            audit: None,
             start_time: std::time::Instant::now(),
         }
+    }
+
+    /// Attach a tamper-evident audit logger to this state.
+    ///
+    /// Once attached, mutating and cryptographic handlers log every operation
+    /// fail-closed (an audit-write failure fails the request).
+    pub fn with_audit_logger(mut self, audit: Arc<AsyncAuditLogger>) -> Self {
+        self.audit = Some(audit);
+        self
     }
 }
 

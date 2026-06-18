@@ -4,8 +4,26 @@
 
 use crate::error::{BlockchainError, Result};
 use alloy_primitives::{Address, Bytes, B256, U256};
-use alloy_rlp::Encodable;
+use alloy_rlp::{Encodable, Header};
 use sha3::{Digest, Keccak256};
+
+/// Wrap an already-RLP-encoded payload (the concatenation of each field's RLP
+/// encoding) into a single RLP list by prepending the correct list header.
+///
+/// This is the correct way to build `RLP_list([field0, field1, ...])`. Using
+/// `alloy_rlp::encode_list` with the payload as a single `&[u8]` element instead
+/// produces `RLP_list([RLP_string(payload)])`, which double-wraps the fields and
+/// yields the wrong Keccak256 signing hash.
+fn rlp_wrap_list(payload: &[u8]) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(payload.len() + 9);
+    let header = Header {
+        list: true,
+        payload_length: payload.len(),
+    };
+    header.encode(&mut buf);
+    buf.extend_from_slice(payload);
+    buf
+}
 
 /// Ethereum transaction types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,13 +84,11 @@ impl LegacyTransaction {
 
     /// Get the signing hash (for EIP-155 if chain_id is set)
     pub fn signing_hash(&self) -> [u8; 32] {
-        let mut buf = Vec::new();
-
         // RLP encode: [nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0]
         let nonce = U256::from(self.nonce);
         let gas_limit = U256::from(self.gas_limit);
 
-        // Start RLP list
+        // Concatenate each field's RLP encoding into the list payload.
         let mut items = Vec::new();
 
         nonce.encode(&mut items);
@@ -96,8 +112,8 @@ impl LegacyTransaction {
             U256::ZERO.encode(&mut items);
         }
 
-        // Encode as list
-        alloy_rlp::encode_list::<_, &[u8]>(&[items.as_slice()], &mut buf);
+        // Wrap the fields in a single RLP list header.
+        let buf = rlp_wrap_list(&items);
 
         Keccak256::digest(&buf).into()
     }
@@ -126,9 +142,9 @@ impl LegacyTransaction {
         B256::from_slice(r).encode(&mut items);
         B256::from_slice(s).encode(&mut items);
 
-        let mut buf = Vec::new();
-        alloy_rlp::encode_list::<_, &[u8]>(&[items.as_slice()], &mut buf);
-        items
+        // Wrap the fields in a single RLP list header and return the wrapped
+        // bytes (previously this returned the bare, unwrapped field payload).
+        rlp_wrap_list(&items)
     }
 }
 
@@ -205,22 +221,30 @@ impl Eip1559Transaction {
         self.value.encode(&mut items);
         self.data.clone().encode(&mut items);
 
-        // Encode access list
-        let access_list_encoded = Vec::new();
+        // Encode the access list as a proper nested RLP list:
+        //   accessList = [ [address, [storageKey, ...]], ... ]
+        let mut access_list_payload = Vec::new();
         for (addr, keys) in &self.access_list {
-            let mut entry = Vec::new();
-            addr.encode(&mut entry);
-            let mut keys_encoded = Vec::new();
+            // Inner list of storage keys.
+            let mut keys_payload = Vec::new();
             for key in keys {
-                key.encode(&mut keys_encoded);
+                key.encode(&mut keys_payload);
             }
-            alloy_rlp::encode_list::<_, &[u8]>(&[keys_encoded.as_slice()], &mut entry);
-        }
-        alloy_rlp::encode_list::<_, &[u8]>(&[access_list_encoded.as_slice()], &mut items);
+            let keys_list = rlp_wrap_list(&keys_payload);
 
-        // Prefix with transaction type
+            // entry = [address, [storageKey, ...]]
+            let mut entry_payload = Vec::new();
+            addr.encode(&mut entry_payload);
+            entry_payload.extend_from_slice(&keys_list);
+            access_list_payload.extend_from_slice(&rlp_wrap_list(&entry_payload));
+        }
+        items.extend_from_slice(&rlp_wrap_list(&access_list_payload));
+
+        // Wrap the fields in a single RLP list header, then prefix with the
+        // EIP-2718 transaction type byte.
+        let body = rlp_wrap_list(&items);
         let mut buf = vec![0x02]; // EIP-1559 type
-        buf.extend_from_slice(&items);
+        buf.extend_from_slice(&body);
 
         Keccak256::digest(&buf).into()
     }
@@ -267,6 +291,110 @@ mod tests {
         assert_eq!(hash.len(), 32);
     }
 
+    /// Known-answer test: the canonical EIP-155 example transaction.
+    ///
+    /// Source: EIP-155 specification example
+    /// (nonce=9, gasPrice=20 gwei, gas=21000, to=0x3535..35, value=1 ETH,
+    /// data=empty, chainId=1). The reference RLP for signing and its Keccak256
+    /// hash are published in the EIP-155 spec. Before the RLP double-wrapping
+    /// fix the encoded list started with 0xed instead of 0xec, producing a wrong
+    /// signing hash (HIGH #17).
+    #[test]
+    fn test_legacy_signing_hash_eip155_kat() {
+        let to: Address = "0x3535353535353535353535353535353535353535"
+            .parse()
+            .unwrap();
+        let tx = LegacyTransaction::new(
+            9,
+            U256::from(20_000_000_000u64), // 20 gwei
+            21000,
+            Some(to),
+            U256::from(1_000_000_000_000_000_000u64), // 1 ETH
+            Bytes::new(),
+        )
+        .with_chain_id(1);
+
+        // The hash must equal the canonical EIP-155 example signing hash.
+        let hash = tx.signing_hash();
+        let expected =
+            hex::decode("daf5a779ae972f972197303d7b574746c7ef83eadac0f2791ad23db92e4c8e53")
+                .unwrap();
+        assert_eq!(hash.as_slice(), expected.as_slice());
+
+        // The reference RLP for signing must be reproduced exactly, and must
+        // begin with 0xec (correct), not 0xed (the double-wrapped bug).
+        let expected_rlp = "ec098504a817c800825208943535353535353535353535353535353535353535880de0b6b3a764000080018080";
+        let mut items = Vec::new();
+        U256::from(9u64).encode(&mut items);
+        U256::from(20_000_000_000u64).encode(&mut items);
+        U256::from(21000u64).encode(&mut items);
+        to.encode(&mut items);
+        U256::from(1_000_000_000_000_000_000u64).encode(&mut items);
+        Bytes::new().encode(&mut items);
+        U256::from(1u64).encode(&mut items);
+        U256::ZERO.encode(&mut items);
+        U256::ZERO.encode(&mut items);
+        let rlp = rlp_wrap_list(&items);
+        assert_eq!(hex::encode(&rlp), expected_rlp);
+        assert_eq!(rlp[0], 0xec);
+        // And the hash is the Keccak256 of exactly those bytes.
+        let recomputed: [u8; 32] = Keccak256::digest(&rlp).into();
+        assert_eq!(recomputed, hash);
+    }
+
+    /// The signed encoding must be a single RLP list (not the bare, unwrapped
+    /// field payload that the buggy `encode_signed` previously returned), and
+    /// must be re-parseable as a legacy transaction (LOW #27).
+    #[test]
+    fn test_encode_signed_is_wrapped_list() {
+        let tx = LegacyTransaction::new(
+            9,
+            U256::from(20_000_000_000u64),
+            21000,
+            Some(
+                "0x3535353535353535353535353535353535353535"
+                    .parse()
+                    .unwrap(),
+            ),
+            U256::from(1_000_000_000_000_000_000u64),
+            Bytes::new(),
+        )
+        .with_chain_id(1);
+
+        let r = [0x11u8; 32];
+        let s = [0x22u8; 32];
+        let encoded = tx.encode_signed(37, &r, &s);
+
+        // A legacy signed tx is an RLP list, so the first byte is in [0xc0, 0xff].
+        assert!(
+            encoded[0] >= 0xc0,
+            "signed tx must be an RLP list (got first byte 0x{:02x})",
+            encoded[0]
+        );
+        // It must therefore be classified as a legacy transaction.
+        assert_eq!(
+            parse_transaction(&encoded).unwrap(),
+            TransactionType::Legacy
+        );
+
+        // Cross-check the exact bytes against an independently built RLP list.
+        let mut items = Vec::new();
+        U256::from(9u64).encode(&mut items);
+        U256::from(20_000_000_000u64).encode(&mut items);
+        U256::from(21000u64).encode(&mut items);
+        let to: Address = "0x3535353535353535353535353535353535353535"
+            .parse()
+            .unwrap();
+        to.encode(&mut items);
+        U256::from(1_000_000_000_000_000_000u64).encode(&mut items);
+        Bytes::new().encode(&mut items);
+        U256::from(37u64).encode(&mut items);
+        B256::from_slice(&r).encode(&mut items);
+        B256::from_slice(&s).encode(&mut items);
+        let expected = rlp_wrap_list(&items);
+        assert_eq!(encoded, expected);
+    }
+
     #[test]
     fn test_eip1559_transaction_hash() {
         let tx = Eip1559Transaction::new(
@@ -282,6 +410,96 @@ mod tests {
 
         let hash = tx.signing_hash();
         assert_eq!(hash.len(), 32);
+    }
+
+    /// Known-answer test for EIP-1559 signing-hash preimage with an empty access
+    /// list. The transaction payload (type byte 0x02 + RLP list) is built and
+    /// cross-checked, then hashed. The empty access list must serialize as the
+    /// empty RLP list (0xc0) and the fields must be wrapped in a single list
+    /// header (HIGH #17 also affected the EIP-1559 path).
+    #[test]
+    fn test_eip1559_signing_hash_kat() {
+        let to: Address = "0x3535353535353535353535353535353535353535"
+            .parse()
+            .unwrap();
+        let tx = Eip1559Transaction::new(
+            1,
+            0,
+            U256::from(1_000_000_000u64), // 1 gwei
+            U256::from(2_000_000_000u64), // 2 gwei
+            21000,
+            Some(to),
+            U256::from(1_000_000_000_000_000_000u64),
+            Bytes::new(),
+        );
+
+        // Independently constructed reference preimage.
+        let expected_tx = "02ef0180843b9aca008477359400825208943535353535353535353535353535353535353535880de0b6b3a764000080c0";
+        let mut items = Vec::new();
+        U256::from(1u64).encode(&mut items);
+        U256::from(0u64).encode(&mut items);
+        U256::from(1_000_000_000u64).encode(&mut items);
+        U256::from(2_000_000_000u64).encode(&mut items);
+        U256::from(21000u64).encode(&mut items);
+        to.encode(&mut items);
+        U256::from(1_000_000_000_000_000_000u64).encode(&mut items);
+        Bytes::new().encode(&mut items);
+        items.extend_from_slice(&rlp_wrap_list(&[])); // empty access list => 0xc0
+        let body = rlp_wrap_list(&items);
+        let mut preimage = vec![0x02u8];
+        preimage.extend_from_slice(&body);
+        assert_eq!(hex::encode(&preimage), expected_tx);
+        // ...and it ends with the empty-access-list marker 0xc0.
+        assert_eq!(*preimage.last().unwrap(), 0xc0);
+
+        let expected_hash: [u8; 32] = Keccak256::digest(&preimage).into();
+        assert_eq!(tx.signing_hash(), expected_hash);
+    }
+
+    /// An access-list entry must serialize as the nested RLP structure
+    /// `[address, [storageKey, ...]]` and change the signing hash relative to
+    /// the empty-access-list case. The old code discarded the per-entry bytes,
+    /// so the access list silently had no effect on the hash.
+    #[test]
+    fn test_eip1559_access_list_affects_hash() {
+        let to: Address = "0x3535353535353535353535353535353535353535"
+            .parse()
+            .unwrap();
+        let base = Eip1559Transaction::new(
+            1,
+            0,
+            U256::from(1_000_000_000u64),
+            U256::from(2_000_000_000u64),
+            21000,
+            Some(to),
+            U256::from(1_000_000_000_000_000_000u64),
+            Bytes::new(),
+        );
+
+        let addr: Address = "0x0000000000000000000000000000000000001337"
+            .parse()
+            .unwrap();
+        let key = B256::from_slice(&[0x11u8; 32]);
+        let with_list = base.clone().with_access_list(vec![(addr, vec![key])]);
+
+        assert_ne!(
+            base.signing_hash(),
+            with_list.signing_hash(),
+            "access list entries must change the signing hash"
+        );
+
+        // Cross-check the access-list RLP fragment against an independent build.
+        let mut keys_payload = Vec::new();
+        key.encode(&mut keys_payload);
+        let keys_list = rlp_wrap_list(&keys_payload);
+        let mut entry_payload = Vec::new();
+        addr.encode(&mut entry_payload);
+        entry_payload.extend_from_slice(&keys_list);
+        let access = rlp_wrap_list(&rlp_wrap_list(&entry_payload));
+        assert_eq!(
+            hex::encode(&access),
+            "f838f7940000000000000000000000000000000000001337e1a01111111111111111111111111111111111111111111111111111111111111111"
+        );
     }
 
     #[test]

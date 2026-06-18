@@ -1,5 +1,17 @@
 # Phase 4: Code Quality & Continuous Improvement
 
+> **STATUS: ✅ RESOLVED (7/7).** Verified 2026-06-17:
+>
+> | Fix | Status | Evidence |
+> | --- | --- | --- |
+> | 1. Remove production `println!` | ✅ | `crates/verification/src/shamir.rs` — 0 `println!`, uses `tracing` |
+> | 2. Graceful server shutdown | ✅ | `crates/hsm-server/src/main.rs:147,187` — `CancellationToken` + `tokio::select!` + `shutdown_signal()` |
+> | 3. StarkNet string truncation | ✅ | `crates/blockchain/src/starknet/signing.rs:294` — `felt_from_short_string` returns `Result`, errors `> 31` bytes |
+> | 4. Remove blanket clippy suppressions | ✅ | All crate-root `#![allow(dead_code/unused_imports/unused_variables)]` removed (`auth`, `cluster`, `validator`, `bridge-monitor`). Rather than prune the scaffolding, the underlying features were completed: `validator` builder now honors `enable_babylon` (`service.rs`); `bridge-monitor` time-lock queue + release + config-driven maintenance loop (`policy/mod.rs`, `lib.rs`); `cluster` Raft replicated state machine in `apply_command` + `voted_for` vote-safety in `handle_request_vote` (`node.rs`). `#![deny(unsafe_code)]` retained everywhere; only stale leftover imports removed. |
+> | 5. WASM allocation + fuel safety | ✅ | `crates/wasm-policy/src/engine.rs:300-333` checked `HEAP_MAX`; fuel exhaustion detected via typed `Trap::OutOfFuel` (289), regression-tested |
+> | 6. Upgrade Wasmtime | ✅ | `crates/wasm-policy/Cargo.toml:11` — `wasmtime = "45"` |
+> | 7. Mnemonic zeroization | ✅ | `crates/blockchain/src/bip/bip39.rs:25,151` — `Zeroize`/`ZeroizeOnDrop` + manual `Drop for Mnemonic` |
+
 ## Overview
 7 quality improvements for long-term maintainability and safety.
 

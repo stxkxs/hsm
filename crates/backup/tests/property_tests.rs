@@ -54,7 +54,7 @@ proptest! {
         let recovery_shares = &shares[..threshold as usize];
         let recovered = shamir.recover_secret(recovery_shares).unwrap();
 
-        prop_assert_eq!(recovered, secret);
+        prop_assert_eq!(recovered.as_slice(), secret.as_slice());
     }
 }
 
@@ -81,9 +81,9 @@ proptest! {
         let recovered2 = shamir.recover_secret(&subset2).unwrap();
         let recovered3 = shamir.recover_secret(&subset3).unwrap();
 
-        prop_assert_eq!(&recovered1, &secret);
-        prop_assert_eq!(&recovered2, &secret);
-        prop_assert_eq!(&recovered3, &secret);
+        prop_assert_eq!(recovered1.as_slice(), secret.as_slice());
+        prop_assert_eq!(recovered2.as_slice(), secret.as_slice());
+        prop_assert_eq!(recovered3.as_slice(), secret.as_slice());
     }
 }
 

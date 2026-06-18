@@ -1,5 +1,8 @@
 //! Performance tests for storage backend
 
+// the perf_target! macro intentionally negates a comparison to warn when a target is missed
+#![allow(clippy::neg_cmp_op_on_partial_ord)]
+
 use hsm_storage::{EncryptedFileStorage, KeyId, StorageBackend};
 use std::time::Instant;
 use tempfile::TempDir;

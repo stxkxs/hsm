@@ -2,12 +2,10 @@
 
 pub mod evm;
 
-use crate::config::ChainConfig;
 use crate::error::Result;
 use async_trait::async_trait;
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 
 pub use evm::EvmWatcher;
 
@@ -173,6 +171,7 @@ pub struct WatcherMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_bridge_event() {

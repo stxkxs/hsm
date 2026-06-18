@@ -1,6 +1,6 @@
 //! Benchmarks for blockchain operations
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use hsm_blockchain::bip::bip32::{DerivationPath, ExtendedPrivateKey};
 use hsm_blockchain::bip::bip39::{Language, Mnemonic, MnemonicType};
 use hsm_blockchain::ethereum::eip191::PersonalMessage;
@@ -8,6 +8,7 @@ use hsm_blockchain::ethereum::eip712::{Eip712Domain, Eip712TypedData, TypedDataH
 use k256::ecdsa::SigningKey;
 use k256::SecretKey;
 use serde_json::json;
+use std::hint::black_box;
 
 fn bench_mnemonic_generation(c: &mut Criterion) {
     c.bench_function("mnemonic_generate_24_words", |b| {

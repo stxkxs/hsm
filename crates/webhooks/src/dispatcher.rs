@@ -160,7 +160,31 @@ impl WebhookDispatcher {
 
     /// Get pending events count (approximate)
     pub fn pending_count(&self) -> usize {
-        self.event_tx.capacity() - self.event_tx.max_capacity()
+        // `max_capacity()` is the constant channel size; `capacity()` is the
+        // number of currently-available permits. The backlog is the difference
+        // (total - available). The operands must be in this order, otherwise
+        // the subtraction underflows whenever any event is buffered.
+        self.event_tx.max_capacity() - self.event_tx.capacity()
+    }
+
+    /// Test-only constructor that does NOT spawn the background drain task.
+    ///
+    /// Returns the dispatcher together with the receiver so callers can keep
+    /// the channel from being drained, allowing the buffered backlog observed
+    /// by [`Self::pending_count`] to be asserted deterministically.
+    #[cfg(test)]
+    fn new_undrained(
+        registry: Arc<WebhookRegistry>,
+        channel_size: usize,
+    ) -> (Self, mpsc::Receiver<WebhookEvent>) {
+        let deliverer = Arc::new(WebhookDeliverer::new());
+        let (event_tx, event_rx) = mpsc::channel(channel_size);
+        let dispatcher = Self {
+            registry,
+            deliverer,
+            event_tx,
+        };
+        (dispatcher, event_rx)
     }
 }
 
@@ -248,5 +272,48 @@ mod tests {
         let dispatcher = WebhookDispatcherBuilder::new().channel_size(5000).build();
 
         assert_eq!(dispatcher.registry().count(), 0);
+    }
+
+    /// Regression test for the `pending_count` underflow bug.
+    ///
+    /// Before the fix, `pending_count` computed `capacity() - max_capacity()`.
+    /// `capacity()` (available permits) is always `<= max_capacity()` (the
+    /// constant channel size), so buffering any event made the subtraction
+    /// underflow: a panic in debug builds, or ~usize::MAX in release builds.
+    ///
+    /// We deterministically buffer events into an undrained channel and assert
+    /// that `pending_count()` reports the exact small backlog.
+    #[tokio::test]
+    async fn test_pending_count_reports_actual_backlog() {
+        let channel_size = 16;
+        let registry = Arc::new(WebhookRegistry::new());
+        // Keep the receiver alive but never poll it, so sent events stay buffered.
+        let (dispatcher, _rx) = WebhookDispatcher::new_undrained(registry, channel_size);
+
+        // Empty channel: no backlog.
+        assert_eq!(dispatcher.pending_count(), 0);
+
+        // Buffer exactly 3 events without draining.
+        for i in 0..3 {
+            dispatcher
+                .dispatch_sync(WebhookEvent::new(
+                    WebhookEventType::KeyCreated,
+                    "default",
+                    json!({ "n": i }),
+                ))
+                .expect("buffer should have room");
+        }
+
+        let pending = dispatcher.pending_count();
+        // Exact known answer: 3 buffered events => backlog of 3.
+        assert_eq!(
+            pending, 3,
+            "expected a backlog of 3, got {pending} (underflow / wrong operand order?)"
+        );
+        // And it must be a small, sane number — never the usize::MAX underflow.
+        assert!(
+            pending < channel_size,
+            "pending_count {pending} exceeds channel size {channel_size}; likely underflow"
+        );
     }
 }

@@ -5,13 +5,21 @@
 // - Session lookup: < 50μs p99
 // - Concurrent sessions: > 10,000
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use hsm_auth::*;
-use rcgen::{CertificateParams, DistinguishedName, DnType};
+use rcgen::{CertificateParams, DistinguishedName, DnType, Issuer, KeyPair};
+use std::hint::black_box;
 use std::time::Duration;
 
-// Helper to generate test certificates
-fn generate_test_certs() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+// A self-signed CA along with the key pair needed to sign certificates with it.
+struct TestCa {
+    params: CertificateParams,
+    key: KeyPair,
+    pem: Vec<u8>,
+}
+
+// Helper to generate a self-signed test CA (rcgen 0.14 API).
+fn generate_test_ca() -> TestCa {
     let mut ca_params = CertificateParams::default();
     ca_params.distinguished_name = DistinguishedName::new();
     ca_params
@@ -19,27 +27,19 @@ fn generate_test_certs() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
         .push(DnType::CommonName, "Test CA");
     ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
 
-    let ca_cert = rcgen::Certificate::from_params(ca_params).unwrap();
-    let ca_pem = ca_cert.serialize_pem().unwrap().into_bytes();
+    let ca_key = KeyPair::generate().unwrap();
+    let ca_cert = ca_params.self_signed(&ca_key).unwrap();
+    let ca_pem = ca_cert.pem().into_bytes();
 
-    // Server cert
-    let mut server_params = CertificateParams::default();
-    server_params.distinguished_name = DistinguishedName::new();
-    server_params
-        .distinguished_name
-        .push(DnType::CommonName, "Test Server");
-
-    let server_cert = rcgen::Certificate::from_params(server_params).unwrap();
-    let server_cert_pem = server_cert
-        .serialize_pem_with_signer(&ca_cert)
-        .unwrap()
-        .into_bytes();
-    let server_key_pem = server_cert.serialize_private_key_pem().into_bytes();
-
-    (ca_pem, server_cert_pem, server_key_pem)
+    TestCa {
+        params: ca_params,
+        key: ca_key,
+        pem: ca_pem,
+    }
 }
 
-fn generate_client_cert(ca_cert: &rcgen::Certificate, common_name: &str) -> Vec<u8> {
+// Issue a client certificate signed by the given CA (rcgen 0.14 API).
+fn generate_client_cert(ca: &TestCa, common_name: &str) -> Vec<u8> {
     let mut client_params = CertificateParams::default();
     client_params.distinguished_name = DistinguishedName::new();
     client_params
@@ -53,29 +53,18 @@ fn generate_client_cert(ca_cert: &rcgen::Certificate, common_name: &str) -> Vec<
         .distinguished_name
         .push(DnType::OrganizationName, "roles=user");
 
-    let client_cert = rcgen::Certificate::from_params(client_params).unwrap();
-    client_cert
-        .serialize_pem_with_signer(ca_cert)
-        .unwrap()
-        .into_bytes()
+    let client_key = KeyPair::generate().unwrap();
+    let issuer = Issuer::from_params(&ca.params, &ca.key);
+    let client_cert = client_params.signed_by(&client_key, &issuer).unwrap();
+    client_cert.pem().into_bytes()
 }
 
 // Benchmark 1: Certificate validation (with and without caching)
 fn bench_cert_validation(c: &mut Criterion) {
-    let (ca_pem, _, _) = generate_test_certs();
-    let ca_cert = rcgen::Certificate::from_params({
-        let mut params = CertificateParams::default();
-        params.distinguished_name = DistinguishedName::new();
-        params
-            .distinguished_name
-            .push(DnType::CommonName, "Test CA");
-        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
-        params
-    })
-    .unwrap();
+    let ca = generate_test_ca();
 
-    let validator = CertificateValidator::new(&ca_pem).unwrap();
-    let client_cert_pem = generate_client_cert(&ca_cert, "benchmark-client");
+    let validator = CertificateValidator::new(&ca.pem).unwrap();
+    let client_cert_pem = generate_client_cert(&ca, "benchmark-client");
 
     let mut group = c.benchmark_group("certificate_validation");
     group.measurement_time(Duration::from_secs(10));
@@ -102,16 +91,19 @@ fn bench_cert_validation(c: &mut Criterion) {
 
 // Benchmark 2: Permission checks with bitflags
 fn bench_permission_checks(c: &mut Criterion) {
-    let policy = RbacPolicy::new();
-    policy.grant_permission(&Role::User, &Permission::Sign);
-    policy.grant_permission(&Role::User, &Permission::Encrypt);
+    let mut policy = RbacPolicy::new();
+    // Configure the same permissions the old `grant_permission` calls set up.
+    // (`RbacPolicy::new` already grants these to `Role::User` by default, so
+    // these are idempotent — they exercise the current grant API explicitly.)
+    policy.grant(Role::User, Permission::Sign);
+    policy.grant(Role::User, Permission::Encrypt);
 
     let mut group = c.benchmark_group("permission_checks");
 
     // Single permission check (target: < 100μs)
     group.bench_function("single_check", |b| {
         b.iter(|| {
-            let _ = policy.can_any(black_box(&vec![Role::User]), black_box(&Permission::Sign));
+            let _ = policy.can_any(black_box(&[Role::User]), black_box(&Permission::Sign));
         });
     });
 
@@ -119,7 +111,7 @@ fn bench_permission_checks(c: &mut Criterion) {
     group.bench_function("multiple_checks", |b| {
         b.iter(|| {
             for perm in &[Permission::Sign, Permission::Encrypt, Permission::Decrypt] {
-                let _ = policy.can_any(black_box(&vec![Role::User]), black_box(perm));
+                let _ = policy.can_any(black_box(&[Role::User]), black_box(perm));
             }
         });
     });
@@ -156,8 +148,11 @@ fn bench_session_operations(c: &mut Criterion) {
     });
 
     // Session validation (target: < 50μs)
+    // `validate_session` is deprecated in favor of the token-checked variant
+    // benchmarked below, but is still part of the public API; measure it.
     group.bench_function("validate_session", |b| {
         b.iter(|| {
+            #[allow(deprecated)]
             let _ = session_manager.validate_session(black_box(&result.session.id));
         });
     });

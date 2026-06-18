@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use hsm_config::{manager::ConfigManager, HsmConfig};
+use std::hint::black_box;
 use std::io::Write;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
@@ -145,7 +146,8 @@ fn benchmark_config_validation(c: &mut Criterion) {
 
     c.bench_function("config_validation", |b| {
         b.iter(|| {
-            black_box(config.validate().unwrap());
+            let _: () = config.validate().unwrap();
+            black_box(());
         });
     });
 }

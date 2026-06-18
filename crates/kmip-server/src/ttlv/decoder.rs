@@ -12,6 +12,15 @@ use bytes::{Buf, Bytes};
 
 use super::types::{Tag, Ttlv, TtlvError, TtlvType, TtlvValue};
 
+/// Maximum nesting depth for TTLV structures.
+///
+/// KMIP messages are only a handful of levels deep in practice
+/// (RequestMessage → BatchItem → RequestPayload → TemplateAttribute → Attribute → ...).
+/// A bounded limit prevents an attacker from supplying ~0.5-1MB of nested structure
+/// headers that would recurse `decode_item` deeply enough to overflow the worker
+/// thread's stack and SIGABRT the process. 64 is far above any legitimate message.
+const MAX_TTLV_DEPTH: usize = 64;
+
 /// TTLV Decoder for parsing bytes into Ttlv structures
 pub struct TtlvDecoder;
 
@@ -19,15 +28,24 @@ impl TtlvDecoder {
     /// Decode bytes to a TTLV item
     pub fn decode(data: &[u8]) -> Result<Ttlv, TtlvError> {
         let mut bytes = Bytes::copy_from_slice(data);
-        Self::decode_item(&mut bytes)
+        Self::decode_item(&mut bytes, 0)
     }
 
     /// Decode from a Bytes buffer (consumes bytes as it decodes)
     pub fn decode_from_bytes(bytes: &mut Bytes) -> Result<Ttlv, TtlvError> {
-        Self::decode_item(bytes)
+        Self::decode_item(bytes, 0)
     }
 
-    fn decode_item(buf: &mut Bytes) -> Result<Ttlv, TtlvError> {
+    fn decode_item(buf: &mut Bytes, depth: usize) -> Result<Ttlv, TtlvError> {
+        // Bound recursion: each nested Structure increments `depth`. Reject before
+        // recursing past the limit so a maliciously deep message cannot overflow the
+        // stack and crash the process.
+        if depth >= MAX_TTLV_DEPTH {
+            return Err(TtlvError::InvalidEncoding(format!(
+                "TTLV nesting depth exceeds maximum of {MAX_TTLV_DEPTH}"
+            )));
+        }
+
         // Need at least 8 bytes for header (tag + type + length)
         if buf.remaining() < 8 {
             return Err(TtlvError::UnexpectedEof);
@@ -56,7 +74,7 @@ impl TtlvDecoder {
                 let mut structure_bytes = buf.copy_to_bytes(length);
                 let mut items = Vec::new();
                 while structure_bytes.has_remaining() {
-                    items.push(Self::decode_item(&mut structure_bytes)?);
+                    items.push(Self::decode_item(&mut structure_bytes, depth + 1)?);
                 }
                 TtlvValue::Structure(items)
             }
@@ -397,5 +415,76 @@ mod tests {
 
         // Too short
         assert!(peek_message_length(&[0x42, 0x00]).is_none());
+    }
+
+    /// Build a TTLV structure header (tag + type + 4-byte length) for `inner_len`
+    /// bytes of nested content. Structures are not padded, so the length is exact.
+    fn structure_header(tag: Tag, inner_len: u32) -> [u8; 8] {
+        let tag_bytes = tag.0.to_be_bytes(); // high byte is zero
+        [
+            tag_bytes[1],
+            tag_bytes[2],
+            tag_bytes[3],
+            TtlvType::Structure as u8,
+            (inner_len >> 24) as u8,
+            (inner_len >> 16) as u8,
+            (inner_len >> 8) as u8,
+            inner_len as u8,
+        ]
+    }
+
+    /// Regression test for the unbounded-recursion DoS (MEDIUM #14).
+    ///
+    /// Before the depth limit, a message consisting solely of nested Structure
+    /// headers (each wrapping the next) recursed `decode_item` once per level. A
+    /// few hundred thousand levels (~0.5-1MB of headers) overflowed the thread
+    /// stack and SIGABRTed the process. With the bound, decoding must return an
+    /// `InvalidEncoding` error instead of crashing.
+    #[test]
+    fn test_decode_rejects_excessive_nesting() {
+        // Build N nested structures from the inside out. The innermost has an
+        // empty body; each enclosing structure's body is the previous encoding.
+        let levels = 100_000; // far beyond MAX_TTLV_DEPTH, would blow the stack
+        let mut inner: Vec<u8> = Vec::new();
+        // Innermost: empty structure (length 0).
+        inner.extend_from_slice(&structure_header(Tag::REQUEST_MESSAGE, 0));
+        for _ in 0..levels {
+            let len = u32::try_from(inner.len()).expect("nesting body fits in u32");
+            let mut next = Vec::with_capacity(8 + inner.len());
+            next.extend_from_slice(&structure_header(Tag::REQUEST_MESSAGE, len));
+            next.extend_from_slice(&inner);
+            inner = next;
+        }
+
+        let result = TtlvDecoder::decode(&inner);
+        assert!(
+            matches!(result, Err(TtlvError::InvalidEncoding(_))),
+            "deeply nested TTLV must be rejected, got {result:?}"
+        );
+    }
+
+    /// Nesting up to (but not exceeding) the limit must still decode successfully,
+    /// proving the bound does not reject legitimate KMIP messages.
+    #[test]
+    fn test_decode_accepts_nesting_at_limit() {
+        // Build exactly MAX_TTLV_DEPTH levels of nested structures. The top-level
+        // call is depth 0, so this is the maximum that decodes without error.
+        let levels = super::MAX_TTLV_DEPTH;
+        let mut inner: Vec<u8> = Vec::new();
+        inner.extend_from_slice(&structure_header(Tag::REQUEST_MESSAGE, 0));
+        // We already have 1 structure (depth 0). Add levels-1 enclosing structures.
+        for _ in 0..(levels - 1) {
+            let len = u32::try_from(inner.len()).expect("nesting body fits in u32");
+            let mut next = Vec::with_capacity(8 + inner.len());
+            next.extend_from_slice(&structure_header(Tag::REQUEST_MESSAGE, len));
+            next.extend_from_slice(&inner);
+            inner = next;
+        }
+
+        let result = TtlvDecoder::decode(&inner);
+        assert!(
+            result.is_ok(),
+            "nesting at the depth limit must decode, got {result:?}"
+        );
     }
 }

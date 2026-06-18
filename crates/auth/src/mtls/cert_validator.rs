@@ -5,7 +5,18 @@ use parking_lot::Mutex;
 use sha2::{Digest, Sha256};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::time::Duration;
 use x509_parser::prelude::*;
+
+/// Maximum lifetime of a cached positive validation result.
+///
+/// This is deliberately decoupled from the certificate's own `not_after`
+/// (which may be years in the future). Capping the cache TTL to a short window
+/// bounds how long a freshly-revoked certificate could remain authenticated via
+/// the fast path *even if* the revocation-list recheck were ever bypassed. The
+/// fast path also rechecks the live revocation list on every hit, so revocation
+/// takes effect immediately; this TTL is defense-in-depth.
+const CACHE_ENTRY_TTL: Duration = Duration::from_secs(300);
 
 /// Certificate fingerprint for caching
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -30,6 +41,9 @@ impl CertFingerprint {
 pub struct ValidationResult {
     /// Certificate fingerprint
     pub fingerprint: CertFingerprint,
+    /// Certificate serial number (hex, lowercase) — used to evict cache entries
+    /// when the corresponding serial is added to the revocation list.
+    pub serial: String,
     /// When the validation was performed
     pub validated_at: chrono::DateTime<Utc>,
     /// Certificate expiry time
@@ -76,16 +90,34 @@ impl CertificateValidator {
         let client_cert_der = Self::pem_to_der(client_cert_pem)?;
         let fingerprint = CertFingerprint::from_der(&client_cert_der);
 
-        // Check cache first for fast path
-        if let Some(cached) = self.validation_cache.lock().get(&fingerprint) {
-            // Verify cached result is still valid
-            if Utc::now() < cached.expires_at && !cached.is_revoked {
+        // Check cache first for fast path. Clone the cached entry out so we can
+        // release the cache lock before consulting the revocation list, avoiding
+        // any lock-ordering coupling between the two mutexes.
+        let cached = self.validation_cache.lock().get(&fingerprint).cloned();
+        if let Some(cached) = cached {
+            let now = Utc::now();
+            // A cached positive result is only honored when ALL of the following hold:
+            //   1. the certificate has not naturally expired,
+            //   2. the cache entry itself is within its short TTL (independent of
+            //      the cert's own not_after, which may be years out), and
+            //   3. the certificate's serial is NOT currently revoked.
+            // The revocation check reads the *live* revocation list on every hit
+            // rather than trusting the (possibly stale) snapshot captured at
+            // validation time, so revoke_certificate() takes effect immediately.
+            let cache_age = now.signed_duration_since(cached.validated_at);
+            let within_ttl = cache_age >= chrono::Duration::zero()
+                && cache_age
+                    < chrono::Duration::from_std(CACHE_ENTRY_TTL).unwrap_or(chrono::Duration::MAX);
+            let revoked = self.is_revoked(&cached.serial)?;
+
+            if now < cached.expires_at && within_ttl && !revoked {
                 metrics::counter!("auth.cert_validation.cache_hit").increment(1);
                 return Ok(ParsedCertificate {
                     der: client_cert_der,
                 });
             }
-            // Cache entry expired or revoked, fall through to full validation
+            // Cache entry expired, aged out, or revoked: fall through to full
+            // validation (which re-checks revocation and will reject if revoked).
             metrics::counter!("auth.cert_validation.cache_expired").increment(1);
         } else {
             metrics::counter!("auth.cert_validation.cache_miss").increment(1);
@@ -143,6 +175,7 @@ impl CertificateValidator {
 
         Ok(ValidationResult {
             fingerprint,
+            serial,
             validated_at: Utc::now(),
             expires_at,
             is_revoked: false,
@@ -166,13 +199,31 @@ impl CertificateValidator {
         Ok(self.revocation_list.lock().contains(serial_number))
     }
 
-    /// Add a certificate to the revocation list
+    /// Add a certificate to the revocation list.
+    ///
+    /// This both records the serial in the revocation list (consulted on every
+    /// validation, including the cache fast path) and immediately evicts any
+    /// cached positive validation results for that serial, so a revoked
+    /// certificate cannot continue to authenticate via a stale cache entry.
     pub fn revoke_certificate(&self, serial_number: &str) {
         self.revocation_list
             .lock()
             .insert(serial_number.to_string());
-        // Invalidate cache entries with this serial
-        // (in production, we'd track serial numbers in cache entries)
+
+        // Evict any cached validation results matching this serial so the next
+        // validate() for that cert takes the slow path and is rejected.
+        {
+            let mut cache = self.validation_cache.lock();
+            let to_evict: Vec<CertFingerprint> = cache
+                .iter()
+                .filter(|(_, result)| result.serial == serial_number)
+                .map(|(fp, _)| fp.clone())
+                .collect();
+            for fp in to_evict {
+                cache.pop(&fp);
+            }
+        }
+
         metrics::counter!("auth.cert_revocation.added").increment(1);
     }
 
@@ -280,9 +331,17 @@ impl CertificateValidator {
         let tbs_data = cert.tbs_certificate.as_ref();
         let sig_value = cert.signature_value.as_ref();
 
-        // Get the CA's public key info
+        // Get the CA's public key bytes.
+        //
+        // `ring`'s `UnparsedPublicKey` expects the *public key* itself, not the
+        // surrounding SubjectPublicKeyInfo:
+        //   - ECDSA: the uncompressed EC point (0x04 || X || Y)
+        //   - RSA:   the DER-encoded PKCS#1 RSAPublicKey
+        // In an X.509 SPKI both of these live in the `subjectPublicKey` BIT
+        // STRING contents. Using `ca_spki.raw` (the whole SPKI SEQUENCE,
+        // including the AlgorithmIdentifier) makes ring reject every signature.
         let ca_spki = ca_cert.public_key();
-        let ca_pubkey_der = ca_spki.raw;
+        let ca_pubkey_der: &[u8] = &ca_spki.subject_public_key.data;
 
         // Map X.509 signature algorithm OID to ring algorithm
         let oid = sig_alg.algorithm.to_id_string();
@@ -386,11 +445,131 @@ pub struct ParsedCertificate {
 
 #[cfg(test)]
 mod tests {
-    // Note: These tests require valid test certificates
-    // They will be implemented in the integration tests with rcgen
+    use super::*;
+    use rcgen::{CertificateParams, DistinguishedName, DnType, Issuer, KeyPair};
+
+    // A self-signed CA together with the material needed to sign client certs.
+    struct TestCa {
+        params: CertificateParams,
+        key: KeyPair,
+        pem: Vec<u8>,
+    }
+
+    fn generate_test_ca() -> TestCa {
+        let mut ca_params = CertificateParams::default();
+        ca_params.distinguished_name = DistinguishedName::new();
+        ca_params
+            .distinguished_name
+            .push(DnType::CommonName, "Test CA");
+        ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+
+        let ca_key = KeyPair::generate().unwrap();
+        let ca_cert = ca_params.self_signed(&ca_key).unwrap();
+        let ca_pem = ca_cert.pem().into_bytes();
+
+        TestCa {
+            params: ca_params,
+            key: ca_key,
+            pem: ca_pem,
+        }
+    }
+
+    fn generate_client_cert(ca: &TestCa, common_name: &str) -> Vec<u8> {
+        let mut client_params = CertificateParams::default();
+        client_params.distinguished_name = DistinguishedName::new();
+        client_params
+            .distinguished_name
+            .push(DnType::CommonName, common_name);
+
+        let client_key = KeyPair::generate().unwrap();
+        let issuer = Issuer::from_params(&ca.params, &ca.key);
+        let client_cert = client_params.signed_by(&client_key, &issuer).unwrap();
+        client_cert.pem().into_bytes()
+    }
+
+    fn pem_to_der(pem_bytes: &[u8]) -> Vec<u8> {
+        let pem = ::pem::parse(std::str::from_utf8(pem_bytes).unwrap()).unwrap();
+        pem.contents().to_vec()
+    }
+
+    /// Regression test for HIGH #9.
+    ///
+    /// Before the fix, a successful validation cached `is_revoked: false` with
+    /// `expires_at` set to the certificate's own `not_after` (potentially years
+    /// out), and the fast path returned success on a cache hit without ever
+    /// consulting the live revocation list. As a result, calling
+    /// `revoke_certificate()` had no effect until the certificate expired
+    /// naturally — a revoked cert kept authenticating.
+    ///
+    /// After the fix, `revoke_certificate()` evicts the cache entry AND the fast
+    /// path rechecks the live revocation list, so the very next `validate()`
+    /// must fail with `CertificateRevoked`. This test would FAIL before the fix
+    /// (the second validate would return Ok) and PASSES after.
+    #[test]
+    fn revoked_certificate_is_rejected_promptly_even_after_caching() {
+        let ca = generate_test_ca();
+        let validator = CertificateValidator::new(&ca.pem).unwrap();
+        let client_pem = generate_client_cert(&ca, "revoke-me");
+
+        // 1. First validation succeeds and populates the positive cache entry.
+        validator
+            .validate(&client_pem)
+            .expect("freshly issued cert should validate");
+
+        // 2. A second validation also succeeds via the fast (cached) path.
+        validator
+            .validate(&client_pem)
+            .expect("cached cert should still validate before revocation");
+
+        // 3. Revoke the certificate by its serial (the same value callers obtain
+        //    via get_serial_number()).
+        let client_der = pem_to_der(&client_pem);
+        let serial = CertificateValidator::get_serial_number(&client_der).unwrap();
+        validator.revoke_certificate(&serial);
+
+        // 4. The next validation MUST be rejected immediately — not deferred to
+        //    natural expiry. This is the crux of the regression.
+        let result = validator.validate(&client_pem);
+        assert!(
+            matches!(result, Err(AuthError::CertificateRevoked)),
+            "revoked certificate must be rejected promptly, got: {:?}",
+            result.map(|_| "Ok"),
+        );
+
+        // 5. Repeated attempts stay rejected (no flapping back to the cache).
+        let result2 = validator.validate(&client_pem);
+        assert!(
+            matches!(result2, Err(AuthError::CertificateRevoked)),
+            "revoked certificate must stay rejected on subsequent calls"
+        );
+    }
+
+    /// A non-revoked, valid certificate continues to validate (guards against
+    /// the fix over-rejecting). Confirms the fast path still works.
+    #[test]
+    fn valid_certificate_still_validates_through_cache() {
+        let ca = generate_test_ca();
+        let validator = CertificateValidator::new(&ca.pem).unwrap();
+        let client_pem = generate_client_cert(&ca, "keep-me");
+
+        validator.validate(&client_pem).expect("first validate");
+        validator
+            .validate(&client_pem)
+            .expect("cached validate should succeed for a non-revoked cert");
+
+        // Revoking a DIFFERENT serial must not affect this cert.
+        validator.revoke_certificate("deadbeefcafe");
+        validator
+            .validate(&client_pem)
+            .expect("unrelated revocation must not reject this cert");
+    }
 
     #[test]
     fn test_extract_serial_number() {
-        // This test will be implemented with real certificates in integration tests
+        let ca = generate_test_ca();
+        let client_pem = generate_client_cert(&ca, "serial-test");
+        let der = pem_to_der(&client_pem);
+        let serial = CertificateValidator::get_serial_number(&der).unwrap();
+        assert!(!serial.is_empty(), "serial number must be extractable");
     }
 }

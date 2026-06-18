@@ -842,7 +842,11 @@ mod tests {
         assert_ne!(gk1.bytes, gk2.bytes);
     }
 
+    /// Ignored: exercises the threshold-ECDSA signing flow, which now fails closed
+    /// (no `k^-1`; see `ThresholdEcdsaEngine::presign`). DKG correctness itself is
+    /// still covered by `test_dkg_all_same_group_key` and `test_dkg_invalid_share_detected`.
     #[test]
+    #[ignore = "requires correct threshold ECDSA (GG20/MtA)"]
     fn test_dkg_shares_sign_valid() {
         // Test that DKG-generated shares can be used to create valid threshold signatures
         let (shares, group_key) = run_full_dkg(2, 3, EcdsaCurve::P256).unwrap();
@@ -897,7 +901,9 @@ mod tests {
         assert_eq!(signature.curve, EcdsaCurve::P256);
     }
 
+    /// Ignored: threshold-ECDSA signing flow fails closed (no `k^-1`).
     #[test]
+    #[ignore = "requires correct threshold ECDSA (GG20/MtA)"]
     fn test_dkg_shares_sign_valid_secp256k1() {
         // Test DKG-generated secp256k1 shares can sign
         let (shares, group_key) = run_full_dkg(2, 3, EcdsaCurve::Secp256k1).unwrap();
@@ -946,7 +952,9 @@ mod tests {
         assert_eq!(signature.to_bytes().len(), 64);
     }
 
+    /// Ignored: threshold-ECDSA signing flow fails closed (no `k^-1`).
     #[test]
+    #[ignore = "requires correct threshold ECDSA (GG20/MtA)"]
     fn test_dkg_different_participant_subsets() {
         // Test that different subsets of participants can sign
         let (shares, group_key) = run_full_dkg(2, 4, EcdsaCurve::P256).unwrap();
@@ -1036,7 +1044,11 @@ mod tests {
         assert!(matches!(result, Err(ThresholdError::InvalidParticipant(_))));
     }
 
+    /// Ignored: after the DKG-shape assertions it exercises the threshold-ECDSA
+    /// signing flow, which now fails closed (no `k^-1`). DKG group-key agreement is
+    /// covered by `test_dkg_all_same_group_key`.
     #[test]
+    #[ignore = "requires correct threshold ECDSA (GG20/MtA)"]
     fn test_dkg_5_of_7() {
         // Test larger threshold configuration
         let (shares, group_key) = run_full_dkg(5, 7, EcdsaCurve::P256).unwrap();

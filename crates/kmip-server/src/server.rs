@@ -4,15 +4,39 @@
 //! processes TTLV-encoded requests, and returns TTLV-encoded responses.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
+use tokio::sync::Semaphore;
 use tokio_rustls::TlsAcceptor;
 use tracing::{debug, error, info, warn};
 
 use crate::operations;
 use crate::protocol::enums::*;
 use crate::ttlv::{Tag, Ttlv, TtlvDecoder, TtlvEncoder, TtlvError, TtlvValue};
+
+/// Maximum size (in bytes) of a single KMIP message body the server will accept.
+///
+/// The TTLV header carries a fully attacker-controlled 32-bit length. Without a
+/// cap, a client could declare a ~4 GiB body and force the server to allocate that
+/// buffer before reading a single payload byte, exhausting memory. KMIP messages
+/// are small in practice (key material, attributes, a little ciphertext); a few MiB
+/// is generous. Anything larger is rejected before allocation.
+pub const MAX_KMIP_MESSAGE_SIZE: usize = 4 * 1024 * 1024; // 4 MiB
+
+/// Maximum number of connections handled concurrently.
+///
+/// Bounds the number of in-flight connection tasks (and therefore the aggregate
+/// buffer/stack memory and file descriptors) so a flood of connections cannot
+/// exhaust server resources. Excess connections wait for a permit.
+pub const MAX_CONCURRENT_CONNECTIONS: usize = 1024;
+
+/// Maximum time allowed to read a single message (header + body) from a client.
+///
+/// Wraps `read_exact` so a client that opens a connection and sends a partial
+/// message (or nothing) cannot tie up a connection slot indefinitely (slowloris).
+const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// KMIP Server configuration
 pub struct KmipServerConfig {
@@ -100,9 +124,23 @@ impl KmipServer {
         let listener = TcpListener::bind(&self.config.bind_address).await?;
         let acceptor = TlsAcceptor::from(self.config.tls_config.clone());
 
+        // Cap concurrent connections so a connection flood cannot exhaust memory
+        // or file descriptors. Each accepted connection holds a permit for its
+        // lifetime; the accept loop blocks for a permit once the cap is reached.
+        let connection_limiter = Arc::new(Semaphore::new(MAX_CONCURRENT_CONNECTIONS));
+
         info!("KMIP server listening on {}", self.config.bind_address);
 
         loop {
+            // Acquire a connection permit before accepting. Holding the permit
+            // across the accept means we stop pulling new connections off the
+            // backlog while at capacity, applying backpressure to clients.
+            let permit = connection_limiter
+                .clone()
+                .acquire_owned()
+                .await
+                .expect("connection semaphore is never closed");
+
             let (stream, peer_addr) = listener.accept().await?;
             debug!("New connection from {}", peer_addr);
 
@@ -110,6 +148,8 @@ impl KmipServer {
             let hsm_client = self.config.hsm_client.clone();
 
             tokio::spawn(async move {
+                // Permit is moved into the task and released when the task ends.
+                let _permit = permit;
                 match acceptor.accept(stream).await {
                     Ok(tls_stream) => {
                         if let Err(e) = handle_connection(tls_stream, hsm_client).await {
@@ -126,6 +166,71 @@ impl KmipServer {
     }
 }
 
+/// Outcome of attempting to read one framed KMIP message from a stream.
+#[derive(Debug)]
+enum FramedRead {
+    /// A complete message of the given bytes was read.
+    Message(Vec<u8>),
+    /// The peer closed the connection gracefully before sending a (further) message.
+    Eof,
+}
+
+/// Read a single length-prefixed KMIP/TTLV message from `stream`.
+///
+/// Security properties:
+/// - The 8-byte header is read first; the declared body length is validated
+///   against [`MAX_KMIP_MESSAGE_SIZE`] *before* any body buffer is allocated, so
+///   an attacker cannot trigger a multi-gigabyte allocation with a forged length.
+/// - Both the header read and the body read are wrapped in a [`READ_TIMEOUT`], so
+///   a client that stalls mid-message cannot hold a connection open indefinitely.
+async fn read_framed_message<S>(stream: &mut S) -> Result<FramedRead, KmipError>
+where
+    S: tokio::io::AsyncRead + Unpin,
+{
+    // Read TTLV header (8 bytes: tag + type + length) under a timeout.
+    let mut header = [0u8; 8];
+    match tokio::time::timeout(READ_TIMEOUT, stream.read_exact(&mut header)).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+            // Client closed connection gracefully (possibly between messages).
+            return Ok(FramedRead::Eof);
+        }
+        Ok(Err(e)) => return Err(e.into()),
+        Err(_elapsed) => {
+            return Err(KmipError::InvalidMessage(
+                "timed out reading message header".to_string(),
+            ));
+        }
+    }
+
+    // Parse header to get message body length.
+    let length = u32::from_be_bytes([header[4], header[5], header[6], header[7]]) as usize;
+
+    // Reject oversized declarations BEFORE allocating. This is the critical check:
+    // `length` is fully attacker-controlled, so never size a buffer from it unchecked.
+    if length > MAX_KMIP_MESSAGE_SIZE {
+        return Err(KmipError::InvalidMessage(format!(
+            "declared message body length {length} exceeds maximum {MAX_KMIP_MESSAGE_SIZE}"
+        )));
+    }
+
+    // Allocate exactly the validated size (bounded by the cap) and read the body
+    // under a timeout.
+    let mut message = vec![0u8; 8 + length];
+    message[..8].copy_from_slice(&header);
+    match tokio::time::timeout(READ_TIMEOUT, stream.read_exact(&mut message[8..])).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => return Err(e.into()),
+        Err(_elapsed) => {
+            return Err(KmipError::InvalidMessage(
+                "timed out reading message body".to_string(),
+            ));
+        }
+    }
+
+    Ok(FramedRead::Message(message))
+}
+
 /// Handle a single KMIP connection
 async fn handle_connection<S>(
     mut stream: S,
@@ -135,24 +240,10 @@ where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     loop {
-        // Read TTLV header (8 bytes: tag + type + length)
-        let mut header = [0u8; 8];
-        match stream.read_exact(&mut header).await {
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                // Client closed connection gracefully
-                break;
-            }
-            Err(e) => return Err(e.into()),
-        }
-
-        // Parse header to get message length
-        let length = u32::from_be_bytes([header[4], header[5], header[6], header[7]]) as usize;
-
-        // Read rest of message
-        let mut message = vec![0u8; 8 + length];
-        message[..8].copy_from_slice(&header);
-        stream.read_exact(&mut message[8..]).await?;
+        let message = match read_framed_message(&mut stream).await? {
+            FramedRead::Message(m) => m,
+            FramedRead::Eof => break,
+        };
 
         debug!("Received KMIP message: {} bytes", message.len());
 
@@ -485,6 +576,94 @@ impl KmipError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build an 8-byte TTLV header declaring a body of `length` bytes for a
+    /// Structure tag. (Type 0x01 = Structure; length is big-endian.)
+    fn ttlv_header(length: u32) -> [u8; 8] {
+        [
+            0x42,
+            0x00,
+            0x78, // RequestMessage tag
+            0x01, // Structure
+            (length >> 24) as u8,
+            (length >> 16) as u8,
+            (length >> 8) as u8,
+            length as u8,
+        ]
+    }
+
+    /// Regression test for HIGH #13: an over-large declared body length must be
+    /// rejected from the header alone, *before* any body buffer is allocated.
+    ///
+    /// The reader here supplies ONLY the 8-byte header that declares a ~4 GiB body
+    /// (0xFFFF_FFFF). If the code allocated `vec![0u8; 8 + length]` from the
+    /// attacker-controlled length (the original bug), this test would attempt a
+    /// ~4 GiB allocation and would not return a clean error. With the fix it
+    /// returns `InvalidMessage` having allocated nothing.
+    #[tokio::test]
+    async fn test_oversized_length_rejected_without_allocating() {
+        let header = ttlv_header(u32::MAX); // ~4 GiB declared body
+        let mut reader: &[u8] = &header[..];
+
+        let result = read_framed_message(&mut reader).await;
+        match result {
+            Err(KmipError::InvalidMessage(msg)) => {
+                assert!(
+                    msg.contains("exceeds maximum"),
+                    "expected size-cap rejection, got: {msg}"
+                );
+            }
+            other => panic!("expected InvalidMessage rejection, got {other:?}"),
+        }
+    }
+
+    /// A declared length exactly one byte over the cap is rejected; the body is
+    /// never read (reader provides no body bytes, yet there is no EOF error).
+    #[tokio::test]
+    async fn test_length_just_over_cap_rejected() {
+        let over = u32::try_from(MAX_KMIP_MESSAGE_SIZE + 1).unwrap();
+        let header = ttlv_header(over);
+        let mut reader: &[u8] = &header[..];
+
+        let result = read_framed_message(&mut reader).await;
+        assert!(
+            matches!(result, Err(KmipError::InvalidMessage(_))),
+            "length one over the cap must be rejected, got {result:?}"
+        );
+    }
+
+    /// A well-formed, in-bounds message round-trips through the framed reader and
+    /// decodes back to the original TTLV, proving the cap does not reject valid
+    /// traffic and the body is read correctly.
+    #[tokio::test]
+    async fn test_in_bounds_message_reads_and_decodes() {
+        let original = Ttlv::structure(
+            Tag::REQUEST_MESSAGE,
+            vec![Ttlv::integer(Tag::BATCH_COUNT, 1)],
+        );
+        let encoded = TtlvEncoder::encode(&original);
+        assert!(encoded.len() <= MAX_KMIP_MESSAGE_SIZE);
+
+        let mut reader: &[u8] = &encoded[..];
+        let framed = read_framed_message(&mut reader).await.unwrap();
+        let bytes = match framed {
+            FramedRead::Message(m) => m,
+            FramedRead::Eof => panic!("expected a message, got EOF"),
+        };
+        assert_eq!(bytes, encoded);
+
+        let decoded = TtlvDecoder::decode(&bytes).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    /// An empty stream (peer closed before sending anything) yields a graceful EOF,
+    /// not an error.
+    #[tokio::test]
+    async fn test_empty_stream_is_eof() {
+        let mut reader: &[u8] = &[];
+        let framed = read_framed_message(&mut reader).await.unwrap();
+        assert!(matches!(framed, FramedRead::Eof));
+    }
 
     #[test]
     fn test_parse_protocol_version() {

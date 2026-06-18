@@ -367,7 +367,8 @@ async fn test_sign_with_nonexistent_key_returns_404() {
 #[tokio::test]
 async fn test_generate_key_returns_201() {
     let state = test_app_state();
-    let token = create_test_session(&state, "testuser", vec![Role::User]);
+    // GenerateKey requires Operator or Admin (User lacks it under RBAC).
+    let token = create_test_session(&state, "operator", vec![Role::Operator]);
     let app = create_router(state);
 
     let body = serde_json::json!({
@@ -402,7 +403,7 @@ async fn test_generate_key_returns_201() {
 #[tokio::test]
 async fn test_list_keys_returns_200() {
     let state = test_app_state();
-    let token = create_test_session(&state, "testuser", vec![Role::User]);
+    let token = create_test_session(&state, "operator", vec![Role::Operator]);
 
     // Generate a key first (using a separate router instance since oneshot consumes it)
     let body = serde_json::json!({
@@ -450,7 +451,7 @@ async fn test_list_keys_returns_200() {
 #[tokio::test]
 async fn test_generate_and_get_key_metadata() {
     let state = test_app_state();
-    let token = create_test_session(&state, "testuser", vec![Role::User]);
+    let token = create_test_session(&state, "operator", vec![Role::Operator]);
 
     // Generate a key
     let body = serde_json::json!({
@@ -568,7 +569,7 @@ async fn test_generate_and_delete_key() {
 #[tokio::test]
 async fn test_sign_and_verify_ed25519() {
     let state = test_app_state();
-    let token = create_test_session(&state, "testuser", vec![Role::User]);
+    let token = create_test_session(&state, "operator", vec![Role::Operator]);
 
     // Generate an Ed25519 key
     let body = serde_json::json!({
@@ -651,7 +652,7 @@ async fn test_sign_and_verify_ed25519() {
 #[tokio::test]
 async fn test_verify_with_wrong_data_returns_false() {
     let state = test_app_state();
-    let token = create_test_session(&state, "testuser", vec![Role::User]);
+    let token = create_test_session(&state, "operator", vec![Role::Operator]);
 
     // Generate an Ed25519 key
     let body = serde_json::json!({
@@ -731,7 +732,7 @@ async fn test_verify_with_wrong_data_returns_false() {
 #[tokio::test]
 async fn test_encrypt_data_returns_ciphertext() {
     let state = test_app_state();
-    let token = create_test_session(&state, "testuser", vec![Role::User]);
+    let token = create_test_session(&state, "operator", vec![Role::Operator]);
 
     // Generate a key (encryption uses an ephemeral AES key internally)
     let body = serde_json::json!({
@@ -794,7 +795,7 @@ async fn test_decrypt_returns_bad_request() {
     // The decrypt endpoint returns 501 Not Implemented because decryption
     // is not yet available via REST API.
     let state = test_app_state();
-    let token = create_test_session(&state, "testuser", vec![Role::User]);
+    let token = create_test_session(&state, "operator", vec![Role::Operator]);
 
     // Generate a key
     let body = serde_json::json!({
@@ -851,7 +852,7 @@ async fn test_decrypt_returns_bad_request() {
 #[tokio::test]
 async fn test_rotate_key() {
     let state = test_app_state();
-    let token = create_test_session(&state, "testuser", vec![Role::User]);
+    let token = create_test_session(&state, "operator", vec![Role::Operator]);
 
     // Generate an Ed25519 key
     let body = serde_json::json!({
@@ -906,7 +907,7 @@ async fn test_rotate_key() {
 #[tokio::test]
 async fn test_rotate_nonexistent_key_returns_404() {
     let state = test_app_state();
-    let token = create_test_session(&state, "testuser", vec![Role::User]);
+    let token = create_test_session(&state, "operator", vec![Role::Operator]);
     let app = create_router(state);
 
     let response = app
@@ -1119,7 +1120,7 @@ async fn test_response_has_request_id_header() {
 #[tokio::test]
 async fn test_generate_ecdsa_p256_key() {
     let state = test_app_state();
-    let token = create_test_session(&state, "testuser", vec![Role::User]);
+    let token = create_test_session(&state, "operator", vec![Role::Operator]);
     let app = create_router(state);
 
     let body = serde_json::json!({
@@ -1150,7 +1151,7 @@ async fn test_generate_ecdsa_p256_key() {
 #[tokio::test]
 async fn test_symmetric_key_rejected_via_rest() {
     let state = test_app_state();
-    let token = create_test_session(&state, "testuser", vec![Role::User]);
+    let token = create_test_session(&state, "operator", vec![Role::Operator]);
     let app = create_router(state);
 
     let body = serde_json::json!({
@@ -1210,7 +1211,7 @@ async fn test_dev_login_returns_token() {
     let json = body_to_json(response.into_body()).await;
     assert!(json["token"].is_string());
     assert_eq!(json["user"]["username"], "admin");
-    assert!(json["user"]["roles"].as_array().unwrap().len() > 0);
+    assert!(!json["user"]["roles"].as_array().unwrap().is_empty());
     assert!(json["expires_at"].is_string());
 }
 
@@ -1285,4 +1286,416 @@ async fn test_dev_login_token_works_for_authenticated_endpoints() {
 
     let me_json = body_to_json(response.into_body()).await;
     assert_eq!(me_json["user"]["username"], "operator");
+}
+
+// =============================================================================
+// Authorization (RBAC), Namespace Isolation, and Audit Wiring Tests
+//
+// These are the regression tests for the live-exploitable gap where the REST
+// API enforced authentication only — RBAC, namespace isolation, and audit
+// logging were implemented in the auth/audit crates but never invoked.
+// =============================================================================
+
+use hsm_audit::{AsyncAuditConfig, AsyncAuditLogger, StorageConfig as AuditStorageConfig};
+
+/// Build an AppState whose handlers record to a real tamper-evident audit log.
+fn test_app_state_with_audit() -> (
+    AppState,
+    std::sync::Arc<AsyncAuditLogger>,
+    tempfile::TempDir,
+) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let logger = std::sync::Arc::new(
+        AsyncAuditLogger::new(AsyncAuditConfig {
+            storage: AuditStorageConfig {
+                base_dir: dir.path().to_path_buf(),
+                ..Default::default()
+            },
+            rebuild_merkle_on_start: false,
+            ..Default::default()
+        })
+        .expect("audit logger"),
+    );
+    let sessions = Arc::new(SessionManager::new(3600));
+    let state = AppState::new(sessions).with_audit_logger(logger.clone());
+    (state, logger, dir)
+}
+
+/// Create a session for an identity in a specific namespace.
+fn create_test_session_in_ns(
+    state: &AppState,
+    username: &str,
+    roles: Vec<Role>,
+    namespace: &str,
+) -> String {
+    let identity = ClientIdentity::new(
+        username.to_string(),
+        Some("TestOrg".to_string()),
+        namespace.to_string(),
+        roles,
+        format!("test-serial-{}", uuid::Uuid::new_v4()),
+    );
+    let result = state.sessions.create_session(identity);
+    format!("{}:{}", result.session.id, result.token.as_str())
+}
+
+/// Helper: generate a key as an admin and return its id (admin has every
+/// permission so it never trips RBAC).
+async fn generate_key_as(state: &AppState, token: &str, namespace: &str) -> String {
+    let body = serde_json::json!({
+        "algorithm": "ED25519",
+        "purpose": "SIGN",
+        "namespace": namespace,
+    });
+    let app = create_router(state.clone());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/keys")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {}", token))
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::CREATED,
+        "key generation should succeed for an authorized role"
+    );
+    let json = body_to_json(response.into_body()).await;
+    json["key_id"].as_str().unwrap().to_string()
+}
+
+/// (a) An authenticated `user`-role request to DELETE a key must be rejected
+/// with 403 — DeleteKey is privileged (Admin only). Pre-fix the REST API never
+/// checked RBAC, so a User could delete any key.
+#[tokio::test]
+async fn test_user_cannot_delete_key_returns_403() {
+    let state = test_app_state();
+    // Provision a key as admin first.
+    let admin = create_test_session(&state, "admin", vec![Role::Admin]);
+    let key_id = generate_key_as(&state, &admin, "default").await;
+
+    // Now a plain User attempts to delete it.
+    let user = create_test_session(&state, "alice", vec![Role::User]);
+    let app = create_router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/keys/{}", key_id))
+                .header(header::AUTHORIZATION, format!("Bearer {}", user))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "User role must not be able to delete keys"
+    );
+}
+
+/// (a continued) A `user`-role request to ROTATE a key must be rejected with
+/// 403 — RotateKey requires Operator or Admin.
+#[tokio::test]
+async fn test_user_cannot_rotate_key_returns_403() {
+    let state = test_app_state();
+    let admin = create_test_session(&state, "admin", vec![Role::Admin]);
+    let key_id = generate_key_as(&state, &admin, "default").await;
+
+    let user = create_test_session(&state, "alice", vec![Role::User]);
+    let app = create_router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/keys/{}/rotate", key_id))
+                .header(header::AUTHORIZATION, format!("Bearer {}", user))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "User role must not be able to rotate keys"
+    );
+}
+
+/// (a continued) An `auditor` (read-only) attempting to GENERATE a key must be
+/// rejected with 403.
+#[tokio::test]
+async fn test_auditor_cannot_generate_key_returns_403() {
+    let state = test_app_state();
+    let auditor = create_test_session(&state, "auditor", vec![Role::Auditor]);
+    let app = create_router(state);
+
+    let body = serde_json::json!({
+        "algorithm": "ED25519",
+        "purpose": "SIGN",
+        "namespace": "default"
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/keys")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {}", auditor))
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+/// (b) A request targeting a namespace different from the identity's namespace
+/// must be rejected. Here the caller's identity is in `tenant-a` but the
+/// request asks to generate a key in `tenant-b`. Pre-fix the namespace came
+/// straight from the request body, enabling cross-tenant access.
+#[tokio::test]
+async fn test_cross_namespace_generate_is_rejected() {
+    let state = test_app_state();
+    // Operator can GenerateKey, but only in their own namespace.
+    let token = create_test_session_in_ns(&state, "op-a", vec![Role::Operator], "tenant-a");
+    let app = create_router(state);
+
+    let body = serde_json::json!({
+        "algorithm": "ED25519",
+        "purpose": "SIGN",
+        "namespace": "tenant-b" // NOT the caller's namespace
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/keys")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {}", token))
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "a caller in tenant-a must not create a key in tenant-b"
+    );
+}
+
+/// (b continued) Listing keys with `?namespace=other-tenant` must be rejected
+/// for a caller whose identity belongs to a different namespace.
+#[tokio::test]
+async fn test_cross_namespace_list_is_rejected() {
+    let state = test_app_state();
+    let token = create_test_session_in_ns(&state, "op-a", vec![Role::Operator], "tenant-a");
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/keys?namespace=tenant-b")
+                .header(header::AUTHORIZATION, format!("Bearer {}", token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "a caller in tenant-a must not list keys in tenant-b"
+    );
+}
+
+/// (d) An admin/operator allowed op still succeeds: operator in tenant-a can
+/// generate, then list, keys in their OWN namespace.
+#[tokio::test]
+async fn test_operator_same_namespace_succeeds() {
+    let state = test_app_state();
+    let token = create_test_session_in_ns(&state, "op-a", vec![Role::Operator], "tenant-a");
+
+    // Generate in own namespace.
+    let body = serde_json::json!({
+        "algorithm": "ED25519",
+        "purpose": "SIGN",
+        "namespace": "tenant-a"
+    });
+    let app = create_router(state.clone());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/keys")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {}", token))
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // List own namespace.
+    let app = create_router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/keys?namespace=tenant-a")
+                .header(header::AUTHORIZATION, format!("Bearer {}", token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_to_json(response.into_body()).await;
+    assert!(json["total"].as_u64().unwrap() >= 1);
+}
+
+/// (c) A crypto op produces a persisted audit record, and `GET /audit` (read
+/// by an Auditor) returns it. This proves the audit log is wired both on the
+/// write path (sign) and the read path (get_audit_log) — both were stubbed
+/// pre-fix.
+#[tokio::test]
+async fn test_sign_produces_persisted_audit_record_readable_via_audit_endpoint() {
+    let (state, logger, _dir) = test_app_state_with_audit();
+
+    // Operator generates a key (also an audited key-lifecycle event).
+    let op = create_test_session(&state, "operator", vec![Role::Operator]);
+    let key_id = generate_key_as(&state, &op, "default").await;
+
+    // Sign some data.
+    let data_b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b"audit me");
+    let sign_body = serde_json::json!({ "data": data_b64 });
+    let app = create_router(state.clone());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/keys/{}/sign", key_id))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {}", op))
+                .body(Body::from(serde_json::to_string(&sign_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Give the background writer a moment to persist.
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // The hash chain must contain both the key-generation and the sign events,
+    // and the chain must verify (tamper-evident).
+    assert!(
+        logger.current_sequence() >= 2,
+        "expected at least key-generation + sign events, got {}",
+        logger.current_sequence()
+    );
+    assert!(logger.verify_integrity().is_ok());
+
+    // Read via the API as an Auditor and confirm a `sign` record on our key is
+    // present with a success result.
+    let auditor = create_test_session(&state, "auditor", vec![Role::Auditor]);
+    let app = create_router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/audit")
+                .header(header::AUTHORIZATION, format!("Bearer {}", auditor))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let json = body_to_json(response.into_body()).await;
+    let entries = json["entries"].as_array().expect("entries array");
+    assert!(
+        json["total"].as_u64().unwrap() >= 2,
+        "audit endpoint should report the persisted events"
+    );
+
+    let sign_entry = entries
+        .iter()
+        .find(|e| e["event_type"] == "sign" && e["resource"] == key_id && e["result"] == "success");
+    assert!(
+        sign_entry.is_some(),
+        "a successful sign audit record for key {} must be returned by GET /audit; got {:?}",
+        key_id,
+        entries
+    );
+}
+
+/// (c continued) A non-auditor (plain User) must NOT be able to read the audit
+/// log even though events exist.
+#[tokio::test]
+async fn test_user_cannot_read_audit_log_returns_403() {
+    let (state, _logger, _dir) = test_app_state_with_audit();
+    let user = create_test_session(&state, "alice", vec![Role::User]);
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/audit")
+                .header(header::AUTHORIZATION, format!("Bearer {}", user))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+/// (c continued) A failing audit write must fail the operation (fail-closed).
+/// We force this by shutting the logger's writer down before issuing a sign,
+/// so the channel send fails and the handler must surface an error rather than
+/// completing the crypto op silently.
+#[tokio::test]
+async fn test_audit_write_failure_fails_the_operation() {
+    let (state, logger, _dir) = test_app_state_with_audit();
+    let op = create_test_session(&state, "operator", vec![Role::Operator]);
+    let key_id = generate_key_as(&state, &op, "default").await;
+
+    // Shut the audit writer down: subsequent log() calls return an error.
+    logger.shutdown().await;
+
+    let data_b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b"x");
+    let sign_body = serde_json::json!({ "data": data_b64 });
+    let app = create_router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/keys/{}/sign", key_id))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {}", op))
+                .body(Body::from(serde_json::to_string(&sign_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "a sign must fail-closed when its audit record cannot be written"
+    );
 }

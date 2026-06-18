@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use hsm_grpc_api::*;
+use std::hint::black_box;
 use std::time::Duration;
 
 fn benchmark_validation(c: &mut Criterion) {
@@ -100,8 +101,8 @@ fn benchmark_circuit_breaker(c: &mut Criterion) {
         };
         let cb = CircuitBreaker::new(config);
         b.iter(|| {
-            let result = cb.call(|| -> Result<(), ()> { Ok(()) });
-            black_box(result);
+            let result = cb.call(|| -> std::result::Result<(), ()> { Ok(()) });
+            let _ = black_box(result);
         })
     });
 
@@ -117,12 +118,12 @@ fn benchmark_circuit_breaker(c: &mut Criterion) {
 
         // Open the circuit
         for _ in 0..2 {
-            let _ = cb.call(|| -> Result<(), ()> { Err(()) });
+            let _ = cb.call(|| -> std::result::Result<(), ()> { Err(()) });
         }
 
         b.iter(|| {
-            let result = cb.call(|| -> Result<(), ()> { Ok(()) });
-            black_box(result);
+            let result = cb.call(|| -> std::result::Result<(), ()> { Ok(()) });
+            let _ = black_box(result);
         })
     });
 

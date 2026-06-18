@@ -8,7 +8,6 @@ use dashmap::DashMap;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 /// Anomaly types
@@ -265,36 +264,58 @@ impl AnomalyDetector {
             timestamp: now,
         });
 
-        // Update sums
-        stats.short_sum = &stats.short_sum + event.amount();
-        stats.medium_sum = &stats.medium_sum + event.amount();
+        // The new point contributes to the long-window running sum. The
+        // short/medium window aggregates are recomputed from the live points
+        // in `cleanup_old_data`, so they are not incremented here.
         stats.long_sum = &stats.long_sum + event.amount();
-        stats.short_count += 1;
 
-        // Clean old data points
+        // Evict expired points and recompute each window independently.
         self.cleanup_old_data(&mut stats, now);
     }
 
-    /// Remove data points outside windows
+    /// Evict data points older than the long window and recompute the
+    /// short/medium window aggregates.
+    ///
+    /// Each window is maintained independently: a point contributes to a given
+    /// window's sum only while its age is within that specific window boundary.
+    /// Because `short_window <= medium_window <= long_window`, a point can age
+    /// out of the short window while remaining inside the medium and long
+    /// windows, so the per-window sums must be derived from the live points
+    /// rather than gated on long-window eviction. The deque retains every point
+    /// younger than the long window (newest at the back), and points are only
+    /// physically removed once they exceed the long window.
     fn cleanup_old_data(&self, stats: &mut TokenStats, now: Instant) {
+        // Drop points that have aged out of the longest window.
         while let Some(front) = stats.values.front() {
             let age = now.duration_since(front.timestamp);
-
             if age > self.long_window {
                 let removed = stats.values.pop_front().unwrap();
                 stats.long_sum = &stats.long_sum - &removed.value;
-
-                if age <= self.medium_window {
-                    stats.medium_sum = &stats.medium_sum - &removed.value;
-                }
-                if age <= self.short_window {
-                    stats.short_sum = &stats.short_sum - &removed.value;
-                    stats.short_count = stats.short_count.saturating_sub(1);
-                }
             } else {
                 break;
             }
         }
+
+        // Recompute the short and medium window aggregates from the points that
+        // remain. This guarantees they shrink as soon as a point's age crosses
+        // the corresponding window boundary, independent of long-window
+        // eviction.
+        let mut short_sum = BigDecimal::from(0);
+        let mut medium_sum = BigDecimal::from(0);
+        let mut short_count: u32 = 0;
+        for point in &stats.values {
+            let age = now.duration_since(point.timestamp);
+            if age <= self.medium_window {
+                medium_sum = &medium_sum + &point.value;
+            }
+            if age <= self.short_window {
+                short_sum = &short_sum + &point.value;
+                short_count += 1;
+            }
+        }
+        stats.short_sum = short_sum;
+        stats.medium_sum = medium_sum;
+        stats.short_count = short_count;
     }
 
     /// Check for large withdrawal
@@ -494,7 +515,9 @@ pub struct TokenStatsSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::TimeWindows;
     use crate::watcher::{BridgeEvent, EventType};
+    use std::str::FromStr;
 
     fn test_config() -> DetectionConfig {
         DetectionConfig {
@@ -588,5 +611,130 @@ mod tests {
         assert!(result.is_anomaly);
         assert_eq!(result.anomaly_type, Some(AnomalyType::BlacklistedAddress));
         assert_eq!(result.severity, Severity::Critical);
+    }
+
+    /// Build a detector with explicit, strictly-ordered window sizes so we can
+    /// reason about which points belong to which window.
+    fn rolling_window_config() -> DetectionConfig {
+        DetectionConfig {
+            large_withdrawal_pct: 1.0,
+            hourly_volume_limit: None,
+            daily_volume_limit: None,
+            imbalance_threshold_pct: 10.0,
+            velocity_threshold: 3.0,
+            time_windows: TimeWindows {
+                short_secs: 10,
+                medium_secs: 100,
+                long_secs: 1000,
+            },
+        }
+    }
+
+    fn dp(value: &str, age: Duration, now: Instant) -> DataPoint {
+        DataPoint {
+            value: BigDecimal::from_str(value).unwrap(),
+            // Place the point `age` in the past relative to `now`.
+            timestamp: now.checked_sub(age).expect("age within Instant range"),
+        }
+    }
+
+    /// Regression test for HIGH #22.
+    ///
+    /// `cleanup_old_data` previously nested the short/medium decrements inside
+    /// the long-window eviction branch, guarded by `age <= short/medium_window`.
+    /// Since `short <= medium <= long`, those guards could never be true when
+    /// `age > long_window`, so the short/medium sums (and short_count) only ever
+    /// grew. This test seeds points with controlled ages spanning all three
+    /// windows and asserts that each window's aggregate reflects ONLY the points
+    /// inside that window -- i.e. the rolling windows actually shrink.
+    #[test]
+    fn test_rolling_windows_shrink() {
+        let detector = AnomalyDetector::new(rolling_window_config());
+        // Anchor `now` well forward of the monotonic-clock origin so the
+        // backwards-dated points below never underflow `checked_sub`.
+        let now = Instant::now()
+            .checked_add(Duration::from_secs(10_000))
+            .expect("anchor within Instant range");
+
+        let mut stats = TokenStats::default();
+
+        // Points listed oldest-first. With short=10s, medium=100s, long=1000s:
+        //   age 2000s -> outside long (evicted)      value 1600
+        //   age 500s  -> in long only                value 800
+        //   age  50s  -> in medium, long (NOT short) value 400
+        //   age   8s  -> in short, medium, long      value 200
+        //   age   5s  -> in short, medium, long      value 100
+        let points = [
+            dp("1600", Duration::from_secs(2000), now),
+            dp("800", Duration::from_secs(500), now),
+            dp("400", Duration::from_secs(50), now),
+            dp("200", Duration::from_secs(8), now),
+            dp("100", Duration::from_secs(5), now),
+        ];
+
+        // `push_back` in oldest-first order so the deque is ordered
+        // front (oldest) -> back (newest), matching how `record_transaction`
+        // pushes points and how `cleanup_old_data` evicts from the front.
+        for p in &points {
+            stats.values.push_back(p.clone());
+        }
+
+        // Seed long_sum the way record_transaction does (running total of every
+        // point currently considered "added", including the about-to-be-evicted
+        // one) so eviction has something to subtract.
+        stats.long_sum = BigDecimal::from_str("3100").unwrap(); // 100+200+400+800+1600
+
+        detector.cleanup_old_data(&mut stats, now);
+
+        // Long window (<=1000s): excludes the 2000s point (1600). 100+200+400+800.
+        assert_eq!(
+            stats.long_sum,
+            BigDecimal::from_str("1500").unwrap(),
+            "long_sum must drop the point older than the long window"
+        );
+        // The evicted point must be physically removed from the buffer.
+        assert_eq!(stats.values.len(), 4, "stale point must be evicted");
+
+        // Medium window (<=100s): excludes 500s (800) and 2000s. 100+200+400.
+        assert_eq!(
+            stats.medium_sum,
+            BigDecimal::from_str("700").unwrap(),
+            "medium_sum must exclude points older than the medium window"
+        );
+
+        // Short window (<=10s): only the 5s and 8s points. 100+200.
+        assert_eq!(
+            stats.short_sum,
+            BigDecimal::from_str("300").unwrap(),
+            "short_sum must exclude points older than the short window"
+        );
+        assert_eq!(
+            stats.short_count, 2,
+            "short_count must reflect only points inside the short window"
+        );
+
+        // Now advance time so the 8s point ages past the 10s short window.
+        // (now + 5s => point ages become 10s and 13s; only the 5s-origin point,
+        // now 10s old, stays within short=10s with the <= boundary.)
+        let later = now.checked_add(Duration::from_secs(5)).unwrap();
+        detector.cleanup_old_data(&mut stats, later);
+
+        // The 8s point (now 13s old) must have dropped OUT of the short window:
+        // short_sum shrinks from 300 to just the 100-value point.
+        assert_eq!(
+            stats.short_sum,
+            BigDecimal::from_str("100").unwrap(),
+            "advancing time must shrink short_sum as points age out"
+        );
+        assert_eq!(
+            stats.short_count, 1,
+            "advancing time must shrink short_count as points age out"
+        );
+        // Medium window unaffected by a 5s advance (all 3 still <=100s old).
+        assert_eq!(
+            stats.medium_sum,
+            BigDecimal::from_str("700").unwrap(),
+            "medium_sum unchanged when no point crosses the medium boundary"
+        );
     }
 }

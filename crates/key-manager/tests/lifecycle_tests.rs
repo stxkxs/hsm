@@ -163,8 +163,10 @@ fn test_operation_counter() {
 fn test_max_operations_limit() {
     let manager = DefaultKeyManager::new();
 
-    let mut policy = KeyUsagePolicy::default();
-    policy.max_operations = Some(2);
+    let policy = KeyUsagePolicy {
+        max_operations: Some(2),
+        ..Default::default()
+    };
 
     let spec = KeySpec {
         key_type: KeyType::Ed25519,

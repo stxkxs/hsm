@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use hsm_crypto_engine::*;
+use std::hint::black_box;
 
 fn bench_ed25519_sign(c: &mut Criterion) {
     let (private_key, _) = asymmetric::ed25519::Ed25519Engine::generate_keypair().unwrap();

@@ -45,6 +45,7 @@ hex = "0.4"
 subtle = "2.6"  # Constant-time operations for cryptographic comparisons
 zeroize = { version = "1.8", features = ["derive"] }  # Secure memory zeroization
 base64 = "0.22"  # Base64 encoding for JWT
+ciborium = "0.2"  # CBOR decoding for WebAuthn COSE keys / attestation objects
 hmac.workspace = true  # HMAC for webhook signatures
 rsa = { workspace = true }  # RSA signature verification for JWT
 p256 = { workspace = true, features = ["ecdsa"] }  # ECDSA P-256 for JWT ES256

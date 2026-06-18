@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use hsm_key_manager::*;
+use std::hint::black_box;
 use std::sync::Arc;
 use std::thread;
 
@@ -197,21 +198,19 @@ fn bench_update_operations(c: &mut Criterion) {
 
     group.bench_function("increment_operations", |b| {
         b.iter(|| {
-            black_box(
-                manager
-                    .increment_operations(&key_id, "update_bench")
-                    .unwrap(),
-            )
+            manager
+                .increment_operations(&key_id, "update_bench")
+                .unwrap();
+            black_box(())
         })
     });
 
     group.bench_function("update_state", |b| {
         b.iter(|| {
-            black_box(
-                manager
-                    .update_state(&key_id, "update_bench", KeyState::Active)
-                    .unwrap(),
-            )
+            manager
+                .update_state(&key_id, "update_bench", KeyState::Active)
+                .unwrap();
+            black_box(())
         })
     });
 

@@ -6,7 +6,7 @@ use crate::threshold::config::{KeyRefreshConfig, ResharingConfig};
 use crate::threshold::ecdsa::ThresholdEcdsaEngine;
 use crate::threshold::frost::FrostEngine;
 use crate::threshold::types::{
-    GroupPublicKey, KeyShare, ParticipantId, ThresholdConfig, ThresholdScheme,
+    GroupPublicKey, KeyShare, ParticipantId, ThresholdConfig, ThresholdError, ThresholdScheme,
 };
 
 // Helper function to convert EcdsaKeyShare to KeyShare
@@ -117,7 +117,7 @@ fn test_key_refresh_frost_ed25519() {
 #[test]
 fn test_key_refresh_ecdsa_p256() {
     let config = ThresholdConfig::new(2, 3).unwrap();
-    let (group_key, shares) = ThresholdEcdsaEngine::trusted_dealer_keygen(
+    let (_group_key, shares) = ThresholdEcdsaEngine::trusted_dealer_keygen(
         config,
         crate::threshold::types::EcdsaCurve::P256,
     )
@@ -186,7 +186,7 @@ fn test_key_refresh_ecdsa_p256() {
 #[test]
 fn test_key_refresh_bls() {
     let config = ThresholdConfig::new(2, 3).unwrap();
-    let (group_key, shares) = ThresholdBlsEngine::trusted_dealer_keygen(config).unwrap();
+    let (_group_key, shares) = ThresholdBlsEngine::trusted_dealer_keygen(config).unwrap();
 
     // Create refresh configuration
     let participants: Vec<ParticipantId> = (1..=3).map(ParticipantId).collect();
@@ -612,6 +612,177 @@ fn test_refresh_state_transitions() {
 
     // Can't do Round 1 again
     assert!(protocol.round1().is_err());
+}
+
+// ========== BLS Feldman-VSS verification (finding #10) ==========
+
+/// Build a valid BLS resharing flow and return the resharing instance plus the
+/// per-new-participant packages (one bucket per old participant, all packages).
+fn bls_resharing_setup() -> (
+    Resharing,
+    GroupPublicKey,
+    Vec<ParticipantId>,
+    Vec<Vec<ResharingPackage>>,
+) {
+    let old_config = ThresholdConfig::new(2, 3).unwrap();
+    let (group_key, old_shares) = ThresholdBlsEngine::trusted_dealer_keygen(old_config).unwrap();
+
+    let key_shares: Vec<KeyShare> = old_shares
+        .iter()
+        .map(|s| {
+            KeyShare::new(
+                s.participant_id,
+                s.config,
+                s.secret_share_bytes().to_vec(),
+                s.public_share.clone(),
+            )
+        })
+        .collect();
+    let generic_group_key = GroupPublicKey::new(
+        group_key.bytes.clone(),
+        group_key.config,
+        group_key.bytes.clone(),
+    );
+
+    let old_participants: Vec<ParticipantId> = (1..=3).map(ParticipantId).collect();
+    let new_participants: Vec<ParticipantId> = (1..=3).map(ParticipantId).collect();
+
+    let resharing_config = ResharingConfig::new(
+        ThresholdScheme::ThresholdBls12381,
+        old_config,
+        2,
+        old_participants,
+        new_participants.clone(),
+    )
+    .unwrap();
+
+    let resharing = Resharing::new(resharing_config).unwrap();
+
+    let mut all_packages: Vec<Vec<ResharingPackage>> = Vec::new();
+    for share in &key_shares {
+        all_packages.push(resharing.generate_new_shares(share).unwrap());
+    }
+
+    (resharing, generic_group_key, new_participants, all_packages)
+}
+
+/// Collect the (up to `take`) packages destined for `new_participant`.
+fn bls_packages_for(
+    all_packages: &[Vec<ResharingPackage>],
+    new_participant: ParticipantId,
+    take: usize,
+) -> Vec<ResharingPackage> {
+    all_packages
+        .iter()
+        .flat_map(|pkgs| {
+            pkgs.iter()
+                .filter(|p| p.new_participant == new_participant)
+                .cloned()
+        })
+        .take(take)
+        .collect()
+}
+
+/// Finding #10: BLS Feldman verification must ACCEPT a correctly generated share
+/// and REJECT a tampered one. Before the fix, `verify_refresh_share` /
+/// `ResharingPackage::verify` returned `Ok(true)` unconditionally for
+/// `ThresholdBls12381`, so any (even adversarial) share was accepted.
+///
+/// This is a true KAT-style check: we generate a genuine (share, G1-commitments)
+/// pair via the protocol, prove it verifies, then flip exactly one byte of the
+/// share and prove verification now reports `false`.
+#[test]
+fn test_bls_package_verify_accepts_valid_rejects_tampered() {
+    let (_resharing, _gk, new_participants, all_packages) = bls_resharing_setup();
+
+    // Grab one genuine package destined for the first new participant.
+    let pkg = bls_packages_for(&all_packages, new_participants[0], 1)
+        .into_iter()
+        .next()
+        .expect("at least one BLS resharing package");
+
+    // The genuine share must verify against its commitments.
+    assert!(
+        pkg.verify().unwrap(),
+        "a correctly generated BLS share must pass Feldman verification"
+    );
+
+    // Tamper a single byte of the share: verification must now FAIL (return false),
+    // proving the verifier is real and not the old `Ok(true)` stub.
+    let mut tampered = pkg.clone();
+    tampered.share[0] ^= 0x01;
+    assert!(
+        !tampered.verify().unwrap(),
+        "a tampered BLS share must be rejected by Feldman verification"
+    );
+}
+
+/// Finding #10 (end-to-end): a tampered BLS share must be rejected by
+/// `receive_shares`, surfacing as `ResharingInvalidShare`.
+#[test]
+fn test_resharing_bls_rejects_tampered_share() {
+    let (resharing, group_key, new_participants, all_packages) = bls_resharing_setup();
+
+    let mut packages = bls_packages_for(&all_packages, new_participants[0], 2);
+    assert_eq!(packages.len(), 2, "need threshold packages for the flow");
+
+    // Sanity: untampered flow succeeds.
+    assert!(resharing
+        .receive_shares(new_participants[0], packages.clone(), &group_key)
+        .is_ok());
+
+    // Tamper the share of the first package; reconstruction must be refused.
+    packages[0].share[1] ^= 0xFF;
+    let tampered_sender = packages[0].old_participant;
+    let result = resharing.receive_shares(new_participants[0], packages, &group_key);
+    assert!(
+        matches!(result, Err(ThresholdError::ResharingInvalidShare(id)) if id == tampered_sender),
+        "tampered BLS share must yield ResharingInvalidShare, got {result:?}"
+    );
+}
+
+// ========== Duplicate / non-member rejection (finding #25) ==========
+
+/// Finding #25: `receive_shares` must reject duplicate `old_participant` IDs.
+/// Two copies of the same old participant's package satisfy the length check but
+/// would corrupt the Lagrange reconstruction; they must be rejected up front.
+#[test]
+fn test_resharing_rejects_duplicate_old_participant() {
+    let (resharing, group_key, new_participants, all_packages) = bls_resharing_setup();
+
+    // Take the single genuine package from old participant 1 and duplicate it so
+    // we have two packages, both from the same sender.
+    let one = bls_packages_for(&all_packages, new_participants[0], 1)
+        .into_iter()
+        .next()
+        .unwrap();
+    let dup_sender = one.old_participant;
+    let packages = vec![one.clone(), one];
+
+    let result = resharing.receive_shares(new_participants[0], packages, &group_key);
+    assert!(
+        matches!(result, Err(ThresholdError::ResharingInvalidShare(id)) if id == dup_sender),
+        "duplicate old-participant package must be rejected, got {result:?}"
+    );
+}
+
+/// Finding #25: `receive_shares` must reject packages whose `old_participant` is
+/// not a member of the old committee.
+#[test]
+fn test_resharing_rejects_non_member_old_participant() {
+    let (resharing, group_key, new_participants, all_packages) = bls_resharing_setup();
+
+    let mut packages = bls_packages_for(&all_packages, new_participants[0], 2);
+    // Rewrite one sender to a participant id that is not in the old committee
+    // (old committee is {1,2,3}).
+    let bogus = ParticipantId(99);
+    packages[1].old_participant = bogus;
+
+    let result = resharing.receive_shares(new_participants[0], packages, &group_key);
+    assert!(
+        matches!(result, Err(ThresholdError::ResharingInvalidShare(id)) if id == bogus),
+        "non-member old-participant package must be rejected, got {result:?}"
+    );
 }
 
 #[test]

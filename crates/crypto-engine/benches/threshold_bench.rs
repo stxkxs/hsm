@@ -391,7 +391,7 @@ fn bench_ecdsa_p256_signing(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let (n0, c0) = ThresholdEcdsaEngine::generate_nonces(&shares[0]).unwrap();
-                let (n1, c1) = ThresholdEcdsaEngine::generate_nonces(&shares[1]).unwrap();
+                let (_n1, c1) = ThresholdEcdsaEngine::generate_nonces(&shares[1]).unwrap();
                 let commits = vec![c0, c1];
                 let participants = vec![shares[0].participant_id, shares[1].participant_id];
                 let presig0 =
@@ -512,6 +512,7 @@ fn bench_bls_signing(c: &mut Criterion) {
             ThresholdBlsEngine::aggregate(
                 black_box(&[sig0.clone(), sig1.clone()]),
                 black_box(&participants),
+                shares[0].config.threshold,
             )
         });
     });
@@ -520,7 +521,9 @@ fn bench_bls_signing(c: &mut Criterion) {
         let sig0 = ThresholdBlsEngine::sign_share(&shares[0], message).unwrap();
         let sig1 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
         let participants = vec![shares[0].participant_id, shares[1].participant_id];
-        let signature = ThresholdBlsEngine::aggregate(&[sig0, sig1], &participants).unwrap();
+        let signature =
+            ThresholdBlsEngine::aggregate(&[sig0, sig1], &participants, shares[0].config.threshold)
+                .unwrap();
 
         b.iter(|| {
             ThresholdBlsEngine::verify(
@@ -536,7 +539,12 @@ fn bench_bls_signing(c: &mut Criterion) {
             let sig0 = ThresholdBlsEngine::sign_share(&shares[0], message).unwrap();
             let sig1 = ThresholdBlsEngine::sign_share(&shares[1], message).unwrap();
             let participants = vec![shares[0].participant_id, shares[1].participant_id];
-            let signature = ThresholdBlsEngine::aggregate(&[sig0, sig1], &participants).unwrap();
+            let signature = ThresholdBlsEngine::aggregate(
+                &[sig0, sig1],
+                &participants,
+                shares[0].config.threshold,
+            )
+            .unwrap();
             let _valid = ThresholdBlsEngine::verify(&group_key, message, &signature).unwrap();
         });
     });
@@ -659,7 +667,12 @@ fn bench_signing_comparison(c: &mut Criterion) {
             let sig0 = ThresholdBlsEngine::sign_share(&bls_shares[0], message).unwrap();
             let sig1 = ThresholdBlsEngine::sign_share(&bls_shares[1], message).unwrap();
             let participants = vec![bls_shares[0].participant_id, bls_shares[1].participant_id];
-            ThresholdBlsEngine::aggregate(&[sig0, sig1], &participants).unwrap()
+            ThresholdBlsEngine::aggregate(
+                &[sig0, sig1],
+                &participants,
+                bls_shares[0].config.threshold,
+            )
+            .unwrap()
         });
     });
 
@@ -744,7 +757,12 @@ fn bench_scaling_with_participants(c: &mut Criterion) {
                         .map(|&idx| shares[idx].participant_id)
                         .collect();
 
-                    ThresholdBlsEngine::aggregate(&sig_shares, &participants).unwrap()
+                    ThresholdBlsEngine::aggregate(
+                        &sig_shares,
+                        &participants,
+                        shares[0].config.threshold,
+                    )
+                    .unwrap()
                 });
             },
         );
