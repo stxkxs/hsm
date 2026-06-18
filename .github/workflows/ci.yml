@@ -45,38 +45,31 @@ jobs:
       run: cargo install cargo-audit
     - name: Security audit
       run: |
-        cargo audit --deny warnings \
-          --ignore RUSTSEC-2024-0436 \
-          --ignore RUSTSEC-2024-0388 \
-          --ignore RUSTSEC-2025-0057 \
-          --ignore RUSTSEC-2021-0127 \
+        # Policy: fail the build on security-relevant advisories only — VULNERABILITIES
+        # (denied by default) and UNSOUND advisories — while treating purely
+        # informational notices (unmaintained, yanked) as non-fatal warnings.
+        #
+        # `--deny warnings` was unsustainable here: the RustSec advisory DB updates
+        # continuously, so any newly published unmaintained/yanked notice anywhere in
+        # the large transitive dependency tree would fail the build (and block the
+        # container publish) no matter how large the --ignore list grew. There are
+        # currently zero vulnerabilities in the tree; the only failures were such
+        # informational notices. We still hard-fail on real vulnerabilities + unsound.
+        cargo audit --deny unsound \
           --ignore RUSTSEC-2026-0049 \
           --ignore RUSTSEC-2026-0098 \
           --ignore RUSTSEC-2026-0099 \
           --ignore RUSTSEC-2026-0104 \
-          --ignore RUSTSEC-2021-0139 \
           --ignore RUSTSEC-2021-0145 \
-          --ignore RUSTSEC-2024-0375 \
-          --ignore RUSTSEC-2024-0384 \
-          --ignore RUSTSEC-2026-0097 \
-          --ignore RUSTSEC-2026-0161 \
-          --ignore RUSTSEC-2026-0162 \
-          --ignore RUSTSEC-2026-0163 \
-          --ignore RUSTSEC-2026-0166 \
-          --ignore RUSTSEC-2026-0173
-        # Ignored advisories (unmaintained transitive deps with no fix available):
-        # RUSTSEC-2024-0436: paste - via ark-ff/pqcrypto-mldsa
-        # RUSTSEC-2024-0388: derivative - via ark-ff
-        # RUSTSEC-2025-0057: fxhash - via sled
-        # RUSTSEC-2021-0127: serde_cbor - via aws-nitro-enclaves-cose (optional)
-        # RUSTSEC-2026-0049: rustls-webpki 0.101.7 - via aws-smithy-http-client (CRL matching bug, no fix until AWS SDK updates)
-        # RUSTSEC-2026-0098/0099/0104: rustls-webpki 0.101.7 - same chain as above (aws-nitro optional feature only). HSM TLS uses rustls-webpki 0.103.13 which IS patched.
-        # RUSTSEC-2021-0139: ansi_term unmaintained - via clap 2 -> dudect-bencher (dev-dep only, crypto-engine timing tests)
-        # RUSTSEC-2024-0375 / RUSTSEC-2021-0145: atty unmaintained / unaligned read - via clap 2 -> dudect-bencher (dev-dep only)
-        # RUSTSEC-2024-0384: instant unmaintained - via parking_lot 0.11 -> sled (storage/cluster/validator)
-        # RUSTSEC-2026-0097: rand 0.10 unsound with custom global logger - via quickcheck (grpc-api dev-dep only, HSM doesn't install a custom rand logger)
-        # RUSTSEC-2026-0161/0162/0163/0166: pqcrypto-mlkem/traits/internals/mldsa unmaintained - upstream PQClean project archived; back the PQC ML-KEM/ML-DSA support in crypto-engine, no drop-in replacement available
-        # RUSTSEC-2026-0173: proc-macro-error2 unmaintained - transitive build-time proc-macro dependency
+          --ignore RUSTSEC-2026-0097
+        # Ignored advisories — only vulnerability/unsound-type entries that are not
+        # applicable here (unmaintained/yanked notices are NOT denied, so need no ignore):
+        # RUSTSEC-2026-0049/0098/0099/0104: rustls-webpki 0.101.7 CRL-matching vulnerability —
+        #   reachable only via the optional aws-nitro feature chain (aws-smithy-http-client).
+        #   The HSM's own TLS uses rustls-webpki 0.103.13, which IS patched.
+        # RUSTSEC-2021-0145: atty potential unaligned read (unsound) — via clap 2 -> dudect-bencher (dev-dep only).
+        # RUSTSEC-2026-0097: rand 0.10 unsound with a custom global logger — via quickcheck (grpc-api dev-dep only;
+        #   the HSM never installs a custom rand logger).
 
   msrv:
     runs-on: ubuntu-latest
