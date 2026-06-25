@@ -44,6 +44,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use hsm_audit::{AsyncAuditConfig, AsyncAuditLogger, StorageConfig as AuditStorageConfig};
 use hsm_auth::SessionManager;
+use hsm_backup::{recover_master_key, SerializableShare};
 use hsm_key_manager::{DefaultKeyManager, KeyFilter, KeyManager};
 use hsm_rest_api::middleware::AppState;
 use hsm_storage::{EncryptedFileStorage, MasterKey, StorageBackend};
@@ -119,6 +120,22 @@ struct Args {
     #[arg(long, env = "HSM_DATA_DIR")]
     data_dir: Option<String>,
 
+    /// Path to a file containing the hex-encoded storage master key.
+    ///
+    /// Preferred over `HSM_MASTER_KEY`: mounting the key as a file (e.g. a
+    /// KMS-backed projected secret) keeps it out of the process environment.
+    #[arg(long, env = "HSM_MASTER_KEY_FILE")]
+    master_key_file: Option<String>,
+
+    /// Directory of Shamir secret-sharing shares from which to reconstruct the
+    /// storage master key (K-of-N).
+    ///
+    /// Most secure source: the full master key never exists at rest — only the
+    /// shares, which can be distributed across separate secrets/custodians. Each
+    /// file is one JSON share as produced by `hsm_backup::split_master_key`.
+    #[arg(long, env = "HSM_MASTER_KEY_SHARES_DIR")]
+    master_key_shares_dir: Option<String>,
+
     /// Maximum number of concurrent connections accepted by the TLS listener.
     ///
     /// Connections beyond this limit wait for a permit before the TLS
@@ -153,16 +170,7 @@ fn build_key_manager(args: &Args) -> Result<DefaultKeyManager> {
         return Ok(DefaultKeyManager::new());
     };
 
-    let master_key_hex = std::env::var("HSM_MASTER_KEY").map_err(|_| {
-        anyhow::anyhow!(
-            "HSM_DATA_DIR is set but HSM_MASTER_KEY is missing: a stable 32-byte \
-             hex-encoded master key is required for persistent key storage"
-        )
-    })?;
-    let master_key_bytes =
-        hex::decode(master_key_hex.trim()).context("HSM_MASTER_KEY must be hex-encoded")?;
-    let master_key = MasterKey::from_bytes(master_key_bytes)
-        .map_err(|e| anyhow::anyhow!("invalid HSM_MASTER_KEY: {e}"))?;
+    let master_key = load_master_key(args)?;
 
     let storage = EncryptedFileStorage::new(PathBuf::from(data_dir), master_key)
         .context("failed to initialize encrypted key storage")?;
@@ -178,6 +186,74 @@ fn build_key_manager(args: &Args) -> Result<DefaultKeyManager> {
     );
 
     Ok(manager)
+}
+
+/// Load the storage master key from the most secure configured source.
+///
+/// Sources are tried in order of decreasing security:
+/// 1. `HSM_MASTER_KEY_SHARES_DIR` — reconstruct the key from Shamir shares
+///    (K-of-N). The full key never exists at rest; the shares can be held in
+///    separate secrets/mounts/custodians.
+/// 2. `HSM_MASTER_KEY_FILE` — read the hex-encoded key from a file, e.g. a
+///    KMS-backed projected secret volume (keeps the key out of the environment).
+/// 3. `HSM_MASTER_KEY` — hex-encoded key in the environment. Least secure (env
+///    is readable via /proc, inherited by children, and often logged); a warning
+///    is emitted.
+fn load_master_key(args: &Args) -> Result<MasterKey> {
+    if let Some(dir) = args.master_key_shares_dir.as_deref() {
+        return reconstruct_master_key_from_shares(dir);
+    }
+    if let Some(path) = args.master_key_file.as_deref() {
+        let hex = std::fs::read_to_string(path)
+            .with_context(|| format!("failed to read HSM_MASTER_KEY_FILE: {path}"))?;
+        return master_key_from_hex(hex.trim());
+    }
+    if let Ok(hex) = std::env::var("HSM_MASTER_KEY") {
+        warn!(
+            "master key sourced from the HSM_MASTER_KEY environment variable; prefer \
+             HSM_MASTER_KEY_FILE (a KMS-backed file mount) or HSM_MASTER_KEY_SHARES_DIR \
+             (Shamir shares) so the key is not exposed in the process environment."
+        );
+        return master_key_from_hex(hex.trim());
+    }
+    anyhow::bail!(
+        "HSM_DATA_DIR is set but no master key source is configured. Provide one of \
+         HSM_MASTER_KEY_SHARES_DIR, HSM_MASTER_KEY_FILE, or HSM_MASTER_KEY."
+    )
+}
+
+/// Parse a hex-encoded 32-byte master key.
+fn master_key_from_hex(hex_str: &str) -> Result<MasterKey> {
+    let bytes = hex::decode(hex_str).context("master key must be hex-encoded")?;
+    MasterKey::from_bytes(bytes).map_err(|e| anyhow::anyhow!("invalid master key: {e}"))
+}
+
+/// Reconstruct the master key from Shamir secret-sharing shares.
+///
+/// Every regular file in `dir` is read as one JSON-serialized share (as produced
+/// by `hsm_backup::split_master_key`). At least the threshold number of shares
+/// must be present; the full key is reconstructed in memory and never persisted.
+fn reconstruct_master_key_from_shares(dir: &str) -> Result<MasterKey> {
+    let mut shares = Vec::new();
+    for entry in
+        std::fs::read_dir(dir).with_context(|| format!("failed to read shares dir: {dir}"))?
+    {
+        let path = entry?.path();
+        if path.is_file() {
+            let data = std::fs::read(&path)
+                .with_context(|| format!("failed to read share file: {path:?}"))?;
+            let share: SerializableShare = serde_json::from_slice(&data)
+                .with_context(|| format!("invalid Shamir share file: {path:?}"))?;
+            shares.push(share);
+        }
+    }
+    if shares.is_empty() {
+        anyhow::bail!("no Shamir share files found in {dir}");
+    }
+    let recovered = recover_master_key(&shares)
+        .map_err(|e| anyhow::anyhow!("failed to reconstruct master key from shares: {e}"))?;
+    MasterKey::from_bytes(recovered.to_vec())
+        .map_err(|e| anyhow::anyhow!("reconstructed master key is invalid: {e}"))
 }
 
 /// Enforce secure-by-default transport.
@@ -745,6 +821,57 @@ mod tests {
         assert!(check_transport_security(false, false, true).is_ok());
         assert!(check_transport_security(true, false, true).is_ok());
         assert!(check_transport_security(true, true, true).is_ok());
+    }
+
+    #[test]
+    fn master_key_from_hex_validates_length_and_encoding() {
+        // 32 bytes of valid hex → ok.
+        assert!(master_key_from_hex(&"11".repeat(32)).is_ok());
+        // Not hex → error.
+        assert!(master_key_from_hex("not-hex").is_err());
+        // Wrong length (16 bytes) → rejected by MasterKey::from_bytes.
+        assert!(master_key_from_hex(&"22".repeat(16)).is_err());
+    }
+
+    #[test]
+    fn master_key_reconstructs_from_shamir_shares() {
+        use hsm_backup::split_master_key;
+
+        let key_bytes = vec![0x33u8; 32];
+        let shares = split_master_key(&key_bytes, 3, 5).expect("split into 3-of-5");
+
+        // Sanity: the Shamir round-trip recovers the original key bytes.
+        let recovered = recover_master_key(&shares[..3]).expect("recover");
+        assert_eq!(recovered.to_vec(), key_bytes);
+
+        // Write a threshold (3) of the shares as JSON files and reconstruct from
+        // the directory, exercising the server's file-reading path end to end.
+        let dir = tempfile::tempdir().expect("tempdir");
+        for (i, share) in shares.iter().take(3).enumerate() {
+            std::fs::write(
+                dir.path().join(format!("share-{i}.json")),
+                serde_json::to_vec(share).expect("serialize share"),
+            )
+            .expect("write share");
+        }
+        assert!(reconstruct_master_key_from_shares(dir.path().to_str().unwrap()).is_ok());
+    }
+
+    #[test]
+    fn master_key_reconstruction_fails_below_threshold() {
+        use hsm_backup::split_master_key;
+
+        let shares = split_master_key(&[0x44u8; 32], 3, 5).expect("split");
+        let dir = tempfile::tempdir().expect("tempdir");
+        // Only 2 of the required 3 shares present.
+        for (i, share) in shares.iter().take(2).enumerate() {
+            std::fs::write(
+                dir.path().join(format!("share-{i}.json")),
+                serde_json::to_vec(share).expect("serialize"),
+            )
+            .expect("write");
+        }
+        assert!(reconstruct_master_key_from_shares(dir.path().to_str().unwrap()).is_err());
     }
 
     /// Install a rustls crypto provider for the process if one isn't already
