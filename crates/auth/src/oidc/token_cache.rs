@@ -48,6 +48,18 @@ pub struct JwksCache {
     refresh_locks: DashMap<String, Arc<RwLock<()>>>,
 }
 
+/// Build the HTTP client used to fetch JWKS documents.
+///
+/// The client carries an explicit request timeout so a slow or hung JWKS
+/// endpoint cannot stall JWT validation (this runs under the per-URI refresh
+/// write lock on the live auth path).
+fn build_jwks_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .expect("failed to build JWKS HTTP client with timeout")
+}
+
 impl JwksCache {
     /// Create a new JWKS cache
     pub fn new() -> Self {
@@ -55,7 +67,7 @@ impl JwksCache {
             cache: DashMap::new(),
             default_ttl: Duration::minutes(15),
             min_ttl: Duration::minutes(1),
-            client: reqwest::Client::new(),
+            client: build_jwks_client(),
             refresh_locks: DashMap::new(),
         }
     }
@@ -66,7 +78,7 @@ impl JwksCache {
             cache: DashMap::new(),
             default_ttl,
             min_ttl: Duration::minutes(1),
-            client: reqwest::Client::new(),
+            client: build_jwks_client(),
             refresh_locks: DashMap::new(),
         }
     }

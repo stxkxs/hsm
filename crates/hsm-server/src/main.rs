@@ -492,8 +492,25 @@ fn create_metrics_router(state: ServerState) -> axum::Router {
 
     Router::new()
         .route("/metrics", get(metrics_handler))
+        // Liveness: shallow "is the process responsive" check. A degraded
+        // dependency must NOT fail this probe — that would restart-loop a pod
+        // that is merely unable to serve, not dead. Readiness handles that.
+        .route("/live", get(liveness_handler))
+        // Readiness/health: deep subsystem check; returns 503 when degraded so
+        // k8s removes the pod from service endpoints without killing it.
         .route("/health", get(health_handler))
         .with_state(state)
+}
+
+/// Liveness handler — confirms the process and async runtime are responsive.
+/// Intentionally does no subsystem checks; if the runtime is wedged the request
+/// simply will not be answered and the probe times out.
+async fn liveness_handler() -> Response {
+    (
+        StatusCode::OK,
+        axum::Json(serde_json::json!({ "status": "alive" })),
+    )
+        .into_response()
 }
 
 /// Metrics endpoint handler — exports real Prometheus metrics

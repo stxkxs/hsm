@@ -54,14 +54,19 @@ spec:
               readOnly: true
             - name: hsm-data
               mountPath: /data/hsm
+          # Liveness uses the shallow /live probe: only restart the pod if the
+          # process/runtime is actually wedged, not when a backend dependency is
+          # temporarily degraded (that is readiness' job).
           livenessProbe:
             httpGet:
-              path: /health
+              path: /live
               port: metrics
             initialDelaySeconds: 10
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
+          # Readiness uses the deep /health probe: a degraded subsystem returns
+          # 503 and the pod is removed from service endpoints (not killed).
           readinessProbe:
             httpGet:
               path: /health
