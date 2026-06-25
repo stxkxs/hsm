@@ -4,13 +4,20 @@
 
 use crate::handlers;
 use crate::middleware::{
-    auth_middleware, rate_limit_middleware, request_tracking_middleware, AppState,
+    auth_middleware, per_client_rate_limit_middleware, rate_limit_middleware,
+    request_tracking_middleware, AppState,
 };
 use axum::{
+    extract::DefaultBodyLimit,
     middleware,
     routing::{delete, get, post, put},
     Router,
 };
+
+/// Maximum accepted request body size. HSM operations (key specs, signatures,
+/// small payloads) are well under this; an explicit bound caps the memory a
+/// single request can force the server to buffer.
+const MAX_REQUEST_BODY_BYTES: usize = 1024 * 1024; // 1 MiB
 use std::time::Duration;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
@@ -73,20 +80,30 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/auth", auth_routes)
         .nest("/namespaces", namespace_routes)
         .nest("/webhooks", webhook_routes)
+        // Inner layer: per-identity/per-namespace rate limiting. Added before the
+        // auth layer so it runs AFTER authentication (the identity must already be
+        // in the request extensions).
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            per_client_rate_limit_middleware,
+        ))
+        // Outer layer: authentication. Runs first and populates the identity.
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
         ));
 
     // Build the full router with middleware stack:
-    // 1. Request timeout (30s)
-    // 2. Rate limiting
-    // 3. Request tracking (logging, metrics)
+    // 1. Request body-size limit (bounds buffered memory per request)
+    // 2. Request timeout (30s)
+    // 3. Global rate limiting (pre-auth DoS protection)
+    // 4. Request tracking (logging, metrics)
     Router::new()
         .merge(public_routes)
         .merge(authenticated_routes)
         .layer(
             ServiceBuilder::new()
+                .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
                 .layer(TimeoutLayer::with_status_code(
                     axum::http::StatusCode::REQUEST_TIMEOUT,
                     Duration::from_secs(30),
@@ -142,5 +159,28 @@ mod tests {
         let state = AppState::new(sessions);
         let _router = create_router(state);
         // Router creation should not panic
+    }
+
+    #[tokio::test]
+    async fn body_size_limit_rejects_oversized_requests() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        let sessions = Arc::new(SessionManager::new(3600));
+        let app = create_router(AppState::new(sessions));
+
+        // A body larger than the configured limit, sent to a body-reading public
+        // route, is rejected with 413 before the handler runs.
+        let oversized = vec![b'x'; MAX_REQUEST_BODY_BYTES + 1];
+        let request = Request::builder()
+            .method("POST")
+            .uri("/auth/dev-login")
+            .header("content-type", "application/json")
+            .body(Body::from(oversized))
+            .expect("request");
+
+        let response = app.oneshot(request).await.expect("response");
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 }
