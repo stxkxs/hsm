@@ -210,6 +210,31 @@ pub async fn rate_limit_middleware(
     Ok(next.run(request).await)
 }
 
+/// Per-identity and per-namespace rate limiting.
+///
+/// Runs AFTER [`auth_middleware`] so the authenticated [`ClientIdentity`] is
+/// available, and applies the per-client and per-namespace token buckets in
+/// addition to the global limit enforced pre-auth by [`rate_limit_middleware`].
+/// This bounds the blast radius of a single noisy tenant rather than only the
+/// aggregate request rate. Returns 429 when either bucket is exhausted.
+pub async fn per_client_rate_limit_middleware(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    if let Some(identity) = request.extensions().get::<ClientIdentity>() {
+        state
+            .rate_limiter
+            .check_identity(identity)
+            .map_err(|_| ApiError::RateLimitExceeded)?;
+        state
+            .rate_limiter
+            .check_namespace(&identity.namespace)
+            .map_err(|_| ApiError::RateLimitExceeded)?;
+    }
+    Ok(next.run(request).await)
+}
+
 /// Extract client identity from request extensions
 pub fn get_identity(request: &Request) -> Option<&ClientIdentity> {
     request.extensions().get::<ClientIdentity>()
