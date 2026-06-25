@@ -154,6 +154,24 @@ async fn audit_failure(
     }
 }
 
+/// Run a blocking key-manager operation on the dedicated blocking thread pool,
+/// off the async runtime workers.
+///
+/// Key generation/rotation are CPU-bound (RSA) and persistence does blocking
+/// disk I/O; executing them on a runtime worker would block every other request
+/// scheduled on that worker. The closure's own `Result` is returned unchanged so
+/// callers can still branch on it (e.g. to emit a failure audit event); only a
+/// task panic is mapped to `ApiError::Internal`.
+async fn spawn_km<T, F>(f: F) -> Result<T>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| ApiError::Internal(format!("key-manager task panicked: {}", e)))
+}
+
 // ============================================================================
 // Type Conversions
 // ============================================================================
@@ -416,8 +434,13 @@ pub async fn generate_key(
         labels: request.labels.clone(),
     };
 
-    // Generate key using key manager
-    let key_id = match state.key_manager.generate_key(spec) {
+    // Generate the key on the blocking thread pool. Key generation is CPU-bound
+    // (RSA can take hundreds of ms) and write-through persistence does blocking
+    // disk I/O; running either on the async runtime workers would stall every
+    // other in-flight request on that worker.
+    let km = state.key_manager.clone();
+    let gen_result = spawn_km(move || km.generate_key(spec)).await?;
+    let key_id = match gen_result {
         Ok(id) => id,
         Err(e) => {
             audit_failure(
@@ -557,8 +580,11 @@ pub async fn delete_key(
         Permission::DeleteKey,
     )?;
 
-    // Delete strictly within the caller's namespace.
-    if let Err(e) = state.key_manager.delete_key(&key_id, &namespace) {
+    // Delete strictly within the caller's namespace (blocking pool: disk I/O).
+    let km = state.key_manager.clone();
+    let delete_ns = namespace.clone();
+    let delete_result = spawn_km(move || km.delete_key(&key_id, &delete_ns)).await?;
+    if let Err(e) = delete_result {
         audit_failure(
             &state,
             EventType::KeyDeletion,
@@ -625,8 +651,11 @@ pub async fn rotate_key(
         .get_metadata(&key_id_parsed, &namespace)
         .map_err(|e| ApiError::NotFound(format!("Key not found: {}", e)))?;
 
-    // Rotate key
-    let new_key_id = match state.key_manager.rotate_key(&key_id_parsed, &namespace) {
+    // Rotate key on the blocking pool (generates a fresh key + persists).
+    let km = state.key_manager.clone();
+    let rotate_ns = namespace.clone();
+    let rotate_result = spawn_km(move || km.rotate_key(&key_id_parsed, &rotate_ns)).await?;
+    let new_key_id = match rotate_result {
         Ok(id) => id,
         Err(e) => {
             audit_failure(
@@ -1720,6 +1749,33 @@ mod tests {
         assert!(get_webhook(State(state), Extension(admin), Path(id))
             .await
             .is_err());
+    }
+
+    #[tokio::test]
+    async fn generate_key_handler_succeeds_via_blocking_pool() {
+        // Exercises the full generate path now that key generation runs on the
+        // blocking thread pool (RBAC -> namespace -> spawn_blocking generate ->
+        // ACL -> audit -> response).
+        let state = test_state();
+        let admin = admin_identity();
+
+        let (status, response) = generate_key(
+            State(state),
+            Extension(admin),
+            Json(GenerateKeyRequest {
+                key_id: None,
+                algorithm: KeyAlgorithm::Ed25519,
+                purpose: KeyPurpose::Sign,
+                namespace: "default".to_string(),
+                labels: std::collections::HashMap::new(),
+            }),
+        )
+        .await
+        .expect("generate_key should succeed");
+
+        assert_eq!(status, StatusCode::CREATED);
+        assert!(!response.0.key_id.is_empty());
+        assert!(response.0.public_key.is_some());
     }
 
     #[tokio::test]
