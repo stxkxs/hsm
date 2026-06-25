@@ -42,18 +42,22 @@ cargo build --release
 # Run tests
 cargo test --workspace
 
-# Start the HSM server (development: in-memory key store, no TLS)
-cargo run --bin hsm-server
+# Start the HSM server (LOCAL DEVELOPMENT — in-memory keys, no TLS).
+# The server requires TLS + mTLS client auth by default and refuses to start
+# without them; this flag disables that check for development only.
+HSM_ALLOW_INSECURE_TRANSPORT=true cargo run --bin hsm-server
 
-# For encrypted persistent storage that survives restarts, provide a data
-# directory and a stable 32-byte hex master key:
-#   HSM_DATA_DIR=/data/hsm \
-#   HSM_MASTER_KEY=$(openssl rand -hex 32) \
+# Production: provide a server certificate, key, and a client-auth CA so the
+# crypto API is served over mutually-authenticated TLS:
+#   HSM_TLS_CERT=server.crt HSM_TLS_KEY=server.key HSM_TLS_CA=client-ca.crt \
 #     cargo run --bin hsm-server
 #
-# The server is configured via flags/environment variables (HSM_REST_PORT,
-# HSM_METRICS_PORT, HSM_TLS_CERT, HSM_TLS_KEY, ...); run with --help for the
-# full list. There is no config file.
+# For encrypted persistent storage that survives restarts, also provide a data
+# directory and a stable 32-byte hex master key:
+#   HSM_DATA_DIR=/data/hsm HSM_MASTER_KEY=$(openssl rand -hex 32) ...
+#
+# The server is configured via flags/environment variables; run with --help for
+# the full list. There is no config file.
 ```
 
 ### Basic Usage
