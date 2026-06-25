@@ -160,7 +160,8 @@ pub fn event_severity(event_type: WebhookEventType) -> EventSeverity {
         | WebhookEventType::BackupStarted
         | WebhookEventType::BackupCompleted
         | WebhookEventType::SystemStartup
-        | WebhookEventType::SystemShutdown => EventSeverity::Info,
+        | WebhookEventType::SystemShutdown
+        | WebhookEventType::Test => EventSeverity::Info,
 
         // Debug events
         WebhookEventType::KeyUsed => EventSeverity::Debug,

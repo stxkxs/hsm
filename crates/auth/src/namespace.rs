@@ -1,5 +1,6 @@
 use crate::error::{AuthError, Result};
 use crate::mtls::ClientIdentity;
+use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -17,6 +18,8 @@ struct NamespaceAcl {
 #[derive(Clone)]
 struct NamespaceMetadata {
     acl: NamespaceAcl,
+    /// When the namespace was created.
+    created_at: DateTime<Utc>,
 }
 
 /// Namespace access control manager
@@ -55,11 +58,17 @@ impl NamespaceManager {
                 allowed_clients: HashSet::new(),
                 is_restricted: false,
             },
+            created_at: Utc::now(),
         };
 
         self.namespaces.insert(namespace.to_string(), metadata);
         metrics::counter!("auth.namespace.created").increment(1);
         Ok(())
+    }
+
+    /// Get the creation time of a namespace, if it exists.
+    pub fn created_at(&self, namespace: &str) -> Option<DateTime<Utc>> {
+        self.namespaces.get(namespace).map(|m| m.created_at)
     }
 
     /// Delete a namespace
@@ -88,7 +97,10 @@ impl NamespaceManager {
             };
             acl.allowed_clients.insert(client_cn.to_string());
 
-            let metadata = NamespaceMetadata { acl };
+            let metadata = NamespaceMetadata {
+                acl,
+                created_at: Utc::now(),
+            };
 
             self.namespaces.insert(namespace.to_string(), metadata);
             Ok(())

@@ -363,6 +363,72 @@ pub struct ComponentStatus {
     pub message: Option<String>,
 }
 
+// ============================================================================
+// Namespace management
+// ============================================================================
+
+/// A namespace as returned by the `/namespaces` endpoints.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NamespaceResponse {
+    /// Namespace name.
+    pub name: String,
+    /// Creation timestamp (RFC 3339), empty if unknown.
+    pub created_at: String,
+    /// Number of keys currently in the namespace.
+    pub key_count: usize,
+    /// Attached policy ids (policy attachment is not yet wired; always empty).
+    pub policies: Vec<String>,
+}
+
+/// Request body for creating a namespace.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateNamespaceRequest {
+    /// Namespace name.
+    pub name: String,
+}
+
+// ============================================================================
+// Webhook management
+// ============================================================================
+
+/// A webhook registration as returned by the `/webhooks` endpoints.
+///
+/// The signing secret is never returned; `secret_hash` is a SHA-256 digest of it
+/// so a client can confirm which secret is configured without exposing it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebhookResponse {
+    /// Webhook id.
+    pub id: String,
+    /// Delivery URL.
+    pub url: String,
+    /// Subscribed event types (empty = all events).
+    pub events: Vec<String>,
+    /// "active" when enabled, "inactive" otherwise.
+    pub status: String,
+    /// SHA-256 hex digest of the signing secret (never the secret itself).
+    pub secret_hash: String,
+    /// Creation timestamp (RFC 3339).
+    pub created_at: String,
+    /// Last delivery attempt timestamp (RFC 3339), if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_triggered: Option<String>,
+    /// Number of failed deliveries.
+    pub failure_count: u64,
+}
+
+/// Request body for creating or updating a webhook.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebhookCreateRequest {
+    /// Delivery URL.
+    pub url: String,
+    /// Event types to subscribe to (empty = all events).
+    #[serde(default)]
+    pub events: Vec<String>,
+    /// HMAC signing secret. Required on create; optional on update.
+    #[serde(default)]
+    pub secret: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

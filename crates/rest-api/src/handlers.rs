@@ -5,10 +5,11 @@
 use crate::error::{ApiError, Result};
 use crate::middleware::AppState;
 use crate::types::{
-    AuditEntry, AuditLogResponse, ComponentStatus, DecryptRequest, DecryptResponse,
-    DevLoginRequest, EncryptRequest, EncryptResponse, GenerateKeyRequest, GenerateKeyResponse,
-    HealthResponse, KeyAlgorithm, KeyMetadataResponse, KeyPurpose, ListKeysResponse, LoginResponse,
-    MeResponse, ReadyResponse, SignRequest, SignResponse, UserInfo, VerifyRequest, VerifyResponse,
+    AuditEntry, AuditLogResponse, ComponentStatus, CreateNamespaceRequest, DecryptRequest,
+    DecryptResponse, DevLoginRequest, EncryptRequest, EncryptResponse, GenerateKeyRequest,
+    GenerateKeyResponse, HealthResponse, KeyAlgorithm, KeyMetadataResponse, KeyPurpose,
+    ListKeysResponse, LoginResponse, MeResponse, NamespaceResponse, ReadyResponse, SignRequest,
+    SignResponse, UserInfo, VerifyRequest, VerifyResponse, WebhookCreateRequest, WebhookResponse,
 };
 use axum::{
     extract::{Path, Query, State},
@@ -23,7 +24,12 @@ use hsm_crypto_engine::{
     KeyMaterial,
 };
 use hsm_key_manager::{KeyFilter, KeyId, KeySpec, KeyState, KeyType, KeyUsagePolicy};
+use hsm_webhooks::delivery::WebhookDeliverer;
+use hsm_webhooks::{
+    EventFilter, Webhook, WebhookConfig, WebhookEvent, WebhookEventType, WebhookSigner,
+};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
 // ============================================================================
@@ -1240,6 +1246,338 @@ fn audit_event_to_entry(event: hsm_audit::AuditEvent) -> AuditEntry {
     }
 }
 
+// ============================================================================
+// Namespace management handlers
+//
+// Namespaces are the multi-tenancy isolation boundary. Listing returns only the
+// namespaces the caller can access; creating and deleting require the
+// privileged ManageNamespaces permission.
+// ============================================================================
+
+/// Build the API view of a namespace, computing the live key count from the key
+/// manager. `created_at` is empty when the namespace is not tracked (e.g. the
+/// caller's implicit default namespace); policy attachment is not yet wired.
+fn namespace_response(state: &AppState, name: &str) -> NamespaceResponse {
+    let created_at = state
+        .namespaces
+        .created_at(name)
+        .map(|t| t.to_rfc3339())
+        .unwrap_or_default();
+    let key_count = state
+        .key_manager
+        .list_keys(name, KeyFilter::default())
+        .map(|keys| keys.len())
+        .unwrap_or(0);
+    NamespaceResponse {
+        name: name.to_string(),
+        created_at,
+        key_count,
+        policies: Vec::new(),
+    }
+}
+
+/// `GET /namespaces` — list all namespaces (admin management view).
+///
+/// Namespace management is an administrative operation gated by the
+/// `ManageNamespaces` permission, distinct from the per-tenant isolation that
+/// governs key and crypto operations.
+pub async fn list_namespaces(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+) -> Result<Json<Vec<NamespaceResponse>>> {
+    require_rbac(&state, &identity, Permission::ManageNamespaces)?;
+    let out = state
+        .namespaces
+        .list_namespaces()
+        .iter()
+        .map(|name| namespace_response(&state, name))
+        .collect();
+    Ok(Json(out))
+}
+
+/// `POST /namespaces` — create a namespace (privileged) and grant the caller
+/// access to it.
+pub async fn create_namespace(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+    Json(req): Json<CreateNamespaceRequest>,
+) -> Result<(StatusCode, Json<NamespaceResponse>)> {
+    require_rbac(&state, &identity, Permission::ManageNamespaces)?;
+    let name = req.name.trim();
+    if name.is_empty() {
+        return Err(ApiError::BadRequest(
+            "namespace name cannot be empty".to_string(),
+        ));
+    }
+    state
+        .namespaces
+        .create_namespace(name)
+        .map_err(|e| ApiError::Conflict(e.to_string()))?;
+    audit_success(
+        &state,
+        EventType::ConfigChange,
+        "create_namespace",
+        name,
+        &identity.common_name,
+        None,
+    )
+    .await?;
+    Ok((StatusCode::CREATED, Json(namespace_response(&state, name))))
+}
+
+/// `GET /namespaces/{name}` — fetch a single namespace (admin management view).
+pub async fn get_namespace(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+    Path(name): Path<String>,
+) -> Result<Json<NamespaceResponse>> {
+    require_rbac(&state, &identity, Permission::ManageNamespaces)?;
+    if state.namespaces.created_at(&name).is_none() {
+        return Err(ApiError::NotFound(format!("namespace {} not found", name)));
+    }
+    Ok(Json(namespace_response(&state, &name)))
+}
+
+/// `DELETE /namespaces/{name}` — delete a namespace (privileged).
+pub async fn delete_namespace(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+    Path(name): Path<String>,
+) -> Result<StatusCode> {
+    require_rbac(&state, &identity, Permission::ManageNamespaces)?;
+    state
+        .namespaces
+        .delete_namespace(&name)
+        .map_err(|_| ApiError::NotFound(format!("namespace {} not found", name)))?;
+    audit_success(
+        &state,
+        EventType::ConfigChange,
+        "delete_namespace",
+        &name,
+        &identity.common_name,
+        None,
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ============================================================================
+// Webhook management handlers
+//
+// All webhook routes require the privileged ManageWebhooks permission. The
+// signing secret is never returned; responses expose only a SHA-256 digest.
+// ============================================================================
+
+/// SHA-256 hex digest of a webhook signing secret (so the secret is never
+/// returned to clients).
+fn secret_hash(secret: &str) -> String {
+    let digest = Sha256::digest(secret.as_bytes());
+    hex::encode(digest)
+}
+
+/// Map subscribed event-type strings to an [`EventFilter`]. An empty list means
+/// "all events"; an unknown event name is a client error.
+fn events_to_filter(events: &[String]) -> Result<EventFilter> {
+    if events.is_empty() {
+        return Ok(EventFilter::all());
+    }
+    let mut types = Vec::with_capacity(events.len());
+    for e in events {
+        let ty = WebhookEventType::parse(e)
+            .ok_or_else(|| ApiError::BadRequest(format!("unknown event type: {}", e)))?;
+        types.push(ty);
+    }
+    Ok(EventFilter::events(&types))
+}
+
+/// Build the API view of a webhook (secret redacted to a hash).
+fn webhook_response(w: &Webhook) -> WebhookResponse {
+    let mut events: Vec<String> = w
+        .filter
+        .include_events
+        .iter()
+        .map(|t| t.as_str().to_string())
+        .collect();
+    events.sort();
+    WebhookResponse {
+        id: w.id.clone(),
+        url: w.config.url.clone(),
+        events,
+        status: if w.config.enabled {
+            "active".to_string()
+        } else {
+            "inactive".to_string()
+        },
+        secret_hash: secret_hash(&w.config.secret),
+        created_at: w.created_at.to_rfc3339(),
+        last_triggered: w.last_delivery.map(|t| t.to_rfc3339()),
+        failure_count: w.failure_count,
+    }
+}
+
+/// `GET /webhooks` — list all registered webhooks.
+pub async fn list_webhooks(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+) -> Result<Json<Vec<WebhookResponse>>> {
+    require_rbac(&state, &identity, Permission::ManageWebhooks)?;
+    let out = state.webhooks.list().iter().map(webhook_response).collect();
+    Ok(Json(out))
+}
+
+/// `POST /webhooks` — register a new webhook.
+pub async fn create_webhook(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+    Json(req): Json<WebhookCreateRequest>,
+) -> Result<(StatusCode, Json<WebhookResponse>)> {
+    require_rbac(&state, &identity, Permission::ManageWebhooks)?;
+    if req.url.trim().is_empty() {
+        return Err(ApiError::BadRequest("webhook url is required".to_string()));
+    }
+    let secret = req
+        .secret
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ApiError::BadRequest("webhook secret is required".to_string()))?;
+    let filter = events_to_filter(&req.events)?;
+    let config = WebhookConfig::new(&req.url, secret);
+    let webhook = Webhook::new(&req.url, config, &identity.common_name).with_filter(filter);
+    let stored = webhook.clone();
+    state.webhooks.register(webhook);
+    audit_success(
+        &state,
+        EventType::ConfigChange,
+        "create_webhook",
+        &identity.namespace,
+        &identity.common_name,
+        Some(stored.id.clone()),
+    )
+    .await?;
+    Ok((StatusCode::CREATED, Json(webhook_response(&stored))))
+}
+
+/// `GET /webhooks/{id}` — fetch a single webhook.
+pub async fn get_webhook(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+    Path(id): Path<String>,
+) -> Result<Json<WebhookResponse>> {
+    require_rbac(&state, &identity, Permission::ManageWebhooks)?;
+    let webhook = state
+        .webhooks
+        .get(&id)
+        .ok_or_else(|| ApiError::NotFound(format!("webhook {} not found", id)))?;
+    Ok(Json(webhook_response(&webhook)))
+}
+
+/// `PUT /webhooks/{id}` — update a webhook's url, events, or secret.
+pub async fn update_webhook(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+    Path(id): Path<String>,
+    Json(req): Json<WebhookCreateRequest>,
+) -> Result<Json<WebhookResponse>> {
+    require_rbac(&state, &identity, Permission::ManageWebhooks)?;
+    // Validate the event list before mutating.
+    let filter = events_to_filter(&req.events)?;
+    let updated = state
+        .webhooks
+        .update(&id, |w| {
+            if !req.url.trim().is_empty() {
+                w.config.url = req.url.clone();
+            }
+            if !req.events.is_empty() {
+                w.filter = filter;
+            }
+            if let Some(secret) = req.secret.as_deref().filter(|s| !s.is_empty()) {
+                w.config.secret = secret.to_string();
+            }
+        })
+        .ok_or_else(|| ApiError::NotFound(format!("webhook {} not found", id)))?;
+    audit_success(
+        &state,
+        EventType::ConfigChange,
+        "update_webhook",
+        &identity.namespace,
+        &identity.common_name,
+        Some(id),
+    )
+    .await?;
+    Ok(Json(webhook_response(&updated)))
+}
+
+/// `DELETE /webhooks/{id}` — remove a webhook.
+pub async fn delete_webhook(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+    Path(id): Path<String>,
+) -> Result<StatusCode> {
+    require_rbac(&state, &identity, Permission::ManageWebhooks)?;
+    state
+        .webhooks
+        .delete(&id)
+        .ok_or_else(|| ApiError::NotFound(format!("webhook {} not found", id)))?;
+    audit_success(
+        &state,
+        EventType::ConfigChange,
+        "delete_webhook",
+        &identity.namespace,
+        &identity.common_name,
+        Some(id),
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /webhooks/{id}/test` — deliver a signed `webhook.test` event to the
+/// webhook's URL and report whether the endpoint accepted it (HTTP 2xx).
+pub async fn test_webhook(
+    State(state): State<AppState>,
+    Extension(identity): Extension<ClientIdentity>,
+    Path(id): Path<String>,
+) -> Result<Json<TestWebhookResponse>> {
+    require_rbac(&state, &identity, Permission::ManageWebhooks)?;
+    let webhook = state
+        .webhooks
+        .get(&id)
+        .ok_or_else(|| ApiError::NotFound(format!("webhook {} not found", id)))?;
+
+    let event = WebhookEvent::new(
+        WebhookEventType::Test,
+        &identity.namespace,
+        serde_json::json!({
+            "message": "HSM webhook connectivity test",
+            "webhook_id": id,
+        }),
+    );
+    let signer = WebhookSigner::new(&webhook.config.secret);
+    let deliverer = WebhookDeliverer::new();
+    let success = match deliverer
+        .deliver(
+            &webhook.config.url,
+            &event,
+            &signer,
+            &webhook.config.headers,
+        )
+        .await
+    {
+        Ok(result) => result
+            .http_status
+            .map(|s| (200..300).contains(&s))
+            .unwrap_or(false),
+        Err(_) => false,
+    };
+    Ok(Json(TestWebhookResponse { success }))
+}
+
+/// Result of a webhook connectivity test.
+#[derive(serde::Serialize)]
+pub struct TestWebhookResponse {
+    /// Whether the endpoint accepted the test delivery (HTTP 2xx).
+    pub success: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1267,5 +1605,152 @@ mod tests {
             Ok(KeyType::EcdsaP256)
         ));
         assert!(to_key_type(&KeyAlgorithm::Aes256).is_err());
+    }
+
+    fn admin_identity() -> ClientIdentity {
+        use hsm_auth::Role;
+        ClientIdentity::new(
+            "admin".to_string(),
+            None,
+            "default".to_string(),
+            vec![Role::Admin],
+            "test-serial".to_string(),
+        )
+    }
+
+    fn test_state() -> AppState {
+        use hsm_auth::SessionManager;
+        use std::sync::Arc;
+        AppState::new(Arc::new(SessionManager::new(3600)))
+    }
+
+    #[tokio::test]
+    async fn test_namespace_handlers_roundtrip() {
+        let state = test_state();
+        let admin = admin_identity();
+
+        let (status, created) = create_namespace(
+            State(state.clone()),
+            Extension(admin.clone()),
+            Json(CreateNamespaceRequest {
+                name: "team-a".to_string(),
+            }),
+        )
+        .await
+        .expect("create_namespace should succeed");
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(created.0.name, "team-a");
+
+        let listed = list_namespaces(State(state.clone()), Extension(admin.clone()))
+            .await
+            .expect("list_namespaces");
+        assert!(listed.0.iter().any(|n| n.name == "team-a"));
+
+        let got = get_namespace(
+            State(state.clone()),
+            Extension(admin.clone()),
+            Path("team-a".to_string()),
+        )
+        .await
+        .expect("get_namespace");
+        assert_eq!(got.0.name, "team-a");
+
+        let deleted = delete_namespace(
+            State(state.clone()),
+            Extension(admin),
+            Path("team-a".to_string()),
+        )
+        .await
+        .expect("delete_namespace");
+        assert_eq!(deleted, StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn test_webhook_handlers_roundtrip() {
+        let state = test_state();
+        let admin = admin_identity();
+
+        let (status, created) = create_webhook(
+            State(state.clone()),
+            Extension(admin.clone()),
+            Json(WebhookCreateRequest {
+                url: "https://example.com/hook".to_string(),
+                events: vec!["key.created".to_string()],
+                secret: Some("s3cr3t".to_string()),
+            }),
+        )
+        .await
+        .expect("create_webhook should succeed");
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(created.0.url, "https://example.com/hook");
+        assert_eq!(created.0.events, vec!["key.created".to_string()]);
+        // The signing secret must never be returned verbatim.
+        assert_ne!(created.0.secret_hash, "s3cr3t");
+        assert!(!created.0.secret_hash.is_empty());
+        let id = created.0.id.clone();
+
+        let listed = list_webhooks(State(state.clone()), Extension(admin.clone()))
+            .await
+            .expect("list_webhooks");
+        assert!(listed.0.iter().any(|w| w.id == id));
+
+        // An unknown event type is rejected as a client error.
+        let bad = create_webhook(
+            State(state.clone()),
+            Extension(admin.clone()),
+            Json(WebhookCreateRequest {
+                url: "https://example.com/x".to_string(),
+                events: vec!["not.a.real.event".to_string()],
+                secret: Some("x".to_string()),
+            }),
+        )
+        .await;
+        assert!(bad.is_err(), "unknown event type must be rejected");
+
+        let deleted = delete_webhook(
+            State(state.clone()),
+            Extension(admin.clone()),
+            Path(id.clone()),
+        )
+        .await
+        .expect("delete_webhook");
+        assert_eq!(deleted, StatusCode::NO_CONTENT);
+
+        // The webhook is gone after deletion.
+        assert!(get_webhook(State(state), Extension(admin), Path(id))
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn test_webhook_create_requires_secret_and_url() {
+        let state = test_state();
+        let admin = admin_identity();
+
+        // Missing secret.
+        assert!(create_webhook(
+            State(state.clone()),
+            Extension(admin.clone()),
+            Json(WebhookCreateRequest {
+                url: "https://example.com/hook".to_string(),
+                events: vec![],
+                secret: None,
+            }),
+        )
+        .await
+        .is_err());
+
+        // Empty url.
+        assert!(create_webhook(
+            State(state),
+            Extension(admin),
+            Json(WebhookCreateRequest {
+                url: "".to_string(),
+                events: vec![],
+                secret: Some("s".to_string()),
+            }),
+        )
+        .await
+        .is_err());
     }
 }
