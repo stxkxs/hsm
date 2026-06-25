@@ -356,8 +356,15 @@ impl CertificateValidator {
             "1.2.840.10045.4.3.2" => &ring::signature::ECDSA_P256_SHA256_ASN1,
             // ECDSA with SHA-384
             "1.2.840.10045.4.3.3" => &ring::signature::ECDSA_P384_SHA384_ASN1,
-            // RSA PKCS1 with SHA-1 (legacy but still used)
-            "1.2.840.113549.1.1.5" => &ring::signature::RSA_PKCS1_2048_8192_SHA256,
+            // RSA PKCS1 with SHA-1 — explicitly rejected. SHA-1 is broken for
+            // signatures (practical collision attacks), and this OID was previously
+            // mis-mapped to the SHA-256 verifier, which would verify a SHA-1-signed
+            // certificate against the wrong digest. Refuse SHA-1-signed certs.
+            "1.2.840.113549.1.1.5" => {
+                return Err(AuthError::CertificateValidationFailed(
+                    "SHA-1 signed certificates are not supported (insecure)".to_string(),
+                ));
+            }
             other => {
                 return Err(AuthError::CertificateValidationFailed(format!(
                     "Unsupported signature algorithm OID: {}",

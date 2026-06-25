@@ -72,7 +72,12 @@ impl OidcDiscovery {
             issuer.trim_end_matches('/')
         );
 
-        let client = reqwest::Client::new();
+        // Always bound the discovery fetch: a slow or hung issuer must not stall
+        // the caller (this runs on the auth path) indefinitely.
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|e: reqwest::Error| DiscoveryError::Http(e.to_string()))?;
         let response = client
             .get(&discovery_url)
             .send()

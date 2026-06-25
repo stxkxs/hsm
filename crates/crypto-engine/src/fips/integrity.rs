@@ -22,10 +22,11 @@ pub struct IntegrityResult {
 
 /// Module integrity checker
 ///
-/// In a real FIPS implementation, this would:
-/// 1. Compute HMAC of the module binary
-/// 2. Compare against stored/embedded expected value
-/// 3. Verify digital signature from trusted authority
+/// Computes an HMAC-SHA256 over the module binary and compares it against a
+/// baseline provisioned at build time via [`IntegrityChecker::with_expected_hmac`].
+/// If no baseline is configured the check **fails closed** — it never reports
+/// success without a baseline to compare against, as FIPS 140-3 module integrity
+/// requires.
 pub struct IntegrityChecker {
     /// Path to module binary (if known)
     module_path: Option<PathBuf>,
@@ -38,8 +39,10 @@ pub struct IntegrityChecker {
 impl IntegrityChecker {
     /// Create a new integrity checker
     pub fn new() -> Self {
-        // In production, this key would be derived from a known value
-        // embedded at build time
+        // Fixed, non-secret default key for the integrity self-test. This detects
+        // accidental or in-place modification of the module binary. For a keyed
+        // FIPS 140-3 integrity guarantee, provision a build-time key via
+        // `with_hmac_key` together with a baseline via `with_expected_hmac`.
         let hmac_key = [0x42u8; 32];
 
         Self {
@@ -47,6 +50,17 @@ impl IntegrityChecker {
             expected_hmac: None,
             hmac_key,
         }
+    }
+
+    /// Set the HMAC key used for the integrity self-test.
+    ///
+    /// For FIPS 140-3 the integrity HMAC key is provisioned at build time. The
+    /// default ([`IntegrityChecker::new`]) is a fixed, non-secret constant
+    /// suitable only for detecting accidental modification; production builds
+    /// should set a build-time key here alongside [`Self::with_expected_hmac`].
+    pub fn with_hmac_key(mut self, key: [u8; 32]) -> Self {
+        self.hmac_key = key;
+        self
     }
 
     /// Create integrity checker with specific module path
@@ -110,13 +124,19 @@ impl IntegrityChecker {
                 },
             })
         } else {
-            // No expected value - can only compute
-            // In production, this would be an error
+            // No baseline configured: integrity CANNOT be verified, so fail closed.
+            // Reporting success here would defeat the FIPS 140-3 tamper-detection
+            // guarantee — a baseline must be provisioned via `with_expected_hmac`
+            // (embedded at build time) before this check can pass.
             Ok(IntegrityResult {
-                passed: true, // Pass without expected value (development mode)
+                passed: false,
                 computed_hash: Some(computed_hash),
                 expected_hash: None,
-                error: Some("No expected HMAC provided (development mode)".to_string()),
+                error: Some(
+                    "No expected HMAC baseline configured: integrity cannot be \
+                     verified (fail-closed)"
+                        .to_string(),
+                ),
             })
         }
     }
@@ -274,6 +294,32 @@ mod tests {
 
         // Different data should produce different HMAC
         assert_ne!(hmac1, hmac2);
+    }
+
+    #[test]
+    fn test_verify_fails_closed_without_baseline() {
+        // With no expected HMAC baseline configured, module integrity cannot be
+        // verified and MUST fail closed — it must never report `passed: true`.
+        let checker = IntegrityChecker::new();
+        let result = checker.verify().expect("verify should not error");
+        assert!(
+            !result.passed,
+            "integrity check must fail closed when no baseline is configured"
+        );
+        assert!(result.expected_hash.is_none());
+        assert!(result.error.is_some());
+    }
+
+    #[test]
+    fn test_with_hmac_key_changes_output() {
+        let data = b"module bytes";
+        let default_key = IntegrityChecker::new();
+        let custom_key = IntegrityChecker::new().with_hmac_key([0x07u8; 32]);
+        assert_ne!(
+            default_key.generate_hmac(data).unwrap(),
+            custom_key.generate_hmac(data).unwrap(),
+            "different HMAC keys must produce different integrity tags"
+        );
     }
 
     #[test]
