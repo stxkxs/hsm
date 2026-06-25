@@ -2,10 +2,17 @@
 //!
 //! Provides signing and transaction support for Aptos (Move-based L1).
 //!
+//! # ⚠️ EXPERIMENTAL — not chain-compatible
+//!
+//! This module is gated behind the `experimental-chains` feature and is **off by
+//! default**. Transaction serialization here is a deterministic placeholder, NOT
+//! canonical Aptos BCS, so signatures produced by [`sign_transaction`] will **not**
+//! verify on any Aptos network. Do not use for real transactions until a canonical
+//! BCS encoder (with chain test vectors) replaces `serialize_raw_transaction`.
+//!
 //! # Features
 //!
 //! - Ed25519 signing with Aptos address derivation
-//! - BCS (Binary Canonical Serialization) transaction encoding
 //! - Multi-signature support
 //! - Resource account derivation
 
@@ -234,7 +241,11 @@ pub struct StructTag {
     pub type_params: Vec<TypeTag>,
 }
 
-/// Sign a raw transaction
+/// Sign a raw transaction.
+///
+/// ⚠️ EXPERIMENTAL: the signing message is built from a non-canonical encoding
+/// (see `serialize_raw_transaction`); the signature will not verify on an
+/// Aptos network.
 pub fn sign_transaction(
     private_key: &[u8],
     transaction: &RawTransaction,
@@ -245,7 +256,7 @@ pub fn sign_transaction(
         ));
     }
 
-    // Serialize the transaction using BCS
+    // Serialize the transaction (EXPERIMENTAL: non-canonical, not Aptos BCS)
     let raw_txn_bytes = serialize_raw_transaction(transaction)?;
 
     // Create the signing message
@@ -303,10 +314,13 @@ pub enum TransactionAuthenticator {
     },
 }
 
-/// Serialize a raw transaction (simplified BCS)
+/// Serialize a raw transaction.
+///
+/// EXPERIMENTAL: this is a deterministic, NON-CANONICAL encoding — it is not
+/// Aptos BCS, so the resulting signing message (and therefore the signature)
+/// will not be accepted by any Aptos network. A canonical BCS encoder with
+/// chain test vectors must replace this before the chain is production-usable.
 fn serialize_raw_transaction(transaction: &RawTransaction) -> Result<Vec<u8>> {
-    // In a real implementation, this would use proper BCS encoding
-    // For now, we create a deterministic representation
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&transaction.sender.bytes);
     bytes.extend_from_slice(&transaction.sequence_number.to_le_bytes());

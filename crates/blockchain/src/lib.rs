@@ -224,13 +224,22 @@ pub mod solana;
 pub mod starknet;
 
 // New chain modules (HSM v2)
-pub mod aptos;
 pub mod cosmos;
 pub mod l2;
-pub mod near;
 pub mod polkadot;
-pub mod sui;
 pub mod ton;
+
+// Experimental, beyond-spec chains. Their transaction serialization is NOT yet
+// canonical (each module carries an EXPERIMENTAL notice), so signatures produced
+// for them are not guaranteed to verify on-chain. Gated off by default behind
+// the `experimental-chains` feature so they are never part of a production build
+// until canonical encoders land.
+#[cfg(feature = "experimental-chains")]
+pub mod aptos;
+#[cfg(feature = "experimental-chains")]
+pub mod near;
+#[cfg(feature = "experimental-chains")]
+pub mod sui;
 
 pub use bip::{
     bip32::{DerivationPath, ExtendedPrivateKey, ExtendedPublicKey},

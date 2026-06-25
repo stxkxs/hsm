@@ -2,10 +2,17 @@
 //!
 //! Provides signing and transaction support for Sui (Move-based L1).
 //!
+//! # ⚠️ EXPERIMENTAL — not chain-compatible
+//!
+//! This module is gated behind the `experimental-chains` feature and is **off by
+//! default**. Transaction serialization here is a simplified placeholder, NOT
+//! canonical Sui BCS, so signatures produced by [`sign_transaction`] will **not**
+//! verify on any Sui network. Do not use for real transactions until a canonical
+//! BCS encoder (with chain test vectors) replaces `serialize_transaction`.
+//!
 //! # Features
 //!
 //! - Ed25519 and secp256k1 signing
-//! - BCS transaction encoding
 //! - Object-centric transaction model
 //! - Programmable transactions
 
@@ -390,7 +397,11 @@ pub struct ConsensusCommitPrologue {
     pub commit_timestamp_ms: u64,
 }
 
-/// Sign a transaction
+/// Sign a transaction.
+///
+/// ⚠️ EXPERIMENTAL: the signing message is built from a non-canonical encoding
+/// (see `serialize_transaction`); the signature will not verify on a Sui
+/// network.
 pub fn sign_transaction(
     private_key: &[u8],
     transaction: &TransactionData,
@@ -477,9 +488,13 @@ fn create_intent(scope: IntentScope) -> Vec<u8> {
     vec![scope_byte, 0, 0]
 }
 
-/// Serialize transaction (simplified)
+/// Serialize transaction.
+///
+/// EXPERIMENTAL: this is a simplified, NON-CANONICAL encoding — it is not Sui
+/// BCS, so the resulting signature will not be accepted by any Sui network. A
+/// canonical BCS encoder with chain test vectors must replace this before the
+/// chain is production-usable.
 fn serialize_transaction(transaction: &TransactionData) -> Result<Vec<u8>> {
-    // Simplified BCS serialization
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&transaction.sender.bytes);
     bytes.extend_from_slice(&transaction.gas_budget.to_le_bytes());

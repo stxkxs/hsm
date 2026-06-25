@@ -2,10 +2,18 @@
 //!
 //! Provides signing and transaction support for NEAR Protocol.
 //!
+//! # ⚠️ EXPERIMENTAL — not chain-compatible
+//!
+//! This module is gated behind the `experimental-chains` feature and is **off by
+//! default**. Transaction serialization here is a simplified placeholder, NOT
+//! canonical NEAR Borsh, so signatures produced by [`sign_transaction`] will
+//! **not** verify on any NEAR network. Do not use for real transactions until a
+//! canonical Borsh encoder (with chain test vectors) replaces
+//! `serialize_transaction`.
+//!
 //! # Features
 //!
 //! - Ed25519 signing
-//! - Borsh serialization
 //! - Named accounts (e.g., alice.near)
 //! - Implicit accounts (public key hex)
 
@@ -201,7 +209,11 @@ pub enum AccessKeyPermission {
     },
 }
 
-/// Sign a transaction
+/// Sign a transaction.
+///
+/// ⚠️ EXPERIMENTAL: the signing message is built from a non-canonical encoding
+/// (see `serialize_transaction`); the signature may not verify on a NEAR
+/// network.
 pub fn sign_transaction(
     private_key: &[u8],
     transaction: &Transaction,
@@ -234,7 +246,13 @@ pub struct Signature {
     pub data: Vec<u8>,
 }
 
-/// Serialize transaction (simplified Borsh)
+/// Serialize transaction.
+///
+/// EXPERIMENTAL: this is a simplified, NON-CANONICAL encoding — it approximates
+/// but is not guaranteed to match NEAR's Borsh layout, so the resulting
+/// signature may not be accepted by any NEAR network. A canonical Borsh encoder
+/// with chain test vectors must replace this before the chain is
+/// production-usable.
 fn serialize_transaction(transaction: &Transaction) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
 
