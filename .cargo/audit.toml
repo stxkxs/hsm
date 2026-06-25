@@ -65,6 +65,25 @@ ignore = [
     # 0.5.2 and still depends on serde_cbor ^0.11; no upstream fix. Also noted in
     # crates/hardware-backend/Cargo.toml.
     "RUSTSEC-2021-0127",
+
+    # pqcrypto-* family - unmaintained: the upstream PQClean project is being archived
+    # (advisories published 2026-06-04). Pulled in via hsm-crypto-engine's post-quantum
+    # support — pqcrypto-mlkem (ML-KEM / Kyber) and pqcrypto-mldsa (ML-DSA / Dilithium),
+    # which in turn depend on pqcrypto-internals and pqcrypto-traits. These are
+    # unmaintained NOTICES (no known vulnerability), not denied by `--deny unsound`. There
+    # is no maintained drop-in pure-Rust replacement for NIST PQC primitives yet; the
+    # RustCrypto ml-kem/ml-dsa crates are not yet a 1:1 swap for these bindings. Tracked for
+    # migration when a maintained successor stabilizes.
+    "RUSTSEC-2026-0161",  # pqcrypto-mlkem unmaintained
+    "RUSTSEC-2026-0162",  # pqcrypto-traits unmaintained
+    "RUSTSEC-2026-0163",  # pqcrypto-internals unmaintained
+    "RUSTSEC-2026-0166",  # pqcrypto-mldsa unmaintained
+
+    # proc-macro-error2 - unmaintained (RUSTSEC-2026-0173, published 2026-06-07). Pulled in
+    # via validator_derive 0.20 -> validator 0.20 (used by hsm-validator). Compile-time-only
+    # proc-macro helper with no runtime exposure; an unmaintained notice, not a vulnerability.
+    # No upstream fix: validator 0.20 has not moved off proc-macro-error2.
+    "RUSTSEC-2026-0173",
 ]
 
 # Severity threshold for errors (we want to be notified of medium+ vulnerabilities)
