@@ -15,6 +15,7 @@ use hsm_auth::{
     SessionToken,
 };
 use hsm_key_manager::{DefaultKeyManager, KeyManager};
+use hsm_webhooks::WebhookRegistry;
 use std::sync::Arc;
 
 /// Application state shared across handlers
@@ -32,6 +33,9 @@ pub struct AppState {
     pub namespaces: Arc<NamespaceManager>,
     /// Per-key ACL manager — fine-grained key access control (authorization layer 3).
     pub acls: Arc<AclManager>,
+    /// Webhook registry — stores event-notification registrations served by the
+    /// `/webhooks` routes and consulted by the dispatcher on lifecycle events.
+    pub webhooks: Arc<WebhookRegistry>,
     /// Tamper-evident audit logger. When present, every crypto and
     /// key-lifecycle operation is logged fail-closed before the response is
     /// returned. `None` only in lightweight unit tests that do not exercise
@@ -51,6 +55,7 @@ impl AppState {
             rbac: Arc::new(RbacPolicy::new()),
             namespaces: Arc::new(NamespaceManager::new()),
             acls: Arc::new(AclManager::new()),
+            webhooks: Arc::new(WebhookRegistry::new()),
             audit: None,
             start_time: std::time::Instant::now(),
         }
@@ -68,6 +73,7 @@ impl AppState {
             rbac: Arc::new(RbacPolicy::new()),
             namespaces: Arc::new(NamespaceManager::new()),
             acls: Arc::new(AclManager::new()),
+            webhooks: Arc::new(WebhookRegistry::new()),
             audit: None,
             start_time: std::time::Instant::now(),
         }

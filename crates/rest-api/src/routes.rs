@@ -8,7 +8,7 @@ use crate::middleware::{
 };
 use axum::{
     middleware,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use std::time::Duration;
@@ -49,12 +49,30 @@ pub fn create_router(state: AppState) -> Router {
         .route("/me", get(handlers::me))
         .route("/logout", post(handlers::logout));
 
+    // Namespace management routes (multi-tenancy isolation boundary)
+    let namespace_routes = Router::new()
+        .route("/", get(handlers::list_namespaces))
+        .route("/", post(handlers::create_namespace))
+        .route("/{name}", get(handlers::get_namespace))
+        .route("/{name}", delete(handlers::delete_namespace));
+
+    // Webhook management routes (event-notification registrations)
+    let webhook_routes = Router::new()
+        .route("/", get(handlers::list_webhooks))
+        .route("/", post(handlers::create_webhook))
+        .route("/{id}", get(handlers::get_webhook))
+        .route("/{id}", put(handlers::update_webhook))
+        .route("/{id}", delete(handlers::delete_webhook))
+        .route("/{id}/test", post(handlers::test_webhook));
+
     // Combine authenticated routes
     let authenticated_routes = Router::new()
         .nest("/keys", key_routes)
         .nest("/keys", crypto_routes)
         .nest("/audit", audit_routes)
         .nest("/auth", auth_routes)
+        .nest("/namespaces", namespace_routes)
+        .nest("/webhooks", webhook_routes)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

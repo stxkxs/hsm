@@ -49,6 +49,7 @@ bitflags! {
         const MANAGE_ROLES      = 1 << 12;
         const BACKUP_KEYS       = 1 << 13;
         const RESTORE_KEYS      = 1 << 14;
+        const MANAGE_WEBHOOKS   = 1 << 15;
 
         // Commonly used permission sets for quick checks
         const READ_ONLY = Self::VIEW_METADATA.bits() | Self::VIEW_AUDIT_LOGS.bits();
@@ -92,7 +93,7 @@ bitflags! {
 ///
 /// // Get all available permissions
 /// let all = Permission::all();
-/// assert_eq!(all.len(), 15);
+/// assert_eq!(all.len(), 16);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Permission {
@@ -129,6 +130,9 @@ pub enum Permission {
     /// Manage namespaces
     ManageNamespaces,
 
+    /// Manage webhook registrations
+    ManageWebhooks,
+
     /// Manage ACLs
     ManageAcls,
 
@@ -157,6 +161,7 @@ impl Permission {
             Permission::ViewAuditLogs,
             Permission::ExportKey,
             Permission::ManageNamespaces,
+            Permission::ManageWebhooks,
             Permission::ManageAcls,
             Permission::ManageRoles,
             Permission::BackupKeys,
@@ -170,6 +175,7 @@ impl Permission {
             self,
             Permission::ExportKey
                 | Permission::ManageNamespaces
+                | Permission::ManageWebhooks
                 | Permission::ManageRoles
                 | Permission::DeleteKey
                 | Permission::BackupKeys
@@ -191,6 +197,7 @@ impl Permission {
             Permission::ViewAuditLogs => "view_audit_logs",
             Permission::ExportKey => "export_key",
             Permission::ManageNamespaces => "manage_namespaces",
+            Permission::ManageWebhooks => "manage_webhooks",
             Permission::ManageAcls => "manage_acls",
             Permission::ManageRoles => "manage_roles",
             Permission::BackupKeys => "backup_keys",
@@ -212,6 +219,7 @@ impl Permission {
             Permission::ViewAuditLogs => PermissionFlags::VIEW_AUDIT_LOGS,
             Permission::ExportKey => PermissionFlags::EXPORT_KEY,
             Permission::ManageNamespaces => PermissionFlags::MANAGE_NAMESPACES,
+            Permission::ManageWebhooks => PermissionFlags::MANAGE_WEBHOOKS,
             Permission::ManageAcls => PermissionFlags::MANAGE_ACLS,
             Permission::ManageRoles => PermissionFlags::MANAGE_ROLES,
             Permission::BackupKeys => PermissionFlags::BACKUP_KEYS,
@@ -267,6 +275,6 @@ mod tests {
         assert!(all.contains(&Permission::GenerateKey));
         assert!(all.contains(&Permission::Sign));
         assert!(all.contains(&Permission::ViewAuditLogs));
-        assert_eq!(all.len(), 15);
+        assert_eq!(all.len(), 16);
     }
 }

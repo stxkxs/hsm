@@ -193,7 +193,7 @@ proptest! {
 // RBAC Policy property tests
 proptest! {
     #[test]
-    fn prop_rbac_grant_check_consistency(role_idx in 0usize..4, perm_idx in 0usize..15) {
+    fn prop_rbac_grant_check_consistency(role_idx in 0usize..4, perm_idx in 0usize..16) {
         let mut policy = RbacPolicy::new();
         let roles = Role::all();
         let permissions = Permission::all();
@@ -207,7 +207,7 @@ proptest! {
     }
 
     #[test]
-    fn prop_rbac_revoke_check_consistency(role_idx in 0usize..4, perm_idx in 0usize..15) {
+    fn prop_rbac_revoke_check_consistency(role_idx in 0usize..4, perm_idx in 0usize..16) {
         let mut policy = RbacPolicy::new();
         let roles = Role::all();
         let permissions = Permission::all();
@@ -225,7 +225,7 @@ proptest! {
     }
 
     #[test]
-    fn prop_rbac_admin_has_all_permissions(perm_idx in 0usize..15) {
+    fn prop_rbac_admin_has_all_permissions(perm_idx in 0usize..16) {
         let policy = RbacPolicy::new();
         let permissions = Permission::all();
         let permission = permissions[perm_idx];
@@ -235,7 +235,7 @@ proptest! {
     }
 
     #[test]
-    fn prop_rbac_can_any_with_admin(perm_idx in 0usize..15, other_role_idx in 1usize..4) {
+    fn prop_rbac_can_any_with_admin(perm_idx in 0usize..16, other_role_idx in 1usize..4) {
         let policy = RbacPolicy::new();
         let permissions = Permission::all();
         let permission = permissions[perm_idx];
@@ -248,7 +248,7 @@ proptest! {
     }
 
     #[test]
-    fn prop_rbac_require_returns_ok_when_can(role_idx in 0usize..4, perm_idx in 0usize..15) {
+    fn prop_rbac_require_returns_ok_when_can(role_idx in 0usize..4, perm_idx in 0usize..16) {
         let policy = RbacPolicy::new();
         let roles = Role::all();
         let permissions = Permission::all();
@@ -327,7 +327,7 @@ proptest! {
     }
 
     #[test]
-    fn prop_permission_flags_roundtrip(perm_idx in 0usize..15) {
+    fn prop_permission_flags_roundtrip(perm_idx in 0usize..16) {
         let permissions = Permission::all();
         let permission = permissions[perm_idx];
 
@@ -340,7 +340,7 @@ proptest! {
     }
 
     #[test]
-    fn prop_permission_flags_multiple(indices in prop::collection::vec(0usize..15, 1..15)) {
+    fn prop_permission_flags_multiple(indices in prop::collection::vec(0usize..16, 1..15)) {
         let all_permissions = Permission::all();
         let selected: Vec<Permission> = indices.iter()
             .map(|&i| all_permissions[i % all_permissions.len()])
@@ -355,7 +355,7 @@ proptest! {
     }
 
     #[test]
-    fn prop_permission_as_str_not_empty(perm_idx in 0usize..15) {
+    fn prop_permission_as_str_not_empty(perm_idx in 0usize..16) {
         let permissions = Permission::all();
         let permission = permissions[perm_idx];
 
@@ -364,7 +364,7 @@ proptest! {
     }
 
     #[test]
-    fn prop_permission_privileged_consistency(perm_idx in 0usize..15) {
+    fn prop_permission_privileged_consistency(perm_idx in 0usize..16) {
         let permissions = Permission::all();
         let permission = permissions[perm_idx];
 
@@ -372,6 +372,7 @@ proptest! {
         let privileged_perms = [
             Permission::ExportKey,
             Permission::ManageNamespaces,
+            Permission::ManageWebhooks,
             Permission::ManageRoles,
             Permission::DeleteKey,
             Permission::BackupKeys,

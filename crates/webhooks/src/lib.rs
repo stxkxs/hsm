@@ -238,6 +238,10 @@ pub enum WebhookEventType {
     AuthenticationFailed,
     AuthorizationDenied,
     RateLimitExceeded,
+
+    // Diagnostics
+    /// Manually triggered connectivity test (e.g. the "test webhook" action).
+    Test,
 }
 
 impl WebhookEventType {
@@ -262,6 +266,7 @@ impl WebhookEventType {
             Self::AuthenticationFailed => "security.auth_failed",
             Self::AuthorizationDenied => "security.authz_denied",
             Self::RateLimitExceeded => "security.rate_limited",
+            Self::Test => "webhook.test",
         }
     }
 
@@ -286,6 +291,7 @@ impl WebhookEventType {
             "security.auth_failed" => Some(Self::AuthenticationFailed),
             "security.authz_denied" => Some(Self::AuthorizationDenied),
             "security.rate_limited" => Some(Self::RateLimitExceeded),
+            "webhook.test" => Some(Self::Test),
             _ => None,
         }
     }
@@ -311,6 +317,7 @@ impl WebhookEventType {
             Self::AuthenticationFailed,
             Self::AuthorizationDenied,
             Self::RateLimitExceeded,
+            Self::Test,
         ]
     }
 }
