@@ -4008,6 +4008,7 @@ dependencies = [
  "axum",
  "clap 4.6.1",
  "config",
+ "hex",
  "hsm-audit",
  "hsm-auth",
  "hsm-config",
