@@ -6,6 +6,15 @@ authors.workspace = true
 license.workspace = true
 description = "Blockchain-specific cryptographic operations for HSM"
 
+[features]
+default = []
+# Experimental, beyond-spec chains (Aptos, Sui, NEAR) whose transaction
+# serialization is NOT yet canonical/chain-compatible. Signatures produced over
+# these encodings are not guaranteed to verify on the respective networks, so
+# the modules are gated off by default. Do not enable in production until
+# canonical encoders land.
+experimental-chains = []
+
 [dependencies]
 # HD key derivation
 bip32 = "0.5"
