@@ -53,7 +53,12 @@ HSM_ALLOW_INSECURE_TRANSPORT=true cargo run --bin hsm-server
 #     cargo run --bin hsm-server
 #
 # For encrypted persistent storage that survives restarts, also provide a data
-# directory and a stable 32-byte hex master key:
+# directory and a master key. The master key may be supplied three ways, in
+# decreasing order of security:
+#   HSM_MASTER_KEY_SHARES_DIR  Shamir K-of-N shares (full key never at rest)
+#   HSM_MASTER_KEY_FILE        hex key in a file (e.g. a KMS-mounted secret)
+#   HSM_MASTER_KEY             hex key in the environment (least secure; warns)
+# e.g.:
 #   HSM_DATA_DIR=/data/hsm HSM_MASTER_KEY=$(openssl rand -hex 32) ...
 #
 # The server is configured via flags/environment variables; run with --help for

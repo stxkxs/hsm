@@ -4013,6 +4013,7 @@ dependencies = [
  "hex",
  "hsm-audit",
  "hsm-auth",
+ "hsm-backup",
  "hsm-config",
  "hsm-crypto-engine",
  "hsm-key-manager",

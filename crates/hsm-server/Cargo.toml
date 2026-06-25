@@ -19,6 +19,7 @@ hsm-rest-api = { path = "../rest-api" }
 hsm-metrics = { path = "../metrics" }
 hsm-audit = { path = "../audit" }
 hsm-storage = { path = "../storage" }
+hsm-backup = { path = "../backup" }
 hsm-config = { path = "../config" }
 
 # Async runtime

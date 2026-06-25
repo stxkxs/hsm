@@ -41,17 +41,12 @@ spec:
             # Client-auth CA: enables mandatory mTLS. Without it the server
             # refuses to start (unless HSM_ALLOW_INSECURE_TRANSPORT is set).
             - "--tls-ca=/tls/ca.crt"
+            # Master key sourced from a mounted file (not the environment), so it
+            # is not visible via /proc or inherited by child processes.
+            - "--master-key-file=/secrets/master-key/HSM_MASTER_KEY"
           envFrom:
             - configMapRef:
                 name: hsm-config
-          env:
-            # Master key for envelope-encrypting persisted keys. Sourced from a
-            # Secret so it is never baked into the image or ConfigMap.
-            - name: HSM_MASTER_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: hsm-master-key
-                  key: HSM_MASTER_KEY
           ports:
             - name: https
               containerPort: 8443
@@ -62,6 +57,9 @@ spec:
           volumeMounts:
             - name: tls-certs
               mountPath: /tls
+              readOnly: true
+            - name: master-key
+              mountPath: /secrets/master-key
               readOnly: true
             - name: hsm-data
               mountPath: /data/hsm
@@ -103,6 +101,10 @@ spec:
         - name: tls-certs
           secret:
             secretName: hsm-tls
+        - name: master-key
+          secret:
+            secretName: hsm-master-key
+            defaultMode: 0400
   volumeClaimTemplates:
     - metadata:
         name: hsm-data
