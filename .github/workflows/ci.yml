@@ -33,6 +33,12 @@ jobs:
           --skip workload
     - name: Run clippy
       run: cargo clippy --all -- -D warnings
+    - name: Lint and test the experimental-chains feature
+      # The Aptos/Sui/NEAR modules are gated off by default; exercise them here so
+      # the gated code and its tests do not bit-rot.
+      run: |
+        cargo clippy -p hsm-blockchain --features experimental-chains --all-targets -- -D warnings
+        cargo test -p hsm-blockchain --features experimental-chains
     - name: Check formatting
       run: cargo fmt --all -- --check
 
@@ -81,6 +87,46 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libz3-dev libclang-dev
     - name: Check MSRV
       run: cargo check --all
+
+  ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: ui/package-lock.json
+    - name: Install dependencies
+      run: npm ci
+    - name: Lint
+      run: npm run lint
+    - name: Type-check
+      run: npm run type-check
+    - name: Build
+      run: npm run build
+
+  sdk-typescript:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/typescript
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: sdks/typescript/package-lock.json
+    - name: Install dependencies
+      run: npm ci
+    - name: Build
+      run: npm run build
+    - name: Test
+      run: npm test
 
   container:
     runs-on: ubuntu-latest

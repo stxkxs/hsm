@@ -7,7 +7,7 @@ Official client libraries for integrating with HSM in your preferred language.
 ### TypeScript / JavaScript
 
 ```bash
-npm install @anthropic/hsm-client
+npm install @hsm/client
 ```
 
 ### Python
@@ -19,7 +19,7 @@ pip install hsm-client
 ### Go
 
 ```bash
-go get github.com/anthropic/hsm/sdks/go
+go get github.com/stxkxs/hsm/sdks/go
 ```
 
 ### Rust
@@ -34,7 +34,7 @@ hsm-client = "0.1"
 ### TypeScript
 
 ```typescript
-import { HsmClient } from '@anthropic/hsm-client';
+import { HsmClient } from '@hsm/client';
 
 const client = new HsmClient({
   baseUrl: 'https://hsm.example.com',
@@ -103,7 +103,7 @@ import (
     "context"
     "os"
 
-    hsm "github.com/anthropic/hsm/sdks/go"
+    hsm "github.com/stxkxs/hsm/sdks/go"
 )
 
 func main() {
@@ -207,7 +207,7 @@ const client = new HsmClient({
 All SDKs use typed errors:
 
 ```typescript
-import { HsmError, RateLimitError, KeyNotFoundError } from '@anthropic/hsm-client';
+import { HsmError, RateLimitError, KeyNotFoundError } from '@hsm/client';
 
 try {
   await client.keys.get('nonexistent');

@@ -1,4 +1,4 @@
-module github.com/your-org/hsm/sdks/go
+module github.com/stxkxs/hsm/sdks/go
 
 go 1.21
 

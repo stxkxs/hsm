@@ -3,7 +3,6 @@
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 [![Rust Version](https://img.shields.io/badge/rust-1.93%2B-orange.svg)](https://www.rust-lang.org)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Coverage](https://img.shields.io/badge/coverage-78%25-green.svg)]()
 
 A production-grade, software-based Hardware Security Module (HSM) implemented in Rust. Designed for cloud-native deployments with enterprise-grade security, auditability, and performance.
 
@@ -43,26 +42,41 @@ cargo build --release
 # Run tests
 cargo test --workspace
 
-# Start the HSM server (development mode)
-cargo run --bin hsm-server -- --config config/development.yaml
+# Start the HSM server (development: in-memory key store, no TLS)
+cargo run --bin hsm-server
+
+# For encrypted persistent storage that survives restarts, provide a data
+# directory and a stable 32-byte hex master key:
+#   HSM_DATA_DIR=/data/hsm \
+#   HSM_MASTER_KEY=$(openssl rand -hex 32) \
+#     cargo run --bin hsm-server
+#
+# The server is configured via flags/environment variables (HSM_REST_PORT,
+# HSM_METRICS_PORT, HSM_TLS_CERT, HSM_TLS_KEY, ...); run with --help for the
+# full list. There is no config file.
 ```
 
 ### Basic Usage
 
+> The default `hsm-server` binary exposes the **REST API** on port 8443 and
+> Prometheus **metrics** on 9090. The gRPC interface shown below is implemented
+> in the `hsm-grpc-api` crate (proto package `hsm.v1`, service `HSM`) and is not
+> started by the default binary.
+
 ```bash
-# Generate a signing key
+# Generate a signing key (gRPC)
 grpcurl -plaintext -d '{
   "namespace": "default",
   "key_id": "signing-key-1",
   "algorithm": "Ed25519"
-}' localhost:50051 hsm.HsmService/GenerateKey
+}' localhost:50051 hsm.v1.HSM/GenerateKey
 
 # Sign data
 grpcurl -plaintext -d '{
   "namespace": "default",
   "key_id": "signing-key-1",
   "data": "SGVsbG8gV29ybGQ="
-}' localhost:50051 hsm.HsmService/Sign
+}' localhost:50051 hsm.v1.HSM/Sign
 
 # Verify signature
 grpcurl -plaintext -d '{
@@ -70,7 +84,7 @@ grpcurl -plaintext -d '{
   "key_id": "signing-key-1",
   "data": "SGVsbG8gV29ybGQ=",
   "signature": "<base64-signature>"
-}' localhost:50051 hsm.HsmService/Verify
+}' localhost:50051 hsm.v1.HSM/Verify
 ```
 
 ## Features
@@ -92,7 +106,7 @@ grpcurl -plaintext -d '{
 - **Argon2**: Memory-hard password hashing
 
 **Hashing:**
-- SHA-256, SHA-384, SHA-512, SHA3-256, SHA3-512, BLAKE3
+- SHA-256, SHA-384, SHA-512, SHA3-256, SHA3-512
 
 ### Blockchain & Web3
 
