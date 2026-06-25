@@ -38,6 +38,9 @@ spec:
           args:
             - "--tls-cert=/tls/tls.crt"
             - "--tls-key=/tls/tls.key"
+            # Client-auth CA: enables mandatory mTLS. Without it the server
+            # refuses to start (unless HSM_ALLOW_INSECURE_TRANSPORT is set).
+            - "--tls-ca=/tls/ca.crt"
           envFrom:
             - configMapRef:
                 name: hsm-config

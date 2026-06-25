@@ -93,6 +93,15 @@ struct Args {
     #[arg(long, env = "HSM_TLS_CA")]
     tls_ca: Option<String>,
 
+    /// Allow running WITHOUT TLS and/or WITHOUT mTLS client authentication.
+    ///
+    /// By default the server refuses to start unless it has a server certificate
+    /// (`--tls-cert`/`--tls-key`) AND a client-auth CA (`--tls-ca`), so the crypto
+    /// API is never exposed without authenticated clients. This flag disables that
+    /// safety check for LOCAL DEVELOPMENT ONLY — never set it in production.
+    #[arg(long, env = "HSM_ALLOW_INSECURE_TRANSPORT", default_value = "false")]
+    allow_insecure_transport: bool,
+
     /// Session timeout in seconds
     #[arg(long, env = "HSM_SESSION_TIMEOUT", default_value = "3600")]
     session_timeout: i64,
@@ -171,6 +180,37 @@ fn build_key_manager(args: &Args) -> Result<DefaultKeyManager> {
     Ok(manager)
 }
 
+/// Enforce secure-by-default transport.
+///
+/// The crypto API must be served over TLS with mutual (client-certificate)
+/// authentication. Unless `allow_insecure` is set (local development), this
+/// returns an error when TLS or the client-auth CA is missing, so the server
+/// refuses to start in an unauthenticated configuration rather than silently
+/// exposing key operations to any client.
+fn check_transport_security(
+    tls_enabled: bool,
+    has_client_ca: bool,
+    allow_insecure: bool,
+) -> Result<()> {
+    if allow_insecure {
+        return Ok(());
+    }
+    if !tls_enabled {
+        anyhow::bail!(
+            "refusing to start: TLS is required (set HSM_TLS_CERT and HSM_TLS_KEY). \
+             For local development only, set HSM_ALLOW_INSECURE_TRANSPORT=true."
+        );
+    }
+    if !has_client_ca {
+        anyhow::bail!(
+            "refusing to start: mTLS client authentication is required (set HSM_TLS_CA \
+             to the client-auth CA certificate). For local development only, set \
+             HSM_ALLOW_INSECURE_TRANSPORT=true."
+        );
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -184,6 +224,22 @@ async fn main() -> Result<()> {
     if args.tls_cert.is_some() != args.tls_key.is_some() {
         anyhow::bail!("Both --tls-cert and --tls-key must be provided together");
     }
+
+    // Secure by default: the crypto API must not be exposed without TLS and
+    // mutual (client-certificate) authentication.
+    let tls_enabled = args.tls_cert.is_some() && args.tls_key.is_some();
+    if args.allow_insecure_transport {
+        warn!(
+            "HSM_ALLOW_INSECURE_TRANSPORT is set: the crypto API may run without TLS \
+             and/or without mTLS client authentication. This is for LOCAL DEVELOPMENT \
+             ONLY — never use it in production."
+        );
+    }
+    check_transport_security(
+        tls_enabled,
+        args.tls_ca.is_some(),
+        args.allow_insecure_transport,
+    )?;
 
     // Initialize metrics collector
     let metrics_collector =
@@ -672,6 +728,24 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use std::time::Duration;
+
+    #[test]
+    fn transport_security_requires_tls_and_mtls_by_default() {
+        // No TLS at all → rejected.
+        assert!(check_transport_security(false, false, false).is_err());
+        // TLS but no client-auth CA (server-only TLS) → rejected.
+        assert!(check_transport_security(true, false, false).is_err());
+        // TLS + client-auth CA → accepted.
+        assert!(check_transport_security(true, true, false).is_ok());
+    }
+
+    #[test]
+    fn transport_security_insecure_flag_allows_anything() {
+        // The explicit dev opt-out permits every configuration.
+        assert!(check_transport_security(false, false, true).is_ok());
+        assert!(check_transport_security(true, false, true).is_ok());
+        assert!(check_transport_security(true, true, true).is_ok());
+    }
 
     /// Install a rustls crypto provider for the process if one isn't already
     /// set. Both `ring` and `aws-lc-rs` are present transitively, so rustls
