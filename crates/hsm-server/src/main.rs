@@ -33,7 +33,8 @@ use clap::Parser;
 use hsm_metrics::MetricsCollector;
 use prometheus::TextEncoder;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::signal;
 use tokio::sync::Semaphore;
@@ -45,6 +46,7 @@ use hsm_audit::{AsyncAuditConfig, AsyncAuditLogger, StorageConfig as AuditStorag
 use hsm_auth::SessionManager;
 use hsm_key_manager::{DefaultKeyManager, KeyFilter, KeyManager};
 use hsm_rest_api::middleware::AppState;
+use hsm_storage::{EncryptedFileStorage, MasterKey, StorageBackend};
 
 /// Shared state for the metrics/health server
 #[derive(Clone)]
@@ -99,6 +101,15 @@ struct Args {
     #[arg(long, env = "HSM_AUDIT_DIR", default_value = "/data/hsm/audit")]
     audit_dir: String,
 
+    /// Directory for encrypted, persistent key storage.
+    ///
+    /// When set, generated/imported keys are encrypted at rest under the master
+    /// key (see `HSM_MASTER_KEY`) and reloaded on startup, so keys survive pod
+    /// restarts. When unset the key store is in-memory only and keys are lost on
+    /// restart — acceptable for local development, never for production.
+    #[arg(long, env = "HSM_DATA_DIR")]
+    data_dir: Option<String>,
+
     /// Maximum number of concurrent connections accepted by the TLS listener.
     ///
     /// Connections beyond this limit wait for a permit before the TLS
@@ -115,6 +126,49 @@ struct Args {
     /// the task, the file descriptor, and the connection permit.
     #[arg(long, env = "HSM_TLS_HANDSHAKE_TIMEOUT", default_value = "10")]
     tls_handshake_timeout: u64,
+}
+
+/// Build the key manager, choosing persistent encrypted storage when a data
+/// directory is configured and falling back to an in-memory store otherwise.
+///
+/// Persistence requires a stable 32-byte master key (hex-encoded in
+/// `HSM_MASTER_KEY`) so previously written keys remain decryptable across
+/// restarts; it is a hard error to configure `HSM_DATA_DIR` without it.
+fn build_key_manager(args: &Args) -> Result<DefaultKeyManager> {
+    let Some(data_dir) = args.data_dir.as_deref() else {
+        warn!(
+            "HSM_DATA_DIR is not set: using an in-memory key store. Generated keys \
+             will NOT survive a restart. Set HSM_DATA_DIR (and HSM_MASTER_KEY) to \
+             enable encrypted persistent storage."
+        );
+        return Ok(DefaultKeyManager::new());
+    };
+
+    let master_key_hex = std::env::var("HSM_MASTER_KEY").map_err(|_| {
+        anyhow::anyhow!(
+            "HSM_DATA_DIR is set but HSM_MASTER_KEY is missing: a stable 32-byte \
+             hex-encoded master key is required for persistent key storage"
+        )
+    })?;
+    let master_key_bytes =
+        hex::decode(master_key_hex.trim()).context("HSM_MASTER_KEY must be hex-encoded")?;
+    let master_key = MasterKey::from_bytes(master_key_bytes)
+        .map_err(|e| anyhow::anyhow!("invalid HSM_MASTER_KEY: {e}"))?;
+
+    let storage = EncryptedFileStorage::new(PathBuf::from(data_dir), master_key)
+        .context("failed to initialize encrypted key storage")?;
+    let storage: Arc<Mutex<dyn StorageBackend>> = Arc::new(Mutex::new(storage));
+
+    let manager = DefaultKeyManager::with_storage(storage);
+    let loaded = manager
+        .hydrate()
+        .context("failed to load persisted keys from encrypted storage")?;
+    info!(
+        "Loaded {} persisted key(s) from encrypted storage at {}",
+        loaded, data_dir
+    );
+
+    Ok(manager)
 }
 
 #[tokio::main]
@@ -137,7 +191,9 @@ async fn main() -> Result<()> {
 
     // Initialize components
     let session_manager = Arc::new(SessionManager::new(args.session_timeout));
-    let key_manager = Arc::new(DefaultKeyManager::new());
+    // Key manager: encrypted-at-rest persistent storage when HSM_DATA_DIR is
+    // configured (keys survive restart), in-memory otherwise.
+    let key_manager = Arc::new(build_key_manager(&args)?);
 
     // Initialize the tamper-evident audit logger. Every mutating/crypto REST
     // operation records an event fail-closed before responding, and the

@@ -11,3 +11,8 @@ data:
   HSM_METRICS_PORT: "9090"
   HSM_LOG_LEVEL: "info"
   HSM_JSON_LOGS: "true"
+  # Encrypted key persistence on the PVC mounted at /data/hsm. Keys are written
+  # encrypted-at-rest here and reloaded on startup, so they survive pod restarts.
+  # Requires HSM_MASTER_KEY (wired from the hsm-master-key Secret).
+  HSM_DATA_DIR: "/data/hsm/keys"
+  HSM_AUDIT_DIR: "/data/hsm/audit"

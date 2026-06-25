@@ -41,6 +41,14 @@ spec:
           envFrom:
             - configMapRef:
                 name: hsm-config
+          env:
+            # Master key for envelope-encrypting persisted keys. Sourced from a
+            # Secret so it is never baked into the image or ConfigMap.
+            - name: HSM_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: hsm-master-key
+                  key: HSM_MASTER_KEY
           ports:
             - name: https
               containerPort: 8443

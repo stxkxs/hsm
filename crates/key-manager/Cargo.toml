@@ -55,8 +55,9 @@ anyhow = "1.0"
 sha2 = "0.10"
 ripemd = "0.1"
 
-# Storage backends (optional)
-hsm-storage = { path = "../storage", optional = true }
+# Encrypted persistent storage (software backend always available; the optional
+# `hardware` feature additionally enables hsm-storage's TEE-sealed backend).
+hsm-storage = { path = "../storage" }
 hsm-hardware-backend = { path = "../hardware-backend", optional = true }
 
 # Async trait support

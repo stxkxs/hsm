@@ -54,6 +54,9 @@ anyhow = "1.0"
 # Serialization
 serde_json = { workspace = true }
 
+# Master-key decoding (HSM_MASTER_KEY is hex-encoded)
+hex = { workspace = true }
+
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
 

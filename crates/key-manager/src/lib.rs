@@ -185,7 +185,8 @@
 
 use chrono::Utc;
 use hsm_crypto_engine::{CryptoEngine, DefaultCryptoEngine};
-use std::sync::Arc;
+use hsm_storage::StorageBackend;
+use std::sync::{Arc, Mutex};
 
 pub mod error;
 pub mod hd;
@@ -270,6 +271,18 @@ pub struct DefaultKeyManager {
     /// engine be supplied via `with_crypto_engine`.
     #[allow(dead_code)]
     crypto_engine: Arc<dyn CryptoEngine>,
+    /// Optional durable, encrypted backing store.
+    ///
+    /// When present, key-lifecycle mutations (generate, import, rotate, state
+    /// changes, delete) are written through to encrypted persistent storage and
+    /// the in-memory working set is rehydrated from it on startup via
+    /// [`DefaultKeyManager::hydrate`], so keys survive process restarts. When
+    /// absent the manager is purely in-memory (suitable for tests).
+    ///
+    /// The hot path ([`KeyManager::increment_operations`], called on every crypto
+    /// operation) is intentionally NOT persisted — that would mean a disk write
+    /// per signature — so the operation counter is best-effort across restarts.
+    storage: Option<Arc<Mutex<dyn StorageBackend>>>,
 }
 
 impl DefaultKeyManager {
@@ -277,6 +290,7 @@ impl DefaultKeyManager {
         Self {
             store: KeyStore::new(),
             crypto_engine: Arc::new(DefaultCryptoEngine),
+            storage: None,
         }
     }
 
@@ -284,8 +298,109 @@ impl DefaultKeyManager {
         Self {
             store: KeyStore::new(),
             crypto_engine,
+            storage: None,
         }
     }
+
+    /// Create a key manager backed by a durable, encrypted storage backend.
+    ///
+    /// Lifecycle mutations are written through to `storage`. Call
+    /// [`DefaultKeyManager::hydrate`] once after construction to load any
+    /// previously persisted keys into the in-memory working set.
+    pub fn with_storage(storage: Arc<Mutex<dyn StorageBackend>>) -> Self {
+        Self {
+            store: KeyStore::new(),
+            crypto_engine: Arc::new(DefaultCryptoEngine),
+            storage: Some(storage),
+        }
+    }
+
+    /// Load all persisted keys from the durable backing store into the in-memory
+    /// working set. No-op when no storage backend is configured. Returns the
+    /// number of keys loaded.
+    pub fn hydrate(&self) -> Result<usize> {
+        let Some(storage) = &self.storage else {
+            return Ok(0);
+        };
+        let storage = storage
+            .lock()
+            .map_err(|_| Error::StorageError("storage mutex poisoned during hydrate".into()))?;
+        let mut loaded = 0;
+        for namespace in storage
+            .list_namespaces()
+            .map_err(|e| Error::StorageError(e.to_string()))?
+        {
+            for key_id in storage
+                .list_keys(&namespace)
+                .map_err(|e| Error::StorageError(e.to_string()))?
+            {
+                let bytes = storage
+                    .load_key(&key_id, &namespace)
+                    .map_err(|e| Error::StorageError(e.to_string()))?;
+                let key: Key = postcard::from_bytes(&bytes).map_err(|e| {
+                    Error::StorageError(format!("failed to deserialize persisted key: {e}"))
+                })?;
+                self.store.insert(&namespace, key)?;
+                loaded += 1;
+            }
+        }
+        Ok(loaded)
+    }
+
+    /// Write a key through to the durable backing store (no-op if none).
+    fn persist_key(&self, namespace: &str, key: &Key) -> Result<()> {
+        let Some(storage) = &self.storage else {
+            return Ok(());
+        };
+        let bytes = postcard::to_allocvec(key)
+            .map_err(|e| Error::StorageError(format!("failed to serialize key: {e}")))?;
+        let mut storage = storage
+            .lock()
+            .map_err(|_| Error::StorageError("storage mutex poisoned".into()))?;
+        // Create the namespace lazily and idempotently before the first write.
+        let exists = storage
+            .list_namespaces()
+            .map_err(|e| Error::StorageError(e.to_string()))?
+            .iter()
+            .any(|n| n == namespace);
+        if !exists {
+            storage
+                .create_namespace(namespace)
+                .map_err(|e| Error::StorageError(e.to_string()))?;
+        }
+        storage
+            .store_key(&storage_key_id(&key.id), &bytes, namespace)
+            .map_err(|e| Error::StorageError(e.to_string()))
+    }
+
+    /// Re-persist the current in-memory state of an existing key (no-op if no
+    /// storage backend is configured).
+    fn persist_existing(&self, namespace: &str, key_id: &KeyId) -> Result<()> {
+        if self.storage.is_none() {
+            return Ok(());
+        }
+        let key = self.store.get(namespace, key_id)?;
+        self.persist_key(namespace, key.as_ref())
+    }
+
+    /// Remove a key from the durable backing store (no-op if none). Removing a
+    /// key that was never persisted is not treated as an error.
+    fn remove_persisted(&self, namespace: &str, key_id: &KeyId) -> Result<()> {
+        let Some(storage) = &self.storage else {
+            return Ok(());
+        };
+        let mut storage = storage
+            .lock()
+            .map_err(|_| Error::StorageError("storage mutex poisoned".into()))?;
+        let _ = storage.delete_key(&storage_key_id(key_id), namespace);
+        Ok(())
+    }
+}
+
+/// Map a key-manager [`KeyId`] (a UUID) to the storage layer's string-typed
+/// `KeyId`, which is the durable lookup handle in the encrypted store.
+fn storage_key_id(key_id: &KeyId) -> hsm_storage::KeyId {
+    hsm_storage::KeyId::new(key_id.to_string())
 }
 
 impl Default for DefaultKeyManager {
@@ -361,7 +476,9 @@ impl KeyManager for DefaultKeyManager {
 
         let key_id = key.id;
 
-        // Store key
+        // Persist to durable storage first so a generated key is always
+        // recoverable on restart, then publish it to the in-memory working set.
+        self.persist_key(&spec.namespace, &key)?;
         self.store.insert(&spec.namespace, key)?;
 
         Ok(key_id)
@@ -433,8 +550,11 @@ impl KeyManager for DefaultKeyManager {
             key.previous_version = Some(*key_id);
             key.version = old_key.version + 1;
         })?;
+        // generate_key persisted the new key at version 1; re-persist now that
+        // its version/previous_version link has been set.
+        self.persist_existing(namespace, &new_key_id)?;
 
-        // Deactivate old key
+        // Deactivate old key (update_state writes the new state through to storage)
         self.update_state(key_id, namespace, KeyState::Deactivated)?;
 
         Ok(new_key_id)
@@ -443,7 +563,8 @@ impl KeyManager for DefaultKeyManager {
     fn update_state(&self, key_id: &KeyId, namespace: &str, state: KeyState) -> Result<()> {
         self.store.update(namespace, key_id, |key| {
             key.state = state;
-        })
+        })?;
+        self.persist_existing(namespace, key_id)
     }
 
     fn delete_key(&self, key_id: &KeyId, namespace: &str) -> Result<()> {
@@ -457,6 +578,9 @@ impl KeyManager for DefaultKeyManager {
         // is already gone, so that call would always fail with `KeyNotFound`
         // and error-log on every successful delete (the bug this replaces).
         let _deleted_key = self.store.delete(namespace, key_id)?;
+        // Drop the durable copy too, so a destroyed key does not reappear on
+        // restart. Removing a key that was never persisted is not an error.
+        self.remove_persisted(namespace, key_id)?;
         Ok(())
     }
 
@@ -636,7 +760,8 @@ impl KeyManager for DefaultKeyManager {
 
         let key_id = key.id;
 
-        // Store key
+        // Persist before publishing to the in-memory store (durable-first).
+        self.persist_key(&spec.namespace, &key)?;
         self.store.insert(&spec.namespace, key)?;
 
         Ok(key_id)
@@ -797,5 +922,66 @@ mod tests {
             manager.delete_key(&missing, "test"),
             Err(Error::KeyNotFound(_))
         ));
+    }
+
+    /// A storage-backed manager persists generated keys so a fresh manager
+    /// (simulating a process restart) recovers them via `hydrate`. This is the
+    /// guarantee the in-memory-only server lacked: keys surviving a restart.
+    #[test]
+    fn test_keys_persist_across_restart() {
+        use hsm_storage::{EncryptedFileStorage, MasterKey};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mk = || MasterKey::from_bytes(vec![0x11u8; 32]).expect("master key");
+
+        // First boot: generate a key through the persistent manager.
+        let key_id = {
+            let storage =
+                EncryptedFileStorage::new(dir.path().to_path_buf(), mk()).expect("storage");
+            let manager = DefaultKeyManager::with_storage(Arc::new(Mutex::new(storage)));
+            let key_id = manager
+                .generate_key(ed25519_spec("prod"))
+                .expect("generate");
+            assert!(manager.get_metadata(&key_id, "prod").is_ok());
+            key_id
+        };
+
+        // Second boot: a brand-new manager + fresh storage handle over the same
+        // directory recovers the key after hydrate().
+        let storage = EncryptedFileStorage::new(dir.path().to_path_buf(), mk()).expect("storage");
+        let manager = DefaultKeyManager::with_storage(Arc::new(Mutex::new(storage)));
+        let loaded = manager.hydrate().expect("hydrate");
+        assert_eq!(loaded, 1, "exactly one persisted key should be recovered");
+        assert!(
+            manager.get_metadata(&key_id, "prod").is_ok(),
+            "recovered key must be retrievable after restart"
+        );
+    }
+
+    /// A key deleted before "restart" must not reappear after hydrate — the
+    /// durable copy is removed on delete, not merely the in-memory entry.
+    #[test]
+    fn test_deleted_key_does_not_resurrect_after_restart() {
+        use hsm_storage::{EncryptedFileStorage, MasterKey};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mk = || MasterKey::from_bytes(vec![0x22u8; 32]).expect("master key");
+
+        let key_id = {
+            let storage =
+                EncryptedFileStorage::new(dir.path().to_path_buf(), mk()).expect("storage");
+            let manager = DefaultKeyManager::with_storage(Arc::new(Mutex::new(storage)));
+            let key_id = manager
+                .generate_key(ed25519_spec("prod"))
+                .expect("generate");
+            manager.delete_key(&key_id, "prod").expect("delete");
+            key_id
+        };
+
+        let storage = EncryptedFileStorage::new(dir.path().to_path_buf(), mk()).expect("storage");
+        let manager = DefaultKeyManager::with_storage(Arc::new(Mutex::new(storage)));
+        let loaded = manager.hydrate().expect("hydrate");
+        assert_eq!(loaded, 0, "a deleted key must not be recovered on restart");
+        assert!(manager.get_key(&key_id, "prod").is_err());
     }
 }
