@@ -333,4 +333,13 @@ mod tests {
         assert!(debug.contains("REDACTED"));
         assert!(!debug.contains("abandon"));
     }
+
+    proptest::proptest! {
+        /// Parsing an arbitrary string as a BIP-39 mnemonic must never panic;
+        /// invalid phrases must return `Err`.
+        #[test]
+        fn mnemonic_from_phrase_never_panics(phrase in ".*") {
+            let _ = Mnemonic::from_phrase(&phrase, Language::English);
+        }
+    }
 }

@@ -78,6 +78,7 @@ getrandom = "0.2"
 
 [dev-dependencies]
 criterion.workspace = true
+proptest = "1"
 
 [[bench]]
 name = "blockchain_bench"
