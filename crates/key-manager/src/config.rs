@@ -3,11 +3,9 @@
 //! Provides configuration types for selecting between software (in-memory) and
 //! hardware-backed key managers.
 
-#![cfg(feature = "hardware")]
-
 use crate::{Error, Result};
 use hsm_hardware_backend::{BackendType, HardwareBackend};
-use hsm_storage::{HardwareStorageBackend, StorageConfig};
+use hsm_storage::HardwareStorageBackend;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -281,13 +279,11 @@ pub async fn create_hardware_key_manager(
     // Create hardware backend
     let hw_backend = create_hardware_backend(&hw_config).await?;
 
-    // Create storage config
-    let storage_config = StorageConfig {
-        base_path: config.storage_path.clone(),
-        backend_type: hsm_storage::StorageBackendType::Hardware,
-        hardware_config: Some(convert_to_storage_hw_config(&hw_config)?),
-        software_kek: None,
-    };
+    // Validate that the hardware config maps to a storage backend config so a
+    // misconfiguration fails fast here. NOTE: the converted config is not yet
+    // threaded into `HardwareStorageBackend::new` below — that wiring is tracked
+    // in #26 (real TEE backend implementation).
+    let _ = convert_to_storage_hw_config(&hw_config)?;
 
     // Create hardware storage backend
     let hw_backend_clone = clone_hardware_backend(&hw_config).await?;

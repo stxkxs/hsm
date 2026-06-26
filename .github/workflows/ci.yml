@@ -39,6 +39,14 @@ jobs:
       run: |
         cargo clippy -p hsm-blockchain --features experimental-chains --all-targets -- -D warnings
         cargo test -p hsm-blockchain --features experimental-chains
+    - name: Lint and test the hardware feature (TEE key manager)
+      # The hardware-backed key manager (and hsm-storage's hardware path) is gated
+      # off by default; exercise the base `hardware` feature here so it cannot
+      # silently stop compiling again. The cloud-backend sub-features
+      # (aws-nitro/intel-sgx/amd-sev) pull heavier deps and are out of scope.
+      run: |
+        cargo clippy -p hsm-key-manager --features hardware --all-targets -- -D warnings
+        cargo test -p hsm-key-manager --features hardware
     - name: Check formatting
       run: cargo fmt --all -- --check
 

@@ -9,10 +9,7 @@ use hsm_hardware_backend::{
     AttestationReport, BackendType, HardwareBackend, HardwareError, PlaintextKey, SealedKey,
     SealedKeyMetadata, TeeMeasurements,
 };
-use hsm_key_manager::{
-    AsyncKeyManager, HardwareKeyManager, KeyFilter, KeyManager, KeySpec, KeyState, KeyType,
-    KeyUsagePolicy,
-};
+use hsm_key_manager::{HardwareKeyManager, KeyFilter, KeySpec, KeyState, KeyType, KeyUsagePolicy};
 use hsm_storage::HardwareStorageBackend;
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -33,6 +30,8 @@ impl MockHardwareBackend {
         }
     }
 
+    // Retained for forthcoming remote-sign failure tests (tracked in #26).
+    #[allow(dead_code)]
     fn with_sign_failure() -> Self {
         Self {
             fail_seal: false,

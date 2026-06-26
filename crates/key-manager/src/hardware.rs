@@ -53,18 +53,16 @@
 //! # }
 //! ```
 
-#![cfg(feature = "hardware")]
-
 use crate::{
     error::{Error, Result},
-    key::{Key, KeyId, KeySpec, KeyState, KeyType, KeyUsagePolicy},
+    key::{Key, KeyId, KeySpec, KeyState, KeyType},
     metadata::{KeyFilter, KeyMetadata},
     KeyManager,
 };
 use async_trait::async_trait;
 use chrono::Utc;
 use hsm_crypto_engine::{CryptoEngine, DefaultCryptoEngine};
-use hsm_hardware_backend::{HardwareBackend, PlaintextKey};
+use hsm_hardware_backend::HardwareBackend;
 use hsm_storage::HardwareStorageBackend;
 use std::sync::Arc;
 
@@ -75,6 +73,9 @@ use std::sync::Arc;
 pub struct HardwareKeyManager {
     pub(crate) storage: HardwareStorageBackend,
     hw_backend: Arc<Box<dyn HardwareBackend>>,
+    /// Retained for dependency injection / future use; key generation currently
+    /// calls the crypto-engine functions directly. Mirrors `DefaultKeyManager`.
+    #[allow(dead_code)]
     crypto_engine: Arc<dyn CryptoEngine>,
 }
 
@@ -176,6 +177,7 @@ impl HardwareKeyManager {
             version: 1,
             previous_version: None,
             operation_count: 0,
+            hd_info: None, // Hardware-generated keys are non-HD.
         };
 
         let key_id = key.id;
@@ -185,7 +187,7 @@ impl HardwareKeyManager {
             .map_err(|e| Error::StorageError(format!("Failed to serialize key: {}", e)))?;
 
         // Create storage key ID from KeyId (use string representation)
-        let storage_key_id = hsm_storage::KeyId::new(&key_id.as_string());
+        let storage_key_id = hsm_storage::KeyId::new(key_id.as_string());
 
         // Store key using hardware backend (will be TEE-sealed)
         self.storage
@@ -278,8 +280,8 @@ impl HardwareKeyManager {
         let mut metadata_list = Vec::new();
 
         for storage_key_id in storage_key_ids {
-            // Convert storage KeyId back to KeyManager KeyId
-            if let Ok(key_id) = KeyId::from_string(storage_key_id.as_str()) {
+            // Skip storage entries whose id is not a valid KeyManager KeyId.
+            if KeyId::from_string(storage_key_id.as_str()).is_ok() {
                 // Load key to apply filters
                 if let Ok(key_bytes) = self
                     .storage
