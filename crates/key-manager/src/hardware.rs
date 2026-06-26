@@ -12,7 +12,11 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! This example uses the AWS Nitro backend, which is only available with the
+//! `aws-nitro` feature, so it is marked `ignore` (it does not compile under the
+//! base `hardware` feature alone).
+//!
+//! ```ignore
 //! use hsm_key_manager::{HardwareKeyManager, KeyManager, KeySpec, KeyType, KeyUsagePolicy};
 //! use hsm_storage::HardwareStorageBackend;
 //! use hsm_hardware_backend::{NitroEnclaveBackend, NitroConfig};
