@@ -225,4 +225,13 @@ mod tests {
             "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
         );
     }
+
+    proptest::proptest! {
+        /// Parsing an arbitrary string as an Ethereum address must never panic;
+        /// malformed input must return `Err`.
+        #[test]
+        fn eth_address_from_hex_never_panics(s in ".*") {
+            let _ = EthereumAddress::from_hex(&s);
+        }
+    }
 }

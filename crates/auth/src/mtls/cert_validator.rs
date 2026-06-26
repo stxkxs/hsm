@@ -579,4 +579,33 @@ mod tests {
         let serial = CertificateValidator::get_serial_number(&der).unwrap();
         assert!(!serial.is_empty(), "serial number must be extractable");
     }
+
+    /// A real CA, generated once and shared across fuzz cases so each case does
+    /// not pay an rcgen key-generation cost.
+    fn shared_ca_pem() -> &'static [u8] {
+        static CA_PEM: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+        CA_PEM.get_or_init(|| generate_test_ca().pem)
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(256))]
+
+        /// The certificate path must never panic on malformed, attacker-
+        /// controlled bytes — it must return `Err`. This is the pre-authentication
+        /// attack surface (an unauthenticated peer supplies the client cert), so a
+        /// panic here is a remote DoS. Fuzzes both CA construction and client-cert
+        /// validation against a real CA across the PEM -> DER -> X.509 -> validate
+        /// pipeline.
+        #[test]
+        fn cert_path_never_panics_on_arbitrary_input(
+            bytes in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..2048)
+        ) {
+            // Constructing a validator from arbitrary CA bytes.
+            let _ = CertificateValidator::new(&bytes);
+
+            // Validating an arbitrary client certificate against a real CA.
+            let validator = CertificateValidator::new(shared_ca_pem()).unwrap();
+            let _ = validator.validate(&bytes);
+        }
+    }
 }

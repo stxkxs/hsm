@@ -984,4 +984,17 @@ mod tests {
         assert_eq!(loaded, 0, "a deleted key must not be recovered on restart");
         assert!(manager.get_key(&key_id, "prod").is_err());
     }
+
+    proptest::proptest! {
+        /// Deserializing arbitrary bytes as a persisted `Key` must return `Err`,
+        /// never panic. The hydrate path feeds these bytes straight from the
+        /// encrypted store on startup, so a panic here would be a crash on
+        /// corrupted/tampered storage.
+        #[test]
+        fn postcard_key_deserialization_never_panics(
+            bytes in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..1024)
+        ) {
+            let _ = postcard::from_bytes::<Key>(&bytes);
+        }
+    }
 }
