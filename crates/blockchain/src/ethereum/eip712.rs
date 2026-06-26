@@ -676,6 +676,55 @@ mod tests {
         assert_eq!(hash, hash2);
     }
 
+    /// EIP-712 known-answer test against the canonical "Mail" example from the
+    /// EIP-712 specification (<https://eips.ethereum.org/EIPS/eip-712>).
+    ///
+    /// Both expected hashes are the spec's published constants, independently
+    /// recomputed with a real keccak-256 oracle — so a wrong-but-deterministic
+    /// domain separator or struct encoding fails here rather than passing a
+    /// len()==32 shape check.
+    #[test]
+    fn test_eip712_mail_known_answer() {
+        let domain = Eip712Domain::new("Ether Mail")
+            .with_version("1")
+            .with_chain_id(1)
+            .with_verifying_contract("0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC");
+
+        // Canonical domain separator for this domain.
+        assert_eq!(
+            hex::encode(domain.hash()),
+            "f2cee375fa42b42143804025fc449deafd50cc031ca257e0b194a650a912090f",
+            "EIP-712 Mail domain separator mismatch"
+        );
+
+        let types = json!({
+            "Person": [
+                {"name": "name", "type": "string"},
+                {"name": "wallet", "type": "address"}
+            ],
+            "Mail": [
+                {"name": "from", "type": "Person"},
+                {"name": "to", "type": "Person"},
+                {"name": "contents", "type": "string"}
+            ]
+        });
+        let message = json!({
+            "from": {"name": "Cow", "wallet": "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826"},
+            "to": {"name": "Bob", "wallet": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB"},
+            "contents": "Hello, Bob!"
+        });
+
+        let typed_data = Eip712TypedData::new(domain, "Mail", types, message).unwrap();
+        let hash = TypedDataHasher::hash(&typed_data).unwrap();
+
+        // Canonical EIP-712 signing hash: keccak256(0x1901 || domainSep || hashStruct(message)).
+        assert_eq!(
+            hex::encode(hash),
+            "be609aee343fb3c4b28e1df9e632fca64fcfaede20f02e86244efddf30957bd2",
+            "EIP-712 Mail signing hash mismatch"
+        );
+    }
+
     #[test]
     fn test_typed_data_creation() {
         let domain = Eip712Domain::new("Test").with_chain_id(1);

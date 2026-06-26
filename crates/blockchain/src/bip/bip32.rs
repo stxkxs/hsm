@@ -406,22 +406,45 @@ mod tests {
         assert_eq!(path.to_string(), "m/44'/0'/0'/0/0");
     }
 
+    /// BIP-32 Test Vector 1 known-answer test.
+    ///
+    /// <https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#test-vector-1>
+    ///
+    /// The expected private keys and chain codes are the canonical spec values,
+    /// independently re-derived (HMAC-SHA512 for the master and `k_child =
+    /// (IL + k_par) mod n` for the hardened child) rather than read back from
+    /// this implementation — so a wrong-but-deterministic derivation fails here.
     #[test]
-    fn test_extended_key_derivation() {
-        // BIP-32 test vector 1
+    fn test_bip32_test_vector_1() {
         let seed = hex::decode("000102030405060708090a0b0c0d0e0f").unwrap();
         let master = ExtendedPrivateKey::from_seed(&seed).unwrap();
 
-        // Master key should have depth 0
+        // Master node (m)
         assert_eq!(master.depth(), 0);
+        assert_eq!(
+            hex::encode(master.private_key_bytes()),
+            "e8f32e723decf4051aefac8e2c93c9c5b214313817cdb01a1494b917c8436b35",
+            "BIP-32 V1 master private key mismatch"
+        );
+        assert_eq!(
+            hex::encode(master.chain_code()),
+            "873dff81c02f525623fd1fe5167eac3a55a049de3d314bb42ee227ffed37d508",
+            "BIP-32 V1 master chain code mismatch"
+        );
 
-        // Derive m/0'
+        // m/0' (hardened)
         let child = master.derive_child(ChildNumber::hardened(0)).unwrap();
         assert_eq!(child.depth(), 1);
-
-        // Public key derivation
-        let pubkey = master.public_key();
-        assert_eq!(pubkey.depth(), 0);
+        assert_eq!(
+            hex::encode(child.private_key_bytes()),
+            "edb2e14f9ee77d26dd93b4ecede8d16ed408ce149b6cd80b0715a2d911a0afea",
+            "BIP-32 V1 m/0' private key mismatch"
+        );
+        assert_eq!(
+            hex::encode(child.chain_code()),
+            "47fdacbd0f1097043b78c63c20c34ef4ed9a111d980047ad16282c7ae6236141",
+            "BIP-32 V1 m/0' chain code mismatch"
+        );
     }
 
     #[test]

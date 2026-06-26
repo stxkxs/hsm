@@ -134,19 +134,38 @@ fn test_pbkdf2_kat_4096() {
     assert_eq!(result, expected);
 }
 
-/// Test AES-256-GCM with known test vectors
+/// AES-256-GCM known-answer test against a NIST GCM test vector.
+///
+/// key = 32 zero bytes, IV = 12 zero bytes, plaintext = 16 zero bytes produces
+/// ciphertext `cea7403d…baf39d18` with tag `d0d1c8a7…d48ab919` (the NIST AES-256
+/// GCM vector, independently recomputed). `decrypt_aes256` consumes the wrapper
+/// layout `[nonce || ciphertext || tag]`, so feeding the vector through it
+/// confirms the wrapper's nonce handling and GCM authentication — unlike a
+/// self-round-trip (random nonce), which would pass even with a broken nonce
+/// scheme or a non-canonical tag.
 #[test]
 fn test_aes256_gcm_kat() {
-    // Known test vector (simplified)
     let key = KeyMaterial::from_bytes(vec![0x00; 32]);
-    let plaintext = b"";
+    // [IV(12) || ciphertext(16) || tag(16)]
+    let input = hex::decode(
+        "000000000000000000000000cea7403d4d606b6e074ec5d3baf39d18d0d1c8a799996bf0265b98b5d48ab919",
+    )
+    .unwrap();
 
-    let ciphertext =
-        symmetric::aes_gcm::AesGcmEngine::encrypt_aes256(&key, plaintext, None).unwrap();
-    let decrypted =
-        symmetric::aes_gcm::AesGcmEngine::decrypt_aes256(&key, &ciphertext, None).unwrap();
+    let decrypted = symmetric::aes_gcm::AesGcmEngine::decrypt_aes256(&key, &input, None).unwrap();
+    assert_eq!(
+        decrypted,
+        vec![0x00u8; 16],
+        "AES-256-GCM NIST vector plaintext mismatch"
+    );
 
-    assert_eq!(plaintext.as_slice(), decrypted.as_slice());
+    // GCM authentication: corrupting the tag must make decryption fail.
+    let mut tampered = input.clone();
+    *tampered.last_mut().unwrap() ^= 0x01;
+    assert!(
+        symmetric::aes_gcm::AesGcmEngine::decrypt_aes256(&key, &tampered, None).is_err(),
+        "AES-256-GCM must reject a tampered authentication tag"
+    );
 }
 
 /// Test P-256 ECDSA basic functionality
