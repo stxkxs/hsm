@@ -1,8 +1,18 @@
 version: 2
 
-# Keeps the four dependency surfaces current so security advisories surface as PRs
-# instead of accumulating silently in the Dependabot alert list. Rust and npm updates
-# are grouped so a maintenance pass is one review, not thirty.
+# Keeps every dependency surface current so security advisories surface as PRs instead
+# of accumulating silently in the alert list. Updates are grouped so a maintenance pass
+# is one review, not thirty.
+#
+# Surfaces covered (verify with: find . -name Cargo.toml -o -name package.json \
+#   -o -name go.mod -o -name pyproject.toml -o -name Dockerfile, minus node_modules/target):
+#   /                        cargo   — the 23-crate workspace
+#   /sdks/rust               cargo   — standalone client lib, excluded from the workspace
+#   /crates/*/fuzz           cargo   — own [workspace] tables, invisible to the root entry
+#   /ui, /sdks/typescript    npm
+#   /sdks/go                 gomod
+#   /sdks/python             pip
+#   /                        docker  — Dockerfile builder + runtime stages
 updates:
   # Rust workspace (23 crates, one shared Cargo.lock)
   - package-ecosystem: cargo
@@ -13,29 +23,154 @@ updates:
     groups:
       rust-patch-and-minor:
         update-types: ["minor", "patch"]
+    # These 26 crates are every direct dependency `cargo upgrade --incompatible
+    # --dry-run` reports as held back, except sgx_types — whose only available bump is
+    # patch-level, so the resolver simply declines it and Dependabot produces nothing.
+    # Keep this in sync with that command: a crate listed there but not here means
+    # Dependabot opens a PR that cannot be merged.
+    #
+    # These crates are all pre-1.0, where a MINOR bump is the breaking one, so both
+    # semver-minor and semver-major are blocked while patch releases (which carry the
+    # security fixes) still flow. The 1.0+ crates are grouped separately below.
     ignore:
-      # Blocked by trait/ecosystem coupling — the RustCrypto digest 0.11 /
-      # crypto-common 0.2 wave cannot be taken piecemeal while aes-gcm 0.10,
-      # {k,p}256/p384 0.13, ed25519-dalek 2.x and rsa 0.9 still pin digest 0.10.
-      # Bumping any one of these creates duplicate, incoherent trait generations.
+      # ── RustCrypto trait wave ──────────────────────────────────────────────
+      # These need digest 0.11 / crypto-common 0.2 / cipher 0.5, but rsa 0.9.10 (the
+      # LATEST rsa, so this cannot be fixed by upgrading rsa) declares sha2 ^0.10.6,
+      # digest ^0.10.5, pkcs8 ^0.10.2; elliptic-curve 0.13.8 under k256/p256/p384
+      # declares sha2 ^0.10 / digest ^0.10.
+      #
+      # The problem is CALL-SITE TYPE COHERENCE, not tree purity — digest 0.11 is
+      # already in Cargo.lock transitively via alloy-primitives, harmlessly. What
+      # breaks is code like crypto-engine/src/asymmetric/rsa.rs importing
+      # pkcs8::DecodePrivateKey for a type from rsa 0.9, or key-manager/src/hd.rs
+      # calling Ripemd160::digest with sha2::Digest also in scope: bump one crate and
+      # the two `Digest` traits become distinct types at the same call site.
+      # They move together or not at all.
       - dependency-name: "sha2"
-        update-types: ["version-update:semver-minor"]
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "sha3"
-        update-types: ["version-update:semver-minor"]
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "sha1"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "hmac"
-        update-types: ["version-update:semver-minor"]
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "hkdf"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "pbkdf2"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "ripemd"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "aes"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "aes-gcm"
-        update-types: ["version-update:semver-minor"]
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "cbc"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "pkcs8"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "k256"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "p256"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "p384"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+
+      # ── rand wave ──────────────────────────────────────────────────────────
       # rand 0.9+/rand_core 0.9+ break every RNG-into-crypto call site, because the
       # crypto stack pins rand_core 0.6 CryptoRng via elliptic-curve 0.13.
+      # num-bigint 0.5 belongs to this wave too: it replaced its `rand` feature with
+      # versioned rand_0_9/rand_0_10 and dropped rand 0.8, which RandBigInt in
+      # crypto-engine blind/rsa_blind.rs still needs.
       - dependency-name: "rand"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "rand_core"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "rand_chacha"
-      # Attempted and reverted — see docs and .cargo/audit.toml for rationale.
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "num-bigint"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+
+      # ── Attempted and reverted (pre-1.0) ───────────────────────────────────
       - dependency-name: "z3"          # 0.13+ removed the 'ctx lifetime; full rewrite of 7 SMT encoders
-      - dependency-name: "reqwest"     # 0.13 dropped the `json` and `rustls-tls` features
-      - dependency-name: "sev"         # 8.x pulls rdrand 0.8, x86-only intrinsics
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # reqwest 0.13 renamed the `rustls-tls` feature to `rustls` and re-pointed it at
+      # rustls-platform-verifier + aws-lc-rs. (`json` still exists in 0.13 — an earlier
+      # note in this repo claimed otherwise and was wrong.) Every crate here enables
+      # `rustls-tls`, so the bump is a coordinated feature-flag change across the
+      # workspace plus a TLS-backend review, not a version bump.
+      - dependency-name: "reqwest"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "dudect-bencher" # 0.7 breaks the rand 0.8 API in timing_tests.rs
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "starknet-types-core" # starknet-crypto 0.8 (latest) still requires 0.2.x
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+
+      # ── 1.0+ crates: only the major is breaking, so minor/patch still flow ──
+      # The dalek wave is blocked by frost-ed25519 3.0.0 (latest), which still
+      # depends on curve25519-dalek 4.x; crypto-engine uses both, so bumping forks
+      # the curve types.
+      - dependency-name: "curve25519-dalek"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "ed25519-dalek"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "x25519-dalek"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "sev"         # 8.x pulls rdrand 0.8, x86-only intrinsics
+        update-types: ["version-update:semver-major"]
+
+  # Standalone Rust client SDK. Deliberately outside the workspace (see `exclude` in
+  # the root Cargo.toml), so the `directory: "/"` entry above cannot reach it — its 11
+  # dependencies received no updates at all until this entry existed.
+  - package-ecosystem: cargo
+    directory: "/sdks/rust"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      sdk-rust-patch-and-minor:
+        update-types: ["minor", "patch"]
+    ignore:
+      # Same coupling as the main workspace: this SDK re-implements request signing
+      # with sha2 0.10 + hmac 0.12, and reqwest 0.13 renamed `rustls-tls` to `rustls`.
+      - dependency-name: "sha2"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "hmac"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "reqwest"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+
+  # Fuzz targets. Each declares its own [workspace] table specifically to stay out of
+  # the root workspace, which also hides them from the root cargo entry.
+  - package-ecosystem: cargo
+    directory: "/crates/crypto-engine/fuzz"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+  - package-ecosystem: cargo
+    directory: "/crates/auth/fuzz"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+
+  # Go client SDK
+  - package-ecosystem: gomod
+    directory: "/sdks/go"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      sdk-go:
+        update-types: ["minor", "patch"]
+
+  # Python client SDK
+  - package-ecosystem: pip
+    directory: "/sdks/python"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      sdk-python:
+        update-types: ["minor", "patch"]
 
   # Next.js dashboard
   - package-ecosystem: npm
@@ -44,15 +179,26 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      ui-patch-and-minor:
-        update-types: ["minor", "patch"]
+      # radix-ui MUST come first. Dependabot assigns each dependency to the FIRST
+      # group it matches, and `ui-patch-and-minor` declares no `patterns` (which
+      # defaults to "*"), so listing it first swallowed every @radix-ui minor/patch
+      # and left the radix group receiving majors only — the opposite of its name.
       radix-ui:
         patterns: ["@radix-ui/*"]
+      ui-patch-and-minor:
+        update-types: ["minor", "patch"]
     ignore:
       # eslint-config-next 16 bundles eslint-plugin-react, which calls the
       # context.getFilename() API removed in eslint 10 — eslint 10 crashes on it.
       - dependency-name: "eslint"
         versions: [">=10"]
+      # TypeScript 7 (the native-Go rewrite) is not usable here yet: no published
+      # typescript-eslint supports it (peer range <6.1.0) and eslint-config-next 16
+      # pins typescript-eslint, so `npm run lint` dies at module load; `next build`
+      # separately rejects it, wanting the TS 6 compiler API. Minor/patch 6.x still
+      # flows. Revisit when typescript-eslint ships TS 7 support.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # TypeScript client SDK
   - package-ecosystem: npm
@@ -63,6 +209,13 @@ updates:
     groups:
       sdk-patch-and-minor:
         update-types: ["minor", "patch"]
+    ignore:
+      # TypeScript 7 ships no JavaScript compiler API — require('typescript') exposes
+      # only {version, versionMajorMinor}, so tsup's --dts step crashes inside
+      # rollup-plugin-dts. `tsc --noEmit` DOES pass, so src/ is TS 7-ready; the build
+      # toolchain is not. Revisit when tsup/rollup-plugin-dts support TS 7.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # CI action versions — these drifted 1-3 majors behind before this file existed.
   - package-ecosystem: github-actions
@@ -72,9 +225,40 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        exclude-patterns: ["dtolnay/rust-toolchain"]
+    ignore:
+      # NOT an action version. `dtolnay/rust-toolchain@1.97` selects the Rust
+      # toolchain, and that ref must stay equal to the MSRV declared in
+      # rust-toolchain.toml / Dockerfile / README — the `msrv` job exists precisely
+      # to compile against that floor. Dependabot version-sorts the action's refs
+      # (1.100 > 1.97) and proposed a Rust release that does not exist; taking it
+      # would leave the msrv job silently not testing the MSRV. Raise this pin by
+      # hand, together with the other MSRV references, whenever MSRV moves.
+      - dependency-name: "dtolnay/rust-toolchain"
 
   # Builder/runtime base images in the multi-stage Dockerfile
   - package-ecosystem: docker
     directory: "/"
     schedule:
       interval: weekly
+    ignore:
+      # `rust:1.97-bookworm` (Dockerfile builder) is the SAME hazard as the
+      # dtolnay/rust-toolchain ref above: the tag is an MSRV declaration, not a
+      # version to keep current. MSRV lives in four places that must agree —
+      # rust-toolchain.toml, this image, the README badge/prereqs, and the CI msrv job.
+      #
+      # This one is nastier than the action, because taking it does NOT turn CI red:
+      # rust-toolchain.toml pins channel 1.97, so rustup re-downloads 1.97 inside a
+      # 1.98 image and everything stays green while the Dockerfile quietly stops being
+      # an MSRV reference. Blocking semver-minor matters most here — Rust ships
+      # 1.97 -> 1.98 as a MINOR bump, so a major-only rule would never fire. Patch
+      # releases (1.97.0 -> 1.97.1) still flow for base-image CVEs.
+      - dependency-name: "rust"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # `debian:bookworm-slim` (runtime stage) must stay on the same Debian release as
+      # the builder, because the runtime stage copies a binary linked against bookworm
+      # glibc out of rust:*-bookworm. Currently invisible to Dependabot only because it
+      # cannot version-parse a bare codename; this makes the constraint explicit so
+      # rewriting the tag as `debian:12-slim` cannot silently open a trixie bump.
+      - dependency-name: "debian"
+        update-types: ["version-update:semver-major"]
