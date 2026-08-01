@@ -78,12 +78,6 @@ ignore = [
     "RUSTSEC-2026-0162",  # pqcrypto-traits unmaintained
     "RUSTSEC-2026-0163",  # pqcrypto-internals unmaintained
     "RUSTSEC-2026-0166",  # pqcrypto-mldsa unmaintained
-
-    # proc-macro-error2 - unmaintained (RUSTSEC-2026-0173, published 2026-06-07). Pulled in
-    # via validator_derive 0.20 -> validator 0.20 (used by hsm-validator). Compile-time-only
-    # proc-macro helper with no runtime exposure; an unmaintained notice, not a vulnerability.
-    # No upstream fix: validator 0.20 has not moved off proc-macro-error2.
-    "RUSTSEC-2026-0173",
 ]
 
 # Severity threshold for errors (we want to be notified of medium+ vulnerabilities)

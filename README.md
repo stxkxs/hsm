@@ -1,7 +1,7 @@
 # hsm
 
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![Rust Version](https://img.shields.io/badge/rust-1.93%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust Version](https://img.shields.io/badge/rust-1.97%2B-orange.svg)](https://www.rust-lang.org)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 
 A production-grade, software-based Hardware Security Module (HSM) implemented in Rust. Designed for cloud-native deployments with enterprise-grade security, auditability, and performance.
@@ -23,7 +23,7 @@ This HSM provides cryptographic key management and operations as a service, with
 
 ### Prerequisites
 
-- Rust 1.93 or later
+- Rust 1.97 or later
 - Protocol Buffers compiler (`protoc`)
 - OpenSSL development libraries
 

@@ -364,8 +364,9 @@ impl ValidatorServiceBuilder {
     /// Build the service.
     ///
     /// When the `babylon` feature is compiled, the resulting service has Babylon
-    /// EOTS support enabled only if [`with_babylon`](Self::with_babylon) was
-    /// called on this builder.
+    /// EOTS support enabled only if `with_babylon` was called on this builder.
+    /// (Not an intra-doc link: `with_babylon` is itself `#[cfg(feature = "babylon")]`,
+    /// so the target does not exist in a default-feature doc build.)
     pub async fn build(self) -> Result<ValidatorService> {
         ValidatorService::new_with_options(
             &self.base_dir,
@@ -383,7 +384,7 @@ mod tests {
 
     fn generate_bls_secret_key() -> Vec<u8> {
         let mut ikm = [0u8; 32];
-        getrandom::getrandom(&mut ikm).unwrap();
+        getrandom::fill(&mut ikm).unwrap();
         let sk = SecretKey::key_gen(&ikm, &[]).unwrap();
         sk.to_bytes().to_vec()
     }

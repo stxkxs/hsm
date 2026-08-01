@@ -90,7 +90,6 @@ export type {
   HsmClientConfig,
   RetryConfig,
   SessionScope,
-
   // Key management
   KeyAlgorithm,
   KeyPurpose,
@@ -100,7 +99,6 @@ export type {
   KeyMetadata,
   ListKeysResponse,
   ListKeysOptions,
-
   // Cryptographic operations
   SignRequest,
   SignResponse,
@@ -110,7 +108,6 @@ export type {
   EncryptResponse,
   DecryptRequest,
   DecryptResponse,
-
   // Batch operations
   BatchSignRequest,
   BatchSignResponse,
@@ -120,12 +117,10 @@ export type {
   BatchEncryptResponse,
   BatchDecryptRequest,
   BatchDecryptResponse,
-
   // Audit
   AuditEntry,
   AuditLogResponse,
   AuditLogOptions,
-
   // Health
   HealthResponse,
   ReadyResponse,

@@ -4,43 +4,38 @@
  * Main client class for interacting with the HSM server.
  */
 
+import { CircuitBreaker, RetryStrategy, TokenManager } from './auth';
+import { normalizeToBase64 } from './crypto';
+import { HsmError, NetworkError, parseErrorResponse, TimeoutError } from './errors';
+import { KeyManager, type KeyManagerClient } from './keys';
 import type {
-  HsmClientConfig,
-  GenerateKeyRequest,
-  GenerateKeyResponse,
-  KeyMetadata,
-  ListKeysResponse,
-  ListKeysOptions,
-  SignRequest,
-  SignResponse,
-  VerifyRequest,
-  VerifyResponse,
-  EncryptRequest,
-  EncryptResponse,
-  DecryptRequest,
-  DecryptResponse,
+  AuditLogOptions,
+  AuditLogResponse,
+  BatchDecryptRequest,
+  BatchDecryptResponse,
+  BatchEncryptRequest,
+  BatchEncryptResponse,
   BatchSignRequest,
   BatchSignResponse,
   BatchVerifyRequest,
   BatchVerifyResponse,
-  BatchEncryptRequest,
-  BatchEncryptResponse,
-  BatchDecryptRequest,
-  BatchDecryptResponse,
-  AuditLogResponse,
-  AuditLogOptions,
+  DecryptRequest,
+  DecryptResponse,
+  EncryptRequest,
+  EncryptResponse,
+  GenerateKeyRequest,
+  GenerateKeyResponse,
   HealthResponse,
+  HsmClientConfig,
+  KeyMetadata,
+  ListKeysOptions,
+  ListKeysResponse,
   ReadyResponse,
+  SignRequest,
+  SignResponse,
+  VerifyRequest,
+  VerifyResponse,
 } from './types';
-import { TokenManager, CircuitBreaker, RetryStrategy } from './auth';
-import { KeyManager, type KeyManagerClient } from './keys';
-import { normalizeToBase64 } from './crypto';
-import {
-  HsmError,
-  NetworkError,
-  TimeoutError,
-  parseErrorResponse,
-} from './errors';
 
 /** HSM Client for interacting with HSM server */
 export class HsmClient implements KeyManagerClient {
@@ -71,12 +66,7 @@ export class HsmClient implements KeyManagerClient {
   // HTTP Request Helpers
   // ===========================================================================
 
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-    attempt = 0
-  ): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, attempt = 0): Promise<T> {
     // Check circuit breaker
     if (!this.circuitBreaker.canRequest()) {
       throw new HsmError('Circuit breaker is open', { code: 'CIRCUIT_OPEN' });
@@ -91,7 +81,7 @@ export class HsmClient implements KeyManagerClient {
     // Add authorization header if authenticated
     const authHeader = this.tokenManager.getAuthorizationHeader();
     if (authHeader) {
-      headers['Authorization'] = authHeader;
+      headers.Authorization = authHeader;
     }
 
     const controller = new AbortController();
@@ -319,15 +309,13 @@ export class HsmClient implements KeyManagerClient {
     const params = new URLSearchParams();
     if (options?.namespace) params.set('namespace', options.namespace);
     if (options?.start_time) {
-      const time = options.start_time instanceof Date
-        ? options.start_time.toISOString()
-        : options.start_time;
+      const time =
+        options.start_time instanceof Date ? options.start_time.toISOString() : options.start_time;
       params.set('start_time', time);
     }
     if (options?.end_time) {
-      const time = options.end_time instanceof Date
-        ? options.end_time.toISOString()
-        : options.end_time;
+      const time =
+        options.end_time instanceof Date ? options.end_time.toISOString() : options.end_time;
       params.set('end_time', time);
     }
     if (options?.user_id) params.set('user_id', options.user_id);

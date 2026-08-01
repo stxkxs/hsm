@@ -109,18 +109,18 @@ pub async fn handle(request: &Ttlv, hsm_client: &Arc<dyn HsmClient>) -> Result<T
                 ));
             }
         }
-        ObjectType::PublicKey | ObjectType::PrivateKey => {
+        ObjectType::PublicKey | ObjectType::PrivateKey
             if !matches!(
                 algorithm,
                 CryptographicAlgorithm::Rsa
                     | CryptographicAlgorithm::Ecdsa
                     | CryptographicAlgorithm::Ed25519
                     | CryptographicAlgorithm::Ed448
-            ) {
-                return Err(KmipError::InvalidAttribute(
-                    "Algorithm not valid for asymmetric key".into(),
-                ));
-            }
+            ) =>
+        {
+            return Err(KmipError::InvalidAttribute(
+                "Algorithm not valid for asymmetric key".into(),
+            ));
         }
         _ => {}
     }

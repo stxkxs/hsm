@@ -14,10 +14,10 @@ thiserror = "2.0"
 
 # Secret management
 secrecy = { version = "0.10", features = ["serde"] }
-zeroize = "1.8"
+zeroize = "1.9"
 
 # Validation
-validator = { version = "0.20", features = ["derive"] }
+validator = { version = "0.21", features = ["derive"] }
 
 # Hot reload & concurrency
 notify = "8.2"
@@ -29,7 +29,7 @@ argon2 = { version = "0.5", features = ["std"] }
 rand = "0.8"
 
 # Async runtime
-tokio = { version = "1.49", features = ["sync", "time", "fs", "rt"] }
+tokio = { version = "1.53", features = ["sync", "time", "fs", "rt"] }
 
 # Logging
 tracing = "0.1"
@@ -38,9 +38,9 @@ tracing = "0.1"
 chrono = "0.4"
 
 [dev-dependencies]
-tempfile = "3.24"
+tempfile = "3.27"
 criterion = { version = "0.8", features = ["html_reports"] }
-tokio = { version = "1.49", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
 
 [[bench]]
 name = "config_benchmarks"

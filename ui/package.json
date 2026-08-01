@@ -15,77 +15,56 @@
     "test:e2e:open": "start-server-and-test dev http://localhost:3000 cy:open"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.0.0",
-    "@radix-ui/react-dialog": "^1.1.14",
-    "@radix-ui/react-dropdown-menu": "^2.1.14",
-    "@radix-ui/react-label": "^2.1.7",
-    "@radix-ui/react-select": "^2.1.14",
-    "@radix-ui/react-separator": "^1.1.8",
-    "@radix-ui/react-slot": "^1.2.3",
-    "@radix-ui/react-tabs": "^1.1.12",
-    "@radix-ui/react-tooltip": "^1.2.7",
-    "@tailwindcss/postcss": "^4.1.10",
+    "@hookform/resolvers": "^5.5.7",
+    "@radix-ui/react-dialog": "^1.1.23",
+    "@radix-ui/react-dropdown-menu": "^2.1.24",
+    "@radix-ui/react-label": "^2.1.15",
+    "@radix-ui/react-select": "^2.3.7",
+    "@radix-ui/react-separator": "^1.1.15",
+    "@radix-ui/react-slot": "^1.3.3",
+    "@radix-ui/react-tabs": "^1.1.21",
+    "@radix-ui/react-tooltip": "^1.2.16",
+    "@tailwindcss/postcss": "^4.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "framer-motion": "^12.19.1",
-    "lucide-react": "^1.0.0",
-    "next": "^16.0.0",
+    "framer-motion": "^12.43.0",
+    "lucide-react": "^1.28.0",
+    "next": "^16.2.12",
     "next-themes": "^0.4.6",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-hook-form": "^7.58.1",
-    "recharts": "^3.0.0",
-    "tailwind-merge": "^3.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-hook-form": "^7.84.0",
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^4.0.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "cypress": "^15.0.0",
-    "eslint": "^9.29.0",
-    "eslint-config-next": "^16.0.0",
-    "postcss": "^8.5.14",
-    "start-server-and-test": "^3.0.0",
-    "tailwindcss": "^4.1.10",
-    "typescript": "^6.0.0"
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "cypress": "^15.19.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.12",
+    "postcss": "^8.5.25",
+    "start-server-and-test": "^3.0.11",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3"
   },
+  "//overrides": [
+    "Both entries force a version ABOVE the range next 16.2.12 declares, because next's own",
+    "declared range is entirely inside a vulnerable range. Re-check on every next upgrade and",
+    "delete each entry once next's declared range is patched on its own.",
+    "postcss: next hard-pins 8.4.31, and postcss <=8.5.17 is GHSA-r28c-9q8g-f849 (path traversal",
+    "in sourceMappingURL auto-loading). 8.5.25 is a patch-level move within postcss 8.",
+    "sharp: next declares optionalDependency ^0.34.5, and all of sharp <0.35.0 inherits the",
+    "libvips CVE-2026-33327/33328/35590/35591 set (GHSA-f88m-g3jw-g9cj). 0.35.3 is verified",
+    "against the sharp API surface next/dist/server/image-optimizer.js actually calls."
+  ],
   "overrides": {
-    "eslint": {
-      "minimatch": "3.1.4"
-    },
-    "eslint-plugin-import": {
-      "minimatch": "3.1.4"
-    },
-    "eslint-plugin-jsx-a11y": {
-      "minimatch": "3.1.4"
-    },
-    "eslint-plugin-react": {
-      "minimatch": "3.1.4"
-    },
-    "@eslint/config-array": {
-      "minimatch": "3.1.4"
-    },
-    "@eslint/eslintrc": {
-      "minimatch": "3.1.4"
-    },
-    "@typescript-eslint/typescript-estree": {
-      "minimatch": "9.0.9"
-    },
-    "qs": "6.15.2",
-    "flatted": "3.4.2",
-    "tinyglobby": {
-      "picomatch": "4.0.4"
-    },
-    "minimatch": {
-      "brace-expansion": "1.1.13"
-    },
-    "axios": "1.16.0",
-    "follow-redirects": "1.16.0",
-    "lodash": "4.18.1",
     "next": {
-      "postcss": "8.5.14"
+      "postcss": "8.5.25",
+      "sharp": "0.35.3"
     }
   }
 }

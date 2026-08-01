@@ -180,7 +180,7 @@ impl AsyncFileStorage {
     /// Store a key asynchronously with atomic write
     ///
     /// Finding #29: the key's ciphertext AND its integrity metadata are packed
-    /// into a SINGLE combined record (see [`COMBINED_RECORD_MAGIC`]) and made
+    /// into a SINGLE combined record (see `COMBINED_RECORD_MAGIC`) and made
     /// durable with ONE `fsync` + ONE atomic rename, followed by an `fsync` of
     /// the parent directory. A crash can therefore only leave the key fully
     /// present (with matching inline metadata) or fully absent — never the

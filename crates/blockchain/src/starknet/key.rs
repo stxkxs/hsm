@@ -39,7 +39,7 @@ impl StarkPrivateKey {
     /// Generate a new random private key.
     pub fn generate() -> Self {
         let mut scalar = [0u8; 32];
-        getrandom::getrandom(&mut scalar).expect("Failed to generate random bytes");
+        getrandom::fill(&mut scalar).expect("Failed to generate random bytes");
 
         // Ensure it's in valid range by masking top bits if needed
         // The Stark curve order is approximately 2^251, so we mask the top bits
@@ -71,7 +71,7 @@ impl StarkPrivateKey {
 
         // Generate random k for signature
         let mut k_bytes = [0u8; 32];
-        getrandom::getrandom(&mut k_bytes).expect("Failed to generate random k");
+        getrandom::fill(&mut k_bytes).expect("Failed to generate random k");
         k_bytes[0] &= 0x07; // Ensure k < curve order
         let k = Felt::from_bytes_be_slice(&k_bytes);
 

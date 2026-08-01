@@ -8,7 +8,7 @@ use crate::{CryptoError, KeyMaterial, Result};
 use aes::{Aes128, Aes256};
 use cbc::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use cbc::{Decryptor, Encryptor};
-use getrandom::getrandom;
+use getrandom::fill;
 
 type Aes128CbcEnc = Encryptor<Aes128>;
 type Aes128CbcDec = Decryptor<Aes128>;
@@ -82,7 +82,7 @@ impl AesCbcEngine {
         }
 
         let mut iv = [0u8; 16];
-        getrandom(&mut iv).map_err(|_| CryptoError::InsufficientEntropy)?;
+        fill(&mut iv).map_err(|_| CryptoError::InsufficientEntropy)?;
 
         let mut buffer = vec![0u8; plaintext.len() + 16];
         buffer[..plaintext.len()].copy_from_slice(plaintext);
@@ -170,7 +170,7 @@ impl AesCbcEngine {
         }
 
         let mut iv = [0u8; 16];
-        getrandom(&mut iv).map_err(|_| CryptoError::InsufficientEntropy)?;
+        fill(&mut iv).map_err(|_| CryptoError::InsufficientEntropy)?;
 
         let mut buffer = vec![0u8; plaintext.len() + 16];
         buffer[..plaintext.len()].copy_from_slice(plaintext);

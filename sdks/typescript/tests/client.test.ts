@@ -2,15 +2,10 @@
  * HSM Client Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { HsmClient, createClient } from '../src/client';
-import {
-  AuthenticationError,
-  NotFoundError,
-  RateLimitError,
-  NetworkError,
-} from '../src/errors';
-import { toBase64, fromBase64, isBase64 } from '../src/crypto';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { createClient, HsmClient } from '../src/client';
+import { fromBase64, isBase64, toBase64 } from '../src/crypto';
+import { AuthenticationError, NetworkError, NotFoundError, RateLimitError } from '../src/errors';
 
 describe('HsmClient', () => {
   let client: HsmClient;
@@ -29,10 +24,10 @@ describe('HsmClient', () => {
     });
 
     it('should strip trailing slash from baseUrl', () => {
-      const client = createClient({
+      const trailingSlashClient = createClient({
         baseUrl: 'https://hsm.example.com/',
       });
-      expect(client).toBeInstanceOf(HsmClient);
+      expect(trailingSlashClient).toBeInstanceOf(HsmClient);
     });
   });
 
@@ -42,10 +37,10 @@ describe('HsmClient', () => {
     });
 
     it('should report not authenticated when no credentials', () => {
-      const client = createClient({
+      const anonymousClient = createClient({
         baseUrl: 'https://hsm.example.com',
       });
-      expect(client.isAuthenticated()).toBe(false);
+      expect(anonymousClient.isAuthenticated()).toBe(false);
     });
 
     it('should clear credentials', () => {

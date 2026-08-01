@@ -5,6 +5,7 @@
 
 use crate::schema::HsmConfig;
 use chrono::{DateTime, Utc};
+use std::cmp::Reverse;
 use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -240,7 +241,7 @@ impl BackupManager {
         }
 
         // Sort by timestamp (newest first)
-        backups.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        backups.sort_by_key(|b| Reverse(b.timestamp));
 
         Ok(backups)
     }

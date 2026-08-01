@@ -460,7 +460,7 @@ mod tests {
 
         // Generate a random secret key
         let mut ikm = [0u8; 32];
-        getrandom::getrandom(&mut ikm).unwrap();
+        getrandom::fill(&mut ikm).unwrap();
         let secret_key = SecretKey::key_gen(&ikm, &[]).unwrap();
 
         let fork_info = ForkInfo::new([0x01, 0x00, 0x00, 0x00], [0; 32]);

@@ -9,7 +9,7 @@ license.workspace = true
 tonic = { version = "0.14", features = ["tls-ring", "transport"] }
 tonic-prost = "0.14"
 prost = "0.14"
-tokio = { version = "1.49", features = ["full"] }
+tokio = { version = "1.53", features = ["full"] }
 tokio-stream = "0.1"
 tower = "0.5"
 tracing = "0.1"
@@ -18,18 +18,18 @@ thiserror = "2.0"
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-uuid = { version = "1.19", features = ["v4", "serde"] }
+uuid = { version = "1.24", features = ["v4", "serde"] }
 
 # Performance enhancements
 lru = "0.18"
-dashmap = "6.1"
+dashmap = "6.2"
 parking_lot = "0.12"
 
 # Security and reliability
 tonic-health = "0.14"
 tonic-web = "0.14"  # gRPC-Web support for browser clients
-tower-http = { version = "0.6", features = ["cors"] }
-http = "1.3"
+tower-http = { version = "0.7", features = ["cors"] }
+http = "1.5"
 async-trait = "0.1"
 
 # HSM dependencies
@@ -41,10 +41,10 @@ hsm-auth = { path = "../auth" }
 tonic-prost-build = "0.14"
 
 [dev-dependencies]
-tempfile = "3.24"
+tempfile = "3.27"
 criterion = { version = "0.8", features = ["async_tokio"] }
-proptest = "1.9"
-quickcheck = "1.0"
+proptest = "1.11"
+quickcheck = "1.1"
 arbitrary = { version = "1.4", features = ["derive"] }
 
 [[bench]]

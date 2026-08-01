@@ -20,7 +20,7 @@ use tempfile::TempDir;
 fn generate_bls_secret_key() -> Vec<u8> {
     use blst::min_pk::SecretKey;
     let mut ikm = [0u8; 32];
-    getrandom::getrandom(&mut ikm).unwrap();
+    getrandom::fill(&mut ikm).unwrap();
     let sk = SecretKey::key_gen(&ikm, &[]).unwrap();
     sk.to_bytes().to_vec()
 }

@@ -8,7 +8,7 @@ use aes_gcm::{
     aead::{Aead, KeyInit, Payload},
     Aes128Gcm, Aes256Gcm, Nonce,
 };
-use getrandom::getrandom;
+use getrandom::fill;
 use rayon::prelude::*;
 
 /// AES-GCM encryption engine.
@@ -98,7 +98,7 @@ impl AesGcmEngine {
             .map_err(|e| CryptoError::Internal(e.to_string()))?;
 
         let mut nonce_bytes = [0u8; 12];
-        getrandom(&mut nonce_bytes).map_err(|_| CryptoError::InsufficientEntropy)?;
+        fill(&mut nonce_bytes).map_err(|_| CryptoError::InsufficientEntropy)?;
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         let payload = Payload {
@@ -244,7 +244,7 @@ impl AesGcmEngine {
             .map_err(|e| CryptoError::Internal(e.to_string()))?;
 
         let mut nonce_bytes = [0u8; 12];
-        getrandom(&mut nonce_bytes).map_err(|_| CryptoError::InsufficientEntropy)?;
+        fill(&mut nonce_bytes).map_err(|_| CryptoError::InsufficientEntropy)?;
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         let payload = Payload {
@@ -383,7 +383,7 @@ impl AesGcmEngine {
             .par_iter()
             .map(|plaintext| {
                 let mut nonce_bytes = [0u8; 12];
-                getrandom(&mut nonce_bytes).map_err(|_| CryptoError::InsufficientEntropy)?;
+                fill(&mut nonce_bytes).map_err(|_| CryptoError::InsufficientEntropy)?;
                 let nonce = Nonce::from_slice(&nonce_bytes);
 
                 let payload = Payload {
@@ -499,7 +499,7 @@ impl AesGcmEngine {
             .par_iter()
             .map(|plaintext| {
                 let mut nonce_bytes = [0u8; 12];
-                getrandom(&mut nonce_bytes).map_err(|_| CryptoError::InsufficientEntropy)?;
+                fill(&mut nonce_bytes).map_err(|_| CryptoError::InsufficientEntropy)?;
                 let nonce = Nonce::from_slice(&nonce_bytes);
 
                 let payload = Payload {

@@ -258,7 +258,7 @@ impl Session {
     /// Generate a cryptographically secure session ID
     pub(super) fn generate_session_id() -> SessionId {
         let mut session_id_bytes = [0u8; 32];
-        getrandom::getrandom(&mut session_id_bytes)
+        getrandom::fill(&mut session_id_bytes)
             .expect("Failed to generate secure random bytes for session ID");
 
         // Hash for additional security

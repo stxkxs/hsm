@@ -46,7 +46,7 @@ impl MetricsCollector {
         let failed = self.failed_requests.load(Ordering::Relaxed);
         let total_duration = self.total_duration_ms.load(Ordering::Relaxed);
 
-        let avg_duration_ms = if total > 0 { total_duration / total } else { 0 };
+        let avg_duration_ms = total_duration.checked_div(total).unwrap_or(0);
 
         MetricsStats {
             total_requests: total,

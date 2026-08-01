@@ -272,7 +272,7 @@ impl RecoveryCode {
     /// Generate a new recovery code
     pub fn generate(length: usize) -> Self {
         let mut bytes = vec![0u8; length.div_ceil(2)];
-        getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
+        getrandom::fill(&mut bytes).expect("Failed to generate random bytes");
         let code = hex::encode(&bytes)[..length].to_uppercase();
         Self(code)
     }
@@ -314,7 +314,7 @@ impl VerificationCode {
     /// Generate a numeric verification code
     pub fn generate(length: usize) -> Self {
         let mut bytes = [0u8; 8];
-        getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
+        getrandom::fill(&mut bytes).expect("Failed to generate random bytes");
         let num = u64::from_le_bytes(bytes);
         let code = format!("{:0width$}", num % 10u64.pow(length as u32), width = length);
         Self(code)
@@ -373,7 +373,7 @@ impl RecoveryManager {
     /// Generate request ID
     fn generate_request_id() -> String {
         let mut bytes = [0u8; 16];
-        getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
+        getrandom::fill(&mut bytes).expect("Failed to generate random bytes");
         format!("rec_{}", hex::encode(bytes))
     }
 

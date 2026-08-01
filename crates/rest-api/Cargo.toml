@@ -10,8 +10,8 @@ description = "REST/JSON API Gateway for HSM"
 # HTTP Server
 axum = { version = "0.8", features = ["json", "macros"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "request-id", "timeout"] }
-hyper = { version = "1.6", features = ["full"] }
+tower-http = { version = "0.7", features = ["cors", "trace", "request-id", "timeout"] }
+hyper = { version = "1.11", features = ["full"] }
 tokio = { workspace = true, features = ["full"] }
 
 # Serialization
@@ -34,11 +34,11 @@ tracing = "0.1"
 metrics = "0.24"
 
 # Utilities
-uuid = { version = "1.16", features = ["v4", "serde"] }
+uuid = { version = "1.24", features = ["v4", "serde"] }
 hex = "0.4"
-base64 = "0.22"
+base64 = "0.23"
 chrono = { workspace = true }
-getrandom = "0.2"
+getrandom.workspace = true
 sha2 = "0.10"
 
 [dev-dependencies]
