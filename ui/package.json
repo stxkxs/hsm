@@ -49,7 +49,7 @@
     "postcss": "^8.5.25",
     "start-server-and-test": "^3.0.11",
     "tailwindcss": "^4.3.3",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   },
   "//overrides": [
     "Both entries force a version ABOVE the range next 16.2.12 declares, because next's own",
