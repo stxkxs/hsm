@@ -192,9 +192,16 @@ impl RetryStrategy {
     }
 
     /// Calculate delay for next retry.
+    ///
+    /// The exponential term saturates at `max_delay` instead of overflowing:
+    /// `base_delay * 2^attempt` panics once `attempt` reaches 32, and this is a
+    /// public method that callers may drive with an arbitrary attempt number.
     pub fn get_delay(&self, attempt: u32) -> Duration {
-        let exponential_delay = self.base_delay * 2u32.pow(attempt);
-        let capped_delay = exponential_delay.min(self.max_delay);
+        let capped_delay = 2u32
+            .checked_pow(attempt)
+            .and_then(|factor| self.base_delay.checked_mul(factor))
+            .unwrap_or(self.max_delay)
+            .min(self.max_delay);
         let jitter_amount = capped_delay.mul_f64(self.jitter * rand_f64());
         capped_delay + jitter_amount
     }
@@ -206,13 +213,22 @@ impl RetryStrategy {
     }
 }
 
+/// Uniform random value in `[0, 1)`, used to jitter retry backoff.
+///
+/// Drawn from the OS CSPRNG rather than the clock: jitter exists to de-correlate
+/// retries across clients, and a clock-derived value gives every client that
+/// failed at the same instant nearly the same delay — exactly the thundering
+/// herd it is meant to prevent. Falls back to the clock only if the entropy
+/// source is unavailable, so backoff never panics.
 fn rand_f64() -> f64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .subsec_nanos();
-    (nanos as f64) / (u32::MAX as f64)
+    let raw = getrandom::u32().unwrap_or_else(|_| {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0)
+    });
+    f64::from(raw) / (f64::from(u32::MAX) + 1.0)
 }
 
 /// Key manager for convenient key operations.
@@ -368,7 +384,8 @@ impl HsmClient {
 
     /// Set credentials.
     pub fn set_credentials(&self, session_id: String, session_token: String) {
-        self.token_manager.set_credentials(session_id, session_token);
+        self.token_manager
+            .set_credentials(session_id, session_token);
     }
 
     /// Clear credentials.
@@ -396,6 +413,13 @@ impl HsmClient {
         self.token_manager.operation_count()
     }
 
+    /// Send a request, retrying retryable statuses with exponential backoff.
+    ///
+    /// The retry loop is written iteratively rather than as a recursive `async fn`:
+    /// a recursive `async fn` builds an infinitely sized future and would need
+    /// `Box::pin` indirection (plus a heap allocation and a stack frame per attempt).
+    /// The recursion here is pure tail recursion over `attempt`, so a `loop` is both
+    /// the cheaper and the more direct expression of it.
     async fn request<T: serde::de::DeserializeOwned>(
         &self,
         method: reqwest::Method,
@@ -403,58 +427,67 @@ impl HsmClient {
         body: Option<serde_json::Value>,
         attempt: u32,
     ) -> Result<T> {
-        if !self.circuit_breaker.can_request() {
-            return Err(HsmError::CircuitOpen);
-        }
+        let mut attempt = attempt;
 
-        let url = format!("{}{}", self.base_url, path);
-
-        let mut request = self.http_client.request(method.clone(), &url);
-
-        for (key, value) in &self.headers {
-            request = request.header(key, value);
-        }
-
-        if let Some(auth) = self.token_manager.get_authorization_header() {
-            request = request.header("Authorization", auth);
-        }
-
-        if let Some(body) = &body {
-            request = request.json(body);
-        }
-
-        let response = request.send().await.map_err(|e| {
-            self.circuit_breaker.record_failure();
-            HsmError::Network {
-                message: e.to_string(),
-                source: Some(e),
+        loop {
+            if !self.circuit_breaker.can_request() {
+                return Err(HsmError::CircuitOpen);
             }
-        })?;
 
-        let status = response.status().as_u16();
+            let url = format!("{}{}", self.base_url, path);
 
-        if status >= 400 {
-            let error_body: serde_json::Value = response.json().await.unwrap_or_default();
+            let mut request = self.http_client.request(method.clone(), &url);
 
-            if self.retry_strategy.should_retry(status, attempt) {
+            for (key, value) in &self.headers {
+                request = request.header(key, value);
+            }
+
+            if let Some(auth) = self.token_manager.get_authorization_header() {
+                request = request.header("Authorization", auth);
+            }
+
+            if let Some(body) = &body {
+                request = request.json(body);
+            }
+
+            let response = request.send().await.map_err(|e| {
                 self.circuit_breaker.record_failure();
-                self.retry_strategy.sleep(attempt).await;
-                return self.request(method, path, body, attempt + 1).await;
+                if e.is_timeout() {
+                    HsmError::Timeout
+                } else {
+                    HsmError::Network {
+                        message: e.to_string(),
+                        source: Some(e),
+                    }
+                }
+            })?;
+
+            let status = response.status().as_u16();
+
+            if status >= 400 {
+                let error_body: serde_json::Value = response.json().await.unwrap_or_default();
+
+                self.circuit_breaker.record_failure();
+
+                if self.retry_strategy.should_retry(status, attempt) {
+                    self.retry_strategy.sleep(attempt).await;
+                    attempt += 1;
+                    continue;
+                }
+
+                return Err(parse_error_response(status, &error_body));
             }
 
-            self.circuit_breaker.record_failure();
-            return Err(parse_error_response(status, &error_body));
+            self.circuit_breaker.record_success();
+            self.token_manager.increment_operation_count();
+
+            let text = response.text().await?;
+            if text.trim().is_empty() {
+                return serde_json::from_str("{}").map_err(Into::into);
+            }
+
+            return serde_json::from_str(&text).map_err(Into::into);
         }
-
-        self.circuit_breaker.record_success();
-        self.token_manager.increment_operation_count();
-
-        let text = response.text().await?;
-        if text.is_empty() {
-            return serde_json::from_str("{}").map_err(Into::into);
-        }
-
-        serde_json::from_str(&text).map_err(Into::into)
     }
 
     async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T> {
@@ -466,7 +499,8 @@ impl HsmClient {
         path: &str,
         body: serde_json::Value,
     ) -> Result<T> {
-        self.request(reqwest::Method::POST, path, Some(body), 0).await
+        self.request(reqwest::Method::POST, path, Some(body), 0)
+            .await
     }
 
     async fn delete<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T> {
@@ -496,26 +530,7 @@ impl HsmClient {
 
     /// List keys.
     pub async fn list_keys(&self, options: Option<ListKeysOptions>) -> Result<ListKeysResponse> {
-        let mut path = "/keys".to_string();
-        if let Some(opts) = options {
-            let mut params = Vec::new();
-            if let Some(ns) = opts.namespace {
-                params.push(format!("namespace={}", urlencoding::encode(&ns)));
-            }
-            if let Some(limit) = opts.limit {
-                params.push(format!("limit={}", limit));
-            }
-            if let Some(cursor) = opts.cursor {
-                params.push(format!("cursor={}", urlencoding::encode(&cursor)));
-            }
-            if let Some(state) = opts.state {
-                params.push(format!("state={:?}", state));
-            }
-            if !params.is_empty() {
-                path = format!("{}?{}", path, params.join("&"));
-            }
-        }
-        self.get(&path).await
+        self.get(&list_keys_path(options.as_ref())).await
     }
 
     /// Delete a key.
@@ -539,11 +554,8 @@ impl HsmClient {
         if let Some(alg) = hash_algorithm {
             body["hash_algorithm"] = serde_json::Value::String(alg.to_string());
         }
-        self.post(
-            &format!("/keys/{}/sign", urlencoding::encode(key_id)),
-            body,
-        )
-        .await
+        self.post(&format!("/keys/{}/sign", urlencoding::encode(key_id)), body)
+            .await
     }
 
     /// Verify a signature.
@@ -615,36 +627,72 @@ impl HsmClient {
         &self,
         options: Option<AuditLogOptions>,
     ) -> Result<AuditLogResponse> {
-        let mut path = "/audit".to_string();
-        if let Some(opts) = options {
-            let mut params = Vec::new();
-            if let Some(ns) = opts.namespace {
-                params.push(format!("namespace={}", urlencoding::encode(&ns)));
-            }
-            if let Some(start) = opts.start_time {
-                params.push(format!("start_time={}", urlencoding::encode(&start)));
-            }
-            if let Some(end) = opts.end_time {
-                params.push(format!("end_time={}", urlencoding::encode(&end)));
-            }
-            if let Some(user) = opts.user_id {
-                params.push(format!("user_id={}", urlencoding::encode(&user)));
-            }
-            if let Some(op) = opts.operation {
-                params.push(format!("operation={}", urlencoding::encode(&op)));
-            }
-            if let Some(limit) = opts.limit {
-                params.push(format!("limit={}", limit));
-            }
-            if let Some(cursor) = opts.cursor {
-                params.push(format!("cursor={}", urlencoding::encode(&cursor)));
-            }
-            if !params.is_empty() {
-                path = format!("{}?{}", path, params.join("&"));
-            }
-        }
-        self.get(&path).await
+        self.get(&audit_log_path(options.as_ref())).await
     }
+}
+
+/// Join `base` with the already-encoded `params`, omitting `?` when empty.
+fn with_query(base: &str, params: &[String]) -> String {
+    if params.is_empty() {
+        base.to_string()
+    } else {
+        format!("{}?{}", base, params.join("&"))
+    }
+}
+
+/// Build the `/keys` request path for the given filter options.
+fn list_keys_path(options: Option<&ListKeysOptions>) -> String {
+    let Some(opts) = options else {
+        return "/keys".to_string();
+    };
+
+    let mut params = Vec::new();
+    if let Some(ns) = &opts.namespace {
+        params.push(format!("namespace={}", urlencoding::encode(ns)));
+    }
+    if let Some(limit) = opts.limit {
+        params.push(format!("limit={}", limit));
+    }
+    if let Some(cursor) = &opts.cursor {
+        params.push(format!("cursor={}", urlencoding::encode(cursor)));
+    }
+    if let Some(state) = opts.state {
+        // `as_str`, not `Debug`: the API expects the SCREAMING_SNAKE_CASE wire
+        // value (`ACTIVE`), which is what the Go/Python/TypeScript SDKs send.
+        params.push(format!("state={}", urlencoding::encode(state.as_str())));
+    }
+    with_query("/keys", &params)
+}
+
+/// Build the `/audit` request path for the given filter options.
+fn audit_log_path(options: Option<&AuditLogOptions>) -> String {
+    let Some(opts) = options else {
+        return "/audit".to_string();
+    };
+
+    let mut params = Vec::new();
+    if let Some(ns) = &opts.namespace {
+        params.push(format!("namespace={}", urlencoding::encode(ns)));
+    }
+    if let Some(start) = &opts.start_time {
+        params.push(format!("start_time={}", urlencoding::encode(start)));
+    }
+    if let Some(end) = &opts.end_time {
+        params.push(format!("end_time={}", urlencoding::encode(end)));
+    }
+    if let Some(user) = &opts.user_id {
+        params.push(format!("user_id={}", urlencoding::encode(user)));
+    }
+    if let Some(op) = &opts.operation {
+        params.push(format!("operation={}", urlencoding::encode(op)));
+    }
+    if let Some(limit) = opts.limit {
+        params.push(format!("limit={}", limit));
+    }
+    if let Some(cursor) = &opts.cursor {
+        params.push(format!("cursor={}", urlencoding::encode(cursor)));
+    }
+    with_query("/audit", &params)
 }
 
 #[cfg(test)]
@@ -678,5 +726,119 @@ mod tests {
 
         cb.reset();
         assert!(cb.can_request());
+    }
+
+    #[test]
+    fn key_state_query_value_matches_the_wire_format() {
+        // `format!("{:?}", KeyState::Active)` yields "Active", which the API does
+        // not accept. The query string must carry the serde representation.
+        for state in [
+            KeyState::Active,
+            KeyState::Inactive,
+            KeyState::Compromised,
+            KeyState::Destroyed,
+        ] {
+            let serialized = serde_json::to_string(&state).unwrap();
+            assert_eq!(
+                format!("\"{}\"", state.as_str()),
+                serialized,
+                "as_str drifted from the Serialize impl"
+            );
+            assert_ne!(state.as_str(), format!("{:?}", state));
+        }
+    }
+
+    #[test]
+    fn get_delay_saturates_instead_of_overflowing() {
+        let strategy = RetryStrategy::new(Some(RetryConfig {
+            max_retries: 3,
+            base_delay: Duration::from_millis(100),
+            max_delay: Duration::from_secs(5),
+            jitter: 0.0,
+            retry_on_status: vec![429],
+        }));
+
+        assert_eq!(strategy.get_delay(0), Duration::from_millis(100));
+        assert_eq!(strategy.get_delay(1), Duration::from_millis(200));
+        assert_eq!(strategy.get_delay(2), Duration::from_millis(400));
+        // 2^32 overflowed `u32::pow` and panicked before; now it clamps.
+        assert_eq!(strategy.get_delay(32), Duration::from_secs(5));
+        assert_eq!(strategy.get_delay(u32::MAX), Duration::from_secs(5));
+    }
+
+    #[test]
+    fn percent_encoding_is_safe_in_both_path_and_query_position() {
+        // The same helper encodes path segments (`/keys/{key_id}`) and query
+        // values. It must percent-encode everything outside the RFC 3986
+        // unreserved set, and must NOT use the `application/x-www-form-urlencoded`
+        // convention of writing a space as `+` — that would be a literal `+` when
+        // a server parses it as a path segment.
+        assert_eq!(urlencoding::encode("a b"), "a%20b");
+        assert_eq!(urlencoding::encode("a/b"), "a%2Fb");
+        assert_eq!(urlencoding::encode("a?b"), "a%3Fb");
+        assert_eq!(urlencoding::encode("a#b"), "a%23b");
+        assert_eq!(urlencoding::encode("a&b=c"), "a%26b%3Dc");
+        assert_eq!(urlencoding::encode("a+b"), "a%2Bb");
+        assert_eq!(urlencoding::encode("100%"), "100%25");
+        assert_eq!(urlencoding::encode("a..b"), "a..b");
+        // Unreserved characters survive untouched in both positions.
+        assert_eq!(urlencoding::encode("Az0-_.~"), "Az0-_.~");
+    }
+
+    #[test]
+    fn list_keys_path_encodes_and_omits_empty_query() {
+        assert_eq!(list_keys_path(None), "/keys");
+        assert_eq!(
+            list_keys_path(Some(&ListKeysOptions::default())),
+            "/keys",
+            "an all-None filter must not append a bare `?`"
+        );
+        assert_eq!(
+            list_keys_path(Some(&ListKeysOptions {
+                namespace: Some("prod team".into()),
+                limit: Some(25),
+                cursor: Some("a+b/c=".into()),
+                state: Some(KeyState::Active),
+            })),
+            "/keys?namespace=prod%20team&limit=25&cursor=a%2Bb%2Fc%3D&state=ACTIVE"
+        );
+    }
+
+    #[test]
+    fn audit_log_path_encodes_every_filter() {
+        assert_eq!(audit_log_path(None), "/audit");
+        assert_eq!(audit_log_path(Some(&AuditLogOptions::default())), "/audit");
+        assert_eq!(
+            audit_log_path(Some(&AuditLogOptions {
+                namespace: Some("prod".into()),
+                start_time: Some("2026-07-31T00:00:00Z".into()),
+                end_time: Some("2026-07-31T23:59:59Z".into()),
+                user_id: Some("svc/a&b".into()),
+                operation: Some("sign key".into()),
+                limit: Some(100),
+                cursor: Some("c=1".into()),
+            })),
+            "/audit?namespace=prod\
+             &start_time=2026-07-31T00%3A00%3A00Z\
+             &end_time=2026-07-31T23%3A59%3A59Z\
+             &user_id=svc%2Fa%26b\
+             &operation=sign%20key\
+             &limit=100\
+             &cursor=c%3D1"
+        );
+    }
+
+    #[test]
+    fn retry_jitter_is_not_clock_correlated() {
+        // Clock-derived jitter gives every caller that failed in the same instant
+        // the same delay, which is precisely what jitter must avoid.
+        let samples: Vec<f64> = (0..64).map(|_| rand_f64()).collect();
+        assert!(samples.iter().all(|v| (0.0..1.0).contains(v)));
+        let distinct = samples
+            .iter()
+            .map(|v| v.to_bits())
+            .collect::<std::collections::HashSet<_>>()
+            .len();
+        assert!(distinct > 32, "only {} distinct jitter values", distinct);
     }
 }

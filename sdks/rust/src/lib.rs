@@ -37,19 +37,22 @@ mod crypto;
 mod error;
 mod types;
 
-pub use client::{CircuitBreaker, HsmClient, KeyManager, RetryStrategy, TokenManager};
+pub use client::{
+    CircuitBreaker, CircuitState, HsmClient, KeyManager, RetryStrategy, TokenManager,
+};
 pub use crypto::{
-    concat_bytes, constant_time_equal, der_to_raw, from_base64, from_hex, hmac_sha256,
-    is_base64, normalize_to_base64, random_bytes, raw_to_der, sha256, sha384, sha512,
-    to_base64, to_hex,
+    concat_bytes, constant_time_equal, der_to_raw, from_base64, from_hex, hmac_sha256, is_base64,
+    normalize_string_to_base64, normalize_to_base64, random_bytes, raw_to_der, sha256, sha384,
+    sha512, to_base64, to_hex,
 };
 pub use error::{HsmError, Result};
 pub use types::{
-    AuditEntry, AuditLogOptions, AuditLogResponse, BatchDecryptRequest, BatchDecryptResponse,
-    BatchEncryptRequest, BatchEncryptResponse, BatchSignRequest, BatchSignResponse,
-    BatchVerifyRequest, BatchVerifyResponse, ClientConfig, ComponentStatus, DecryptRequest,
-    DecryptResponse, EncryptRequest, EncryptResponse, GenerateKeyRequest, GenerateKeyResponse,
-    HealthResponse, KeyAlgorithm, KeyMetadata, KeyPurpose, KeyState, ListKeysOptions,
-    ListKeysResponse, ReadyResponse, RetryConfig, SessionScope, SignRequest, SignResponse,
-    VerifyRequest, VerifyResponse,
+    AuditEntry, AuditLogOptions, AuditLogResponse, BatchDecryptItem, BatchDecryptRequest,
+    BatchDecryptResponse, BatchEncryptItem, BatchEncryptRequest, BatchEncryptResponse,
+    BatchSignItem, BatchSignRequest, BatchSignResponse, BatchVerifyItem, BatchVerifyRequest,
+    BatchVerifyResponse, ClientConfig, ComponentStatus, DecryptRequest, DecryptResponse,
+    EncryptRequest, EncryptResponse, GenerateKeyRequest, GenerateKeyResponse, HealthResponse,
+    KeyAlgorithm, KeyMetadata, KeyPurpose, KeyState, ListKeysOptions, ListKeysResponse,
+    ReadyResponse, RetryConfig, SessionScope, SignRequest, SignResponse, VerifyRequest,
+    VerifyResponse,
 };

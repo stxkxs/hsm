@@ -37,6 +37,28 @@ pub enum KeyState {
     Destroyed,
 }
 
+impl KeyState {
+    /// The wire representation of this state.
+    ///
+    /// This is the same string the `Serialize` impl produces (the enum is
+    /// `SCREAMING_SNAKE_CASE`), and is what must appear in query strings — the
+    /// `Debug` rendering (`Active`) is *not* a valid value for the API.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "ACTIVE",
+            Self::Inactive => "INACTIVE",
+            Self::Compromised => "COMPROMISED",
+            Self::Destroyed => "DESTROYED",
+        }
+    }
+}
+
+impl std::fmt::Display for KeyState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Request to generate a new key.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateKeyRequest {

@@ -22,11 +22,17 @@ pub enum HsmError {
 
     /// Validation error.
     #[error("Validation error: {message}")]
-    Validation { message: String, field: Option<String> },
+    Validation {
+        message: String,
+        field: Option<String>,
+    },
 
     /// Rate limit exceeded.
     #[error("Rate limit exceeded: {message}")]
-    RateLimit { message: String, retry_after: Option<u32> },
+    RateLimit {
+        message: String,
+        retry_after: Option<u32>,
+    },
 
     /// Network error.
     #[error("Network error: {message}")]
@@ -158,10 +164,7 @@ impl HsmError {
 }
 
 /// Parse an error response from the server.
-pub fn parse_error_response(
-    status_code: u16,
-    body: &serde_json::Value,
-) -> HsmError {
+pub fn parse_error_response(status_code: u16, body: &serde_json::Value) -> HsmError {
     let message = body
         .get("message")
         .and_then(|v| v.as_str())

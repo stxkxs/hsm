@@ -2,15 +2,39 @@ package hsm
 
 import "fmt"
 
-// Error represents an HSM error.
-type Error struct {
+// BaseError is the common error payload shared by every HSM error type.
+//
+// It is embedded (as *BaseError) by the concrete error types below. The type is
+// deliberately NOT named Error: embedding a type named Error promotes a *field*
+// called Error, which shadows the promoted Error() string method and stops the
+// embedder from satisfying the error interface.
+type BaseError struct {
 	Message    string
 	StatusCode int
 	Code       string
 	Details    map[string]interface{}
 }
 
-func (e *Error) Error() string {
+// Compile-time proof that every exported error type actually satisfies the
+// error interface. If an embedded base type is ever renamed back to something
+// that collides with the promoted Error() method, this block fails to build
+// instead of failing at every call site.
+var (
+	_ error = (*BaseError)(nil)
+	_ error = (*AuthenticationError)(nil)
+	_ error = (*AuthorizationError)(nil)
+	_ error = (*NotFoundError)(nil)
+	_ error = (*ValidationError)(nil)
+	_ error = (*RateLimitError)(nil)
+	_ error = (*NetworkError)(nil)
+	_ error = (*TimeoutError)(nil)
+	_ error = (*ServerError)(nil)
+)
+
+func (e *BaseError) Error() string {
+	if e == nil {
+		return "<nil>"
+	}
 	if e.Code != "" {
 		return fmt.Sprintf("%s (code: %s, status: %d)", e.Message, e.Code, e.StatusCode)
 	}
@@ -19,13 +43,13 @@ func (e *Error) Error() string {
 
 // AuthenticationError represents an authentication failure.
 type AuthenticationError struct {
-	*Error
+	*BaseError
 }
 
 // NewAuthenticationError creates a new AuthenticationError.
 func NewAuthenticationError(message string) *AuthenticationError {
 	return &AuthenticationError{
-		Error: &Error{
+		BaseError: &BaseError{
 			Message:    message,
 			StatusCode: 401,
 			Code:       "AUTHENTICATION_FAILED",
@@ -35,13 +59,13 @@ func NewAuthenticationError(message string) *AuthenticationError {
 
 // AuthorizationError represents an authorization failure.
 type AuthorizationError struct {
-	*Error
+	*BaseError
 }
 
 // NewAuthorizationError creates a new AuthorizationError.
 func NewAuthorizationError(message string) *AuthorizationError {
 	return &AuthorizationError{
-		Error: &Error{
+		BaseError: &BaseError{
 			Message:    message,
 			StatusCode: 403,
 			Code:       "AUTHORIZATION_FAILED",
@@ -51,7 +75,7 @@ func NewAuthorizationError(message string) *AuthorizationError {
 
 // NotFoundError represents a resource not found error.
 type NotFoundError struct {
-	*Error
+	*BaseError
 	Resource   string
 	ResourceID string
 }
@@ -59,7 +83,7 @@ type NotFoundError struct {
 // NewNotFoundError creates a new NotFoundError.
 func NewNotFoundError(resource, resourceID string) *NotFoundError {
 	return &NotFoundError{
-		Error: &Error{
+		BaseError: &BaseError{
 			Message:    fmt.Sprintf("%s not found: %s", resource, resourceID),
 			StatusCode: 404,
 			Code:       "NOT_FOUND",
@@ -71,14 +95,14 @@ func NewNotFoundError(resource, resourceID string) *NotFoundError {
 
 // ValidationError represents a validation failure.
 type ValidationError struct {
-	*Error
+	*BaseError
 	Field string
 }
 
 // NewValidationError creates a new ValidationError.
 func NewValidationError(message string, field string) *ValidationError {
 	return &ValidationError{
-		Error: &Error{
+		BaseError: &BaseError{
 			Message:    message,
 			StatusCode: 400,
 			Code:       "VALIDATION_ERROR",
@@ -89,14 +113,14 @@ func NewValidationError(message string, field string) *ValidationError {
 
 // RateLimitError represents a rate limit exceeded error.
 type RateLimitError struct {
-	*Error
+	*BaseError
 	RetryAfter int
 }
 
 // NewRateLimitError creates a new RateLimitError.
 func NewRateLimitError(message string, retryAfter int) *RateLimitError {
 	return &RateLimitError{
-		Error: &Error{
+		BaseError: &BaseError{
 			Message:    message,
 			StatusCode: 429,
 			Code:       "RATE_LIMIT_EXCEEDED",
@@ -107,14 +131,14 @@ func NewRateLimitError(message string, retryAfter int) *RateLimitError {
 
 // NetworkError represents a network error.
 type NetworkError struct {
-	*Error
+	*BaseError
 	Cause error
 }
 
 // NewNetworkError creates a new NetworkError.
 func NewNetworkError(message string, cause error) *NetworkError {
 	return &NetworkError{
-		Error: &Error{
+		BaseError: &BaseError{
 			Message: message,
 			Code:    "NETWORK_ERROR",
 		},
@@ -128,13 +152,13 @@ func (e *NetworkError) Unwrap() error {
 
 // TimeoutError represents a timeout error.
 type TimeoutError struct {
-	*Error
+	*BaseError
 }
 
 // NewTimeoutError creates a new TimeoutError.
 func NewTimeoutError() *TimeoutError {
 	return &TimeoutError{
-		Error: &Error{
+		BaseError: &BaseError{
 			Message: "request timed out",
 			Code:    "TIMEOUT",
 		},
@@ -143,13 +167,13 @@ func NewTimeoutError() *TimeoutError {
 
 // ServerError represents a server error.
 type ServerError struct {
-	*Error
+	*BaseError
 }
 
 // NewServerError creates a new ServerError.
 func NewServerError(message string, statusCode int) *ServerError {
 	return &ServerError{
-		Error: &Error{
+		BaseError: &BaseError{
 			Message:    message,
 			StatusCode: statusCode,
 			Code:       "SERVER_ERROR",
@@ -183,7 +207,7 @@ func parseErrorResponse(statusCode int, body map[string]interface{}) error {
 		if statusCode >= 500 {
 			return NewServerError(message, statusCode)
 		}
-		return &Error{
+		return &BaseError{
 			Message:    message,
 			StatusCode: statusCode,
 		}

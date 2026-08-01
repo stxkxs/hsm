@@ -9,10 +9,9 @@ import hashlib
 import hmac
 import os
 import re
-from typing import Union
 
 
-def to_base64(data: Union[bytes, str]) -> str:
+def to_base64(data: bytes | str) -> str:
     """Encode bytes to base64."""
     if isinstance(data, str):
         data = data.encode("utf-8")
@@ -46,7 +45,7 @@ def from_hex(data: str) -> bytes:
     return bytes.fromhex(data)
 
 
-def normalize_to_base64(data: Union[bytes, str]) -> str:
+def normalize_to_base64(data: bytes | str) -> str:
     """Normalize data to base64 for API requests."""
     if isinstance(data, bytes):
         return to_base64(data)
@@ -55,28 +54,28 @@ def normalize_to_base64(data: Union[bytes, str]) -> str:
     return to_base64(data.encode("utf-8"))
 
 
-def sha256(data: Union[bytes, str]) -> bytes:
+def sha256(data: bytes | str) -> bytes:
     """Hash data using SHA-256."""
     if isinstance(data, str):
         data = data.encode("utf-8")
     return hashlib.sha256(data).digest()
 
 
-def sha384(data: Union[bytes, str]) -> bytes:
+def sha384(data: bytes | str) -> bytes:
     """Hash data using SHA-384."""
     if isinstance(data, str):
         data = data.encode("utf-8")
     return hashlib.sha384(data).digest()
 
 
-def sha512(data: Union[bytes, str]) -> bytes:
+def sha512(data: bytes | str) -> bytes:
     """Hash data using SHA-512."""
     if isinstance(data, str):
         data = data.encode("utf-8")
     return hashlib.sha512(data).digest()
 
 
-def hmac_sha256(key: bytes, data: Union[bytes, str]) -> bytes:
+def hmac_sha256(key: bytes, data: bytes | str) -> bytes:
     """Compute HMAC-SHA256."""
     if isinstance(data, str):
         data = data.encode("utf-8")

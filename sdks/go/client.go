@@ -267,7 +267,7 @@ func (rs *RetryStrategy) Sleep(ctx context.Context, attempt int) error {
 // request makes an HTTP request.
 func (c *Client) request(ctx context.Context, method, path string, body interface{}, attempt int) ([]byte, error) {
 	if !c.circuitBreaker.CanRequest() {
-		return nil, &Error{Message: "circuit breaker is open", Code: "CIRCUIT_OPEN"}
+		return nil, &BaseError{Message: "circuit breaker is open", Code: "CIRCUIT_OPEN"}
 	}
 
 	reqURL := c.baseURL + path

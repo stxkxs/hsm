@@ -15,40 +15,52 @@ keywords = ["hsm", "cryptography", "key-management", "security", "signing", "enc
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Security :: Cryptography",
     "Typing :: Typed",
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "httpx>=0.25.0",
-    "pydantic>=2.5.0",
+    # 0.28 is the first series pytest-httpx (>=0.36) pins to, and the first
+    # without the deprecated `proxies=` / `app=` transport shims.
+    "httpx>=0.28.0",
+    # 2.12.0 is the first pydantic that pins a pydantic-core (2.41.x) publishing
+    # cp314 wheels; 2.11.x pins pydantic-core 2.33.2, which has no 3.14 wheel and
+    # falls back to a Rust source build.
+    "pydantic>=2.12.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-httpx>=0.28.0",
-    "mypy>=1.7.0",
-    "ruff>=0.1.0",
+    # 8.4.0 is the first pytest declaring Python 3.14 support.
+    "pytest>=8.4.0",
+    # 1.1.0 is the first pytest-asyncio declaring Python 3.14 support; the 1.x
+    # series also requires the explicit default-loop-scope setting configured below.
+    "pytest-asyncio>=1.1.0",
+    # 0.36.0 is the first pytest-httpx declaring Python 3.14 support (pins httpx 0.28.*).
+    "pytest-httpx>=0.36.0",
+    # 1.17.0 is the first mypy that can analyse Python 3.14 syntax/stdlib.
+    "mypy>=1.17.0",
+    # 0.1.x predates the stable `[tool.ruff.lint]` section this file uses.
+    "ruff>=0.5.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/hsm"
-Documentation = "https://github.com/your-org/hsm/tree/main/sdks/python"
-Repository = "https://github.com/your-org/hsm.git"
+Homepage = "https://github.com/stxkxs/hsm"
+Documentation = "https://github.com/stxkxs/hsm/tree/main/sdks/python"
+Repository = "https://github.com/stxkxs/hsm.git"
 
 [tool.hatch.build.targets.wheel]
 packages = ["hsm_client"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 
 [tool.mypy]
