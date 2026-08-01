@@ -40,7 +40,7 @@ k256 = { version = "0.13", features = ["ecdsa", "schnorr"] }
 sha2.workspace = true
 sha3 = "0.10"
 # RIPEMD-160 for Cosmos HASH160 address derivation
-ripemd = "0.1"
+ripemd = "0.2"
 # Blake2b-512 for SS58 (Substrate/Polkadot) address checksums
 blake2 = "0.10"
 hmac = "0.12"

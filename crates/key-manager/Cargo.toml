@@ -53,7 +53,7 @@ anyhow = "1.0"
 
 # SHA-256 + RIPEMD-160 for BIP-32 HASH160 fingerprints
 sha2 = "0.10"
-ripemd = "0.1"
+ripemd = "0.2"
 
 # Encrypted persistent storage (software backend always available; the optional
 # `hardware` feature additionally enables hsm-storage's TEE-sealed backend).
