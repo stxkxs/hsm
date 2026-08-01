@@ -526,14 +526,14 @@ impl SocialLoginManager {
     /// Generate a secure random state token
     fn generate_state_token() -> String {
         let mut bytes = [0u8; 32];
-        getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
+        getrandom::fill(&mut bytes).expect("Failed to generate random bytes");
         hex::encode(bytes)
     }
 
     /// Generate PKCE code verifier and challenge
     fn generate_pkce() -> (String, String) {
         let mut verifier_bytes = [0u8; 32];
-        getrandom::getrandom(&mut verifier_bytes).expect("Failed to generate random bytes");
+        getrandom::fill(&mut verifier_bytes).expect("Failed to generate random bytes");
         let verifier = base64_url_encode(&verifier_bytes);
 
         // S256 challenge

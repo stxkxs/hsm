@@ -4,7 +4,7 @@
 //! system's cryptographically secure random number generator.
 
 use crate::{CryptoError, Result};
-use getrandom::getrandom;
+use getrandom::fill;
 
 /// Generates cryptographically secure random bytes.
 ///
@@ -45,7 +45,7 @@ use getrandom::getrandom;
 /// Random generation is very fast (~1 microsecond per 32 bytes).
 pub fn generate_random_bytes(length: usize) -> Result<Vec<u8>> {
     let mut buffer = vec![0u8; length];
-    getrandom(&mut buffer).map_err(|_| CryptoError::InsufficientEntropy)?;
+    fill(&mut buffer).map_err(|_| CryptoError::InsufficientEntropy)?;
     Ok(buffer)
 }
 
@@ -77,7 +77,7 @@ pub fn generate_random_bytes(length: usize) -> Result<Vec<u8>> {
 /// - Sampling from ranges
 pub fn generate_random_u64() -> Result<u64> {
     let mut buffer = [0u8; 8];
-    getrandom(&mut buffer).map_err(|_| CryptoError::InsufficientEntropy)?;
+    fill(&mut buffer).map_err(|_| CryptoError::InsufficientEntropy)?;
     Ok(u64::from_le_bytes(buffer))
 }
 

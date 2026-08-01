@@ -7,13 +7,13 @@ use std::hint::black_box;
 
 fn random_root() -> SigningRoot {
     let mut bytes = [0u8; 32];
-    getrandom::getrandom(&mut bytes).unwrap();
+    getrandom::fill(&mut bytes).unwrap();
     SigningRoot::new(bytes)
 }
 
 fn random_pubkey() -> Vec<u8> {
     let mut bytes = vec![0u8; 48];
-    getrandom::getrandom(&mut bytes).unwrap();
+    getrandom::fill(&mut bytes).unwrap();
     bytes
 }
 

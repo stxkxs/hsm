@@ -4,7 +4,7 @@
  * Token management, session handling, and authentication utilities.
  */
 
-import type { SessionScope, RetryConfig } from './types';
+import type { RetryConfig, SessionScope } from './types';
 
 /** Token manager for handling session tokens */
 export class TokenManager {
@@ -194,7 +194,7 @@ export class RetryStrategy {
 
   /** Calculate delay for next retry */
   getDelay(attempt: number): number {
-    const exponentialDelay = this.baseDelay * Math.pow(2, attempt);
+    const exponentialDelay = this.baseDelay * 2 ** attempt;
     const cappedDelay = Math.min(exponentialDelay, this.maxDelay);
     const jitterAmount = cappedDelay * this.jitter * Math.random();
     return cappedDelay + jitterAmount;

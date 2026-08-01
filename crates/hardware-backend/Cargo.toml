@@ -16,11 +16,11 @@ serde_json = "1.0"
 postcard = { workspace = true }
 
 # Security
-zeroize = { version = "1.8", features = ["derive"] }
+zeroize = { version = "1.9", features = ["derive"] }
 secrecy = "0.10"
 
 # Async runtime
-tokio = { version = "1.49", features = ["full"] }
+tokio = { version = "1.53", features = ["full"] }
 futures = "0.3"
 async-trait = "0.1"
 
@@ -40,8 +40,8 @@ chrono = "0.4"
 parking_lot = "0.12"
 
 # AWS Nitro Enclaves backend
-aws-config = { version = "1.5", optional = true }
-aws-sdk-kms = { version = "1.60", optional = true }
+aws-config = { version = "1.10", optional = true }
+aws-sdk-kms = { version = "1.114", optional = true }
 # NOTE: aws-nitro-enclaves-cose pulls in unmaintained serde_cbor (RUSTSEC-2021-0127).
 # This is optional and only compiled with the "aws-nitro" feature. No upstream fix available yet.
 aws-nitro-enclaves-cose = { version = "0.5", optional = true }
@@ -55,7 +55,7 @@ sgx_tcrypto = { version = "1.1", optional = true }
 sev = { version = "7.1", optional = true }
 
 # Base64 encoding for attestation reports
-base64 = "0.22"
+base64 = "0.23"
 
 # HTTP client for attestation verification
 reqwest = { version = "0.12", features = ["json"], optional = true }
@@ -63,8 +63,8 @@ reqwest = { version = "0.12", features = ["json"], optional = true }
 [dev-dependencies]
 criterion = { version = "0.8", features = ["async_tokio", "html_reports"] }
 tokio-test = "0.4"
-proptest = "1.9"
-tempfile = "3.24"
+proptest = "1.11"
+tempfile = "3.27"
 
 [features]
 default = []

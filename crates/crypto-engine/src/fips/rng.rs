@@ -46,11 +46,11 @@ impl FipsDrbg {
 
         // Get entropy from OS
         let mut entropy = [0u8; 48];
-        getrandom::getrandom(&mut entropy).map_err(|e| format!("Failed to get entropy: {}", e))?;
+        getrandom::fill(&mut entropy).map_err(|e| format!("Failed to get entropy: {}", e))?;
 
         // Get nonce
         let mut nonce = [0u8; 16];
-        getrandom::getrandom(&mut nonce).map_err(|e| format!("Failed to get nonce: {}", e))?;
+        getrandom::fill(&mut nonce).map_err(|e| format!("Failed to get nonce: {}", e))?;
 
         // Instantiate
         drbg.instantiate(&entropy, &nonce, None)?;
@@ -157,7 +157,7 @@ impl FipsDrbg {
         if self.reseed_counter > self.reseed_interval {
             // Get fresh entropy and reseed
             let mut entropy = [0u8; 48];
-            getrandom::getrandom(&mut entropy)
+            getrandom::fill(&mut entropy)
                 .map_err(|e| format!("Failed to get entropy for reseed: {}", e))?;
             self.reseed(&entropy, None)?;
             entropy.zeroize();
@@ -314,7 +314,7 @@ mod tests {
         let mut drbg = FipsDrbg::new().unwrap();
 
         let mut entropy = [0u8; 48];
-        getrandom::getrandom(&mut entropy).unwrap();
+        getrandom::fill(&mut entropy).unwrap();
 
         drbg.reseed(&entropy, None).unwrap();
         assert_eq!(drbg.reseed_counter(), 1);

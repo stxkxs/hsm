@@ -100,13 +100,15 @@ export async function sha256(data: Uint8Array | string): Promise<Uint8Array> {
 
   // Use Web Crypto API (available in both browser and Node.js 20+)
   if (typeof crypto !== 'undefined' && crypto.subtle) {
-    const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+    // WebCrypto rejects SharedArrayBuffer-backed views at runtime, so the
+    // narrowing from Uint8Array<ArrayBufferLike> to Uint8Array<ArrayBuffer> holds.
+    const hashBuffer = await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>);
     return new Uint8Array(hashBuffer);
   }
 
   // Fallback for older Node.js
   if (typeof require !== 'undefined') {
-    const cryptoModule = require('crypto');
+    const cryptoModule = require('node:crypto');
     return new Uint8Array(cryptoModule.createHash('sha256').update(bytes).digest());
   }
 
@@ -120,7 +122,9 @@ export async function sha256(data: Uint8Array | string): Promise<Uint8Array> {
 export async function keccak256(data: Uint8Array | string): Promise<Uint8Array> {
   // This is a placeholder - for production use, implement or import keccak256
   // For now, we'll use SHA-256 as a fallback with a warning
-  console.warn('keccak256: Using SHA-256 as fallback. For Ethereum operations, use ethers.js or similar.');
+  console.warn(
+    'keccak256: Using SHA-256 as fallback. For Ethereum operations, use ethers.js or similar.'
+  );
   return sha256(data);
 }
 
@@ -138,12 +142,13 @@ export async function createMessageHash(
   }
 
   if (typeof crypto !== 'undefined' && crypto.subtle) {
-    const hashBuffer = await crypto.subtle.digest(algorithm, bytes);
+    // See sha256(): WebCrypto never accepts SharedArrayBuffer-backed views.
+    const hashBuffer = await crypto.subtle.digest(algorithm, bytes as Uint8Array<ArrayBuffer>);
     return new Uint8Array(hashBuffer);
   }
 
   if (typeof require !== 'undefined') {
-    const cryptoModule = require('crypto');
+    const cryptoModule = require('node:crypto');
     const nodeAlgorithm = algorithm.toLowerCase().replace('-', '');
     return new Uint8Array(cryptoModule.createHash(nodeAlgorithm).update(bytes).digest());
   }
@@ -178,7 +183,7 @@ export function randomBytes(length: number): Uint8Array {
   }
 
   if (typeof require !== 'undefined') {
-    const cryptoModule = require('crypto');
+    const cryptoModule = require('node:crypto');
     return new Uint8Array(cryptoModule.randomBytes(length));
   }
 

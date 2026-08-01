@@ -18,15 +18,15 @@ hmac = { workspace = true }
 hex = "0.4"
 thiserror = "2.0"
 parking_lot = "0.12"
-tokio = { version = "1.49", features = ["sync", "rt", "time", "macros"] }
+tokio = { version = "1.53", features = ["sync", "rt", "time", "macros"] }
 zstd = "0.13"
 aes-gcm = "0.10"
 postcard = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.24"
+tempfile = "3.27"
 criterion = { version = "0.8", features = ["async_tokio"] }
-tokio = { version = "1.49", features = ["full"] }
+tokio = { version = "1.53", features = ["full"] }
 
 [[bench]]
 name = "audit_benchmarks"

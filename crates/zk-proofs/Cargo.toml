@@ -50,7 +50,7 @@ rand_chacha = "0.3"
 
 # Utilities
 parking_lot = "0.12"
-rayon = "1.10"  # Parallel proof generation
+rayon = "1.12"  # Parallel proof generation
 chrono = "0.4"  # Time handling
 
 # Audit integration
@@ -58,8 +58,8 @@ hsm-audit = { path = "../audit" }
 
 [dev-dependencies]
 criterion = "0.8"
-tempfile = "3.24"
-proptest = "1.6"
+tempfile = "3.27"
+proptest = "1.11"
 
 [[bench]]
 name = "zk_benchmarks"

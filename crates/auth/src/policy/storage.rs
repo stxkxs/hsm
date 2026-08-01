@@ -4,6 +4,7 @@ use super::types::{Policy, PolicyId, PolicyScope};
 use chrono::Utc;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::sync::Arc;
 
 /// Policy store for managing policies
@@ -82,7 +83,7 @@ impl PolicyStore {
     pub fn get_enabled_for_scope(&self, scope: &PolicyScope) -> Vec<Policy> {
         let mut policies = self.get_for_scope(scope);
         policies.retain(|p| p.enabled);
-        policies.sort_by(|a, b| b.priority.cmp(&a.priority));
+        policies.sort_by_key(|p| Reverse(p.priority));
         policies
     }
 
@@ -100,7 +101,7 @@ impl PolicyStore {
         policies.extend(self.get_enabled_for_scope(&PolicyScope::Key(key_id.to_string())));
 
         // Sort by priority
-        policies.sort_by(|a, b| b.priority.cmp(&a.priority));
+        policies.sort_by_key(|p| Reverse(p.priority));
         policies
     }
 

@@ -18,7 +18,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 # Concurrency
-dashmap = "6.1"
+dashmap = "6.2"
 parking_lot.workspace = true
 
 # Cryptography
@@ -41,13 +41,13 @@ metrics = "0.24"
 bigdecimal = { version = "0.4", features = ["serde"] }
 
 # UUID for event IDs
-uuid = { version = "1.13", features = ["v4", "serde"] }
+uuid = { version = "1.24", features = ["v4", "serde"] }
 
 # Rate limiting
 governor = "0.10"
 
 # Channel for event streaming
-async-channel = "2.4"
+async-channel = "2.5"
 
 # Async trait
 async-trait = "0.1"

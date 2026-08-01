@@ -18,7 +18,7 @@ experimental-chains = []
 [dependencies]
 # HD key derivation
 bip32 = "0.5"
-bip39 = { version = "2.1", features = ["rand"] }
+bip39 = { version = "2.2", features = ["rand"] }
 
 # Ethereum support
 alloy-primitives = { version = "1", features = ["rlp"] }
@@ -51,10 +51,10 @@ ed25519-dalek.workspace = true
 bs58.workspace = true
 
 # Bech32 encoding (for Cosmos)
-bech32 = "0.11"
+bech32 = "0.12"
 
 # Base64 encoding
-base64 = "0.22"
+base64 = "0.23"
 
 # Security
 secrecy.workspace = true
@@ -74,7 +74,7 @@ thiserror.workspace = true
 
 # Utilities
 rand = "0.8"
-getrandom = "0.2"
+getrandom.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

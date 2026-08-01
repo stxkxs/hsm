@@ -26,8 +26,8 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 # Utilities
-uuid = { version = "1.7", features = ["v4"] }
-bitflags = "2.4"
+uuid = { version = "1.24", features = ["v4"] }
+bitflags = "2.13"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

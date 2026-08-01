@@ -69,7 +69,7 @@ impl BlsEngine {
     pub fn generate_keypair() -> Result<(KeyMaterial, Vec<u8>)> {
         // Generate 32 bytes of randomness for the secret key
         let mut ikm = [0u8; 32];
-        getrandom::getrandom(&mut ikm).map_err(|_| CryptoError::InsufficientEntropy)?;
+        getrandom::fill(&mut ikm).map_err(|_| CryptoError::InsufficientEntropy)?;
 
         let secret_key = SecretKey::key_gen(&ikm, &[])
             .map_err(|e| CryptoError::Internal(format!("BLS keygen failed: {:?}", e)))?;

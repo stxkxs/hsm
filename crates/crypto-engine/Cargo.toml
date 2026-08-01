@@ -33,9 +33,9 @@ pbkdf2 = { version = "0.12", features = ["simple"] }
 argon2 = "0.5"
 
 # Security
-zeroize = { version = "1.8", features = ["derive"] }
+zeroize = { version = "1.9", features = ["derive"] }
 secrecy = "0.10"
-getrandom = "0.2"
+getrandom.workspace = true
 subtle = "2.6"
 
 # FIPS compliance
@@ -44,7 +44,12 @@ parking_lot = "0.12"
 chrono = { version = "0.4", features = ["serde"] }
 serde_json = "1.0"
 
-# Big integer math for blind signatures
+# Big integer math for blind signatures.
+# Held at 0.4: num-bigint 0.5 replaced the `rand` feature with versioned `rand_0_9` /
+# `rand_0_10` features and dropped rand 0.8 support. `RandBigInt` in blind/rsa_blind.rs
+# needs that integration, and rand itself is pinned at 0.8 because the crypto stack
+# (k256/p256/ed25519-dalek via elliptic-curve 0.13) still requires rand_core 0.6.
+# Moves to 0.5 as part of the RustCrypto rand wave, not before.
 num-bigint = { version = "0.4", features = ["rand"] }
 num-traits = "0.2"
 rand = "0.8"
@@ -64,7 +69,7 @@ frost-ed25519 = "3"
 frost-core = "3"
 
 # Parallelism
-rayon = "1.11"
+rayon = "1.12"
 # Post-quantum cryptography (NIST FIPS 203/204 standardized)
 pqcrypto-mlkem = "0.1"
 pqcrypto-mldsa = "0.1"
@@ -75,7 +80,7 @@ x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }
 criterion = { version = "0.8", features = ["html_reports"] }
 hex = "0.4"
 serde_json = "1.0"
-proptest = "1.9"
+proptest = "1.11"
 dudect-bencher = "0.6"
 
 [[bench]]

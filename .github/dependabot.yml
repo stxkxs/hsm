@@ -1,0 +1,80 @@
+version: 2
+
+# Keeps the four dependency surfaces current so security advisories surface as PRs
+# instead of accumulating silently in the Dependabot alert list. Rust and npm updates
+# are grouped so a maintenance pass is one review, not thirty.
+updates:
+  # Rust workspace (23 crates, one shared Cargo.lock)
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      rust-patch-and-minor:
+        update-types: ["minor", "patch"]
+    ignore:
+      # Blocked by trait/ecosystem coupling — the RustCrypto digest 0.11 /
+      # crypto-common 0.2 wave cannot be taken piecemeal while aes-gcm 0.10,
+      # {k,p}256/p384 0.13, ed25519-dalek 2.x and rsa 0.9 still pin digest 0.10.
+      # Bumping any one of these creates duplicate, incoherent trait generations.
+      - dependency-name: "sha2"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "sha3"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "hmac"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "aes-gcm"
+        update-types: ["version-update:semver-minor"]
+      # rand 0.9+/rand_core 0.9+ break every RNG-into-crypto call site, because the
+      # crypto stack pins rand_core 0.6 CryptoRng via elliptic-curve 0.13.
+      - dependency-name: "rand"
+      - dependency-name: "rand_core"
+      - dependency-name: "rand_chacha"
+      # Attempted and reverted — see docs and .cargo/audit.toml for rationale.
+      - dependency-name: "z3"          # 0.13+ removed the 'ctx lifetime; full rewrite of 7 SMT encoders
+      - dependency-name: "reqwest"     # 0.13 dropped the `json` and `rustls-tls` features
+      - dependency-name: "sev"         # 8.x pulls rdrand 0.8, x86-only intrinsics
+      - dependency-name: "dudect-bencher" # 0.7 breaks the rand 0.8 API in timing_tests.rs
+
+  # Next.js dashboard
+  - package-ecosystem: npm
+    directory: "/ui"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      ui-patch-and-minor:
+        update-types: ["minor", "patch"]
+      radix-ui:
+        patterns: ["@radix-ui/*"]
+    ignore:
+      # eslint-config-next 16 bundles eslint-plugin-react, which calls the
+      # context.getFilename() API removed in eslint 10 — eslint 10 crashes on it.
+      - dependency-name: "eslint"
+        versions: [">=10"]
+
+  # TypeScript client SDK
+  - package-ecosystem: npm
+    directory: "/sdks/typescript"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      sdk-patch-and-minor:
+        update-types: ["minor", "patch"]
+
+  # CI action versions — these drifted 1-3 majors behind before this file existed.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Builder/runtime base images in the multi-stage Dockerfile
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly

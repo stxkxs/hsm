@@ -1059,7 +1059,7 @@ pub async fn encrypt_data(
 
     // Generate a random 256-bit key
     let mut key_bytes = vec![0u8; 32];
-    getrandom::getrandom(&mut key_bytes)
+    getrandom::fill(&mut key_bytes)
         .map_err(|e| ApiError::Internal(format!("Key generation failed: {}", e)))?;
     let key = KeyMaterial::from_bytes(key_bytes);
 
@@ -1173,7 +1173,7 @@ pub struct AuditLogQuery {
 /// Get audit log
 ///
 /// Requires the `ViewAuditLogs` permission (Admin or Auditor roles). Returns
-/// the tamper-evident events recorded by the [`AsyncAuditLogger`], filtered by
+/// the tamper-evident events recorded by the [`AsyncAuditLogger`](hsm_audit::AsyncAuditLogger), filtered by
 /// the optional query parameters.
 pub async fn get_audit_log(
     State(state): State<AppState>,

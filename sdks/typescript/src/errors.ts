@@ -121,10 +121,7 @@ export class SessionError extends HsmError {
 /**
  * Parse an error response from the server
  */
-export function parseErrorResponse(
-  statusCode: number,
-  body: unknown
-): HsmError {
+export function parseErrorResponse(statusCode: number, body: unknown): HsmError {
   const message =
     typeof body === 'object' && body !== null && 'message' in body
       ? String((body as { message: unknown }).message)

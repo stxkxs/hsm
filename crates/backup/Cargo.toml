@@ -13,19 +13,19 @@ rand = "0.8"  # Random number generation
 thiserror = "2.0"  # Error handling
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-zeroize = { version = "1.8", features = ["derive"] }
-rayon = "1.11"  # Parallel processing
+zeroize = { version = "1.9", features = ["derive"] }
+rayon = "1.12"  # Parallel processing
 zstd = "0.13"  # Compression
 postcard = { workspace = true }  # Binary serialization
-tokio = { version = "1.49", features = ["io-util", "fs"] }  # Async I/O
+tokio = { version = "1.53", features = ["io-util", "fs"] }  # Async I/O
 hmac = "0.12"  # HMAC for integrity
 sha2 = "0.10"  # SHA-256 hashing
 
 [dev-dependencies]
-proptest = "1.9"  # Property-based testing
+proptest = "1.11"  # Property-based testing
 criterion = { version = "0.8", features = ["html_reports"] }  # Benchmarking
-tempfile = "3.24"  # Temporary files for testing
-tokio = { version = "1.49", features = ["macros", "rt-multi-thread"] }  # Async runtime for tests
+tempfile = "3.27"  # Temporary files for testing
+tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }  # Async runtime for tests
 
 [[bench]]
 name = "backup_benchmarks"

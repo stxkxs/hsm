@@ -7,11 +7,11 @@
 import type {
   GenerateKeyRequest,
   GenerateKeyResponse,
-  KeyMetadata,
-  ListKeysResponse,
-  ListKeysOptions,
   KeyAlgorithm,
+  KeyMetadata,
   KeyPurpose,
+  ListKeysOptions,
+  ListKeysResponse,
 } from './types';
 
 /** Key management class for convenient key operations */

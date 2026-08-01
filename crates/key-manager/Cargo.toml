@@ -25,13 +25,13 @@ blst = "0.3"
 rsa = "0.9"
 
 # Security
-zeroize = { version = "1.8", features = ["derive"] }
+zeroize = { version = "1.9", features = ["derive"] }
 secrecy = "0.10"
 
 # Concurrency
-tokio = { version = "1.49", features = ["sync", "rt", "macros"] }
+tokio = { version = "1.53", features = ["sync", "rt", "macros"] }
 parking_lot = "0.12"
-dashmap = "6.1"
+dashmap = "6.2"
 lru = "0.18"
 
 # Serialization
@@ -42,7 +42,7 @@ postcard = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 
 # UUID for key IDs
-uuid = { version = "1.19", features = ["v4", "serde"] }
+uuid = { version = "1.24", features = ["v4", "serde"] }
 
 # Logging
 tracing = "0.1"
@@ -64,9 +64,9 @@ hsm-hardware-backend = { path = "../hardware-backend", optional = true }
 async-trait = { version = "0.1", optional = true }
 
 [dev-dependencies]
-tempfile = "3.24"
-tokio = { version = "1.49", features = ["full", "test-util"] }
-proptest = "1.9"
+tempfile = "3.27"
+tokio = { version = "1.53", features = ["full", "test-util"] }
+proptest = "1.11"
 criterion = "0.8"
 # Capturing tracing ERROR events to prove delete_key no longer error-logs
 tracing-subscriber = { version = "0.3", features = ["registry"] }

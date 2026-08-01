@@ -64,7 +64,7 @@ fn test_ct_compare_tags(runner: &mut CtRunner, rng: &mut BenchRng) {
 
     // Benchmark the comparison
     // Timing should be independent of whether tags match or which byte differs
-    for (class, tags) in classes.into_iter().zip(inputs.into_iter()) {
+    for (class, tags) in classes.into_iter().zip(inputs) {
         runner.run_one(class, || {
             let _ = ct_compare(&tags.0, &tags.1);
         });
@@ -109,7 +109,7 @@ fn test_ct_compare_diff_position(runner: &mut CtRunner, rng: &mut BenchRng) {
         classes.push(class);
     }
 
-    for (class, data) in classes.into_iter().zip(inputs.into_iter()) {
+    for (class, data) in classes.into_iter().zip(inputs) {
         runner.run_one(class, || {
             let _ = ct_compare(&data.0, &data.1);
         });
@@ -147,7 +147,7 @@ fn test_ct_select(runner: &mut CtRunner, rng: &mut BenchRng) {
         classes.push(class);
     }
 
-    for (class, input) in classes.into_iter().zip(inputs.into_iter()) {
+    for (class, input) in classes.into_iter().zip(inputs) {
         runner.run_one(class, || {
             let _ = ct_select(input.0, &input.1, &input.2);
         });
@@ -202,7 +202,7 @@ fn test_aes_gcm_tag_verification(runner: &mut CtRunner, rng: &mut BenchRng) {
 
     // Benchmark decryption
     // Timing should be independent of tag validity
-    for (class, ciphertext) in classes.into_iter().zip(inputs.into_iter()) {
+    for (class, ciphertext) in classes.into_iter().zip(inputs) {
         runner.run_one(class, || {
             let _ = AesGcmEngine::decrypt_aes256(&key, &ciphertext, None);
         });
@@ -249,7 +249,7 @@ fn test_ct_verify_tag_hamming_distance(runner: &mut CtRunner, rng: &mut BenchRng
         classes.push(class);
     }
 
-    for (class, tags) in classes.into_iter().zip(inputs.into_iter()) {
+    for (class, tags) in classes.into_iter().zip(inputs) {
         runner.run_one(class, || {
             let _ = ct_verify_tag(&tags.0, &tags.1);
         });
@@ -291,7 +291,7 @@ fn test_ct_compare_different_lengths(runner: &mut CtRunner, rng: &mut BenchRng) 
         classes.push(class);
     }
 
-    for (class, data) in classes.into_iter().zip(inputs.into_iter()) {
+    for (class, data) in classes.into_iter().zip(inputs) {
         runner.run_one(class, || {
             let _ = ct_compare(&data.0, &data.1);
         });
@@ -337,7 +337,7 @@ fn test_ct_verify_signature(runner: &mut CtRunner, rng: &mut BenchRng) {
         classes.push(class);
     }
 
-    for (class, sigs) in classes.into_iter().zip(inputs.into_iter()) {
+    for (class, sigs) in classes.into_iter().zip(inputs) {
         runner.run_one(class, || {
             let _ = ct_verify_signature(&sigs.0, &sigs.1);
         });

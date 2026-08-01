@@ -788,7 +788,7 @@ impl WebAuthnManager {
         challenge_type: ChallengeType,
     ) -> Result<WebAuthnChallenge> {
         let mut challenge_bytes = [0u8; 32];
-        getrandom::getrandom(&mut challenge_bytes)
+        getrandom::fill(&mut challenge_bytes)
             .map_err(|_| AuthError::Internal("Failed to generate challenge".to_string()))?;
 
         let challenge = WebAuthnChallenge {

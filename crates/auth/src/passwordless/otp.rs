@@ -91,7 +91,7 @@ impl OtpSecret {
     /// Create a secret with specific length
     pub fn generate_with_length(length: usize) -> Self {
         let mut secret = vec![0u8; length];
-        getrandom::getrandom(&mut secret).expect("Failed to generate random bytes");
+        getrandom::fill(&mut secret).expect("Failed to generate random bytes");
         Self { secret }
     }
 
@@ -616,7 +616,7 @@ fn current_timestamp() -> u64 {
 
 fn generate_recovery_code() -> String {
     let mut bytes = [0u8; 10];
-    getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
+    getrandom::fill(&mut bytes).expect("Failed to generate random bytes");
     // Format as XXXX-XXXX-XXXX
     let hex = hex::encode(&bytes[..6]);
     format!("{}-{}-{}", &hex[0..4], &hex[4..8], &hex[8..12])

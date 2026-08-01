@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "lib": ["ES2022"],
+    "types": ["node"],
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
@@ -15,6 +16,13 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "moduleResolution": "bundler",
+    // Load-bearing for `npm run build` only, not for `tsc --noEmit`. tsup's --dts step
+    // (rollup-plugin-dts) injects a `baseUrl` into the compiler options it synthesizes,
+    // and TS 6 raises that to an error: "TS5101: Option 'baseUrl' is deprecated and will
+    // stop functioning in TypeScript 7.0". Nothing in this file sets baseUrl. Removing
+    // this line type-checks fine and then fails the dts build. Drop it once tsup stops
+    // emitting baseUrl.
+    "ignoreDeprecations": "6.0",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,

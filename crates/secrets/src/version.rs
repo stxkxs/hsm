@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 
 use crate::secret::SecretId;
 
@@ -195,7 +196,7 @@ impl VersionManager {
 
         // Sort by version descending (newest first)
         let mut sorted: Vec<_> = versions.iter().collect();
-        sorted.sort_by(|a, b| b.version.cmp(&a.version));
+        sorted.sort_by_key(|v| Reverse(v.version));
 
         for (i, version) in sorted.iter().enumerate() {
             // Skip already destroyed versions

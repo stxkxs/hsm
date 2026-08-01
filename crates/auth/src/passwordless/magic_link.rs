@@ -19,7 +19,7 @@ impl MagicLinkToken {
     /// Create a new magic link token
     fn new() -> Self {
         let mut bytes = [0u8; 32];
-        getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
+        getrandom::fill(&mut bytes).expect("Failed to generate random bytes");
         Self(hex::encode(bytes))
     }
 

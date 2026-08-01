@@ -5,6 +5,7 @@ use crate::detection::{DetectionResult, Severity};
 use crate::error::{BridgeError, Result};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -465,7 +466,7 @@ impl AlertManager {
     /// Get recent alerts
     pub fn recent_alerts(&self, limit: usize) -> Vec<Alert> {
         let mut alerts: Vec<_> = self.history.iter().map(|e| e.clone()).collect();
-        alerts.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        alerts.sort_by_key(|a| Reverse(a.timestamp));
         alerts.truncate(limit);
         alerts
     }
