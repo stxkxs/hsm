@@ -6,10 +6,9 @@ Pydantic models for request and response types.
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
-
 
 # ============================================================================
 # Key Management Types
@@ -49,10 +48,10 @@ class KeyState(str, Enum):
 class GenerateKeyRequest(BaseModel):
     """Request to generate a new key."""
 
-    key_id: Optional[str] = Field(None, description="Unique key identifier")
+    key_id: str | None = Field(default=None, description="Unique key identifier")
     algorithm: KeyAlgorithm = Field(..., description="Key algorithm")
-    purpose: KeyPurpose = Field(KeyPurpose.GENERAL, description="Key purpose")
-    namespace: str = Field("default", description="Namespace for the key")
+    purpose: KeyPurpose = Field(default=KeyPurpose.GENERAL, description="Key purpose")
+    namespace: str = Field(default="default", description="Namespace for the key")
     labels: dict[str, str] = Field(default_factory=dict, description="Key labels")
 
 
@@ -62,7 +61,7 @@ class GenerateKeyResponse(BaseModel):
     key_id: str = Field(..., description="Generated key ID")
     algorithm: KeyAlgorithm = Field(..., description="Key algorithm")
     purpose: KeyPurpose = Field(..., description="Key purpose")
-    public_key: Optional[str] = Field(None, description="Public key (base64)")
+    public_key: str | None = Field(default=None, description="Public key (base64)")
     created_at: str = Field(..., description="Creation timestamp")
 
 
@@ -73,11 +72,11 @@ class KeyMetadata(BaseModel):
     algorithm: KeyAlgorithm = Field(..., description="Key algorithm")
     purpose: KeyPurpose = Field(..., description="Key purpose")
     namespace: str = Field(..., description="Namespace")
-    public_key: Optional[str] = Field(None, description="Public key (base64)")
+    public_key: str | None = Field(default=None, description="Public key (base64)")
     created_at: str = Field(..., description="Creation timestamp")
-    last_used: Optional[str] = Field(None, description="Last used timestamp")
+    last_used: str | None = Field(default=None, description="Last used timestamp")
     labels: dict[str, str] = Field(default_factory=dict, description="Key labels")
-    active: bool = Field(True, description="Whether the key is active")
+    active: bool = Field(default=True, description="Whether the key is active")
 
 
 class ListKeysResponse(BaseModel):
@@ -85,16 +84,16 @@ class ListKeysResponse(BaseModel):
 
     keys: list[KeyMetadata] = Field(..., description="List of keys")
     total: int = Field(..., description="Total count")
-    next_cursor: Optional[str] = Field(None, description="Next page cursor")
+    next_cursor: str | None = Field(default=None, description="Next page cursor")
 
 
 class ListKeysOptions(BaseModel):
     """List keys options."""
 
-    namespace: Optional[str] = None
-    limit: Optional[int] = None
-    cursor: Optional[str] = None
-    state: Optional[KeyState] = None
+    namespace: str | None = None
+    limit: int | None = None
+    cursor: str | None = None
+    state: KeyState | None = None
 
 
 # ============================================================================
@@ -106,7 +105,7 @@ class SignRequest(BaseModel):
     """Request to sign data."""
 
     data: str = Field(..., description="Data to sign (base64)")
-    hash_algorithm: Optional[str] = Field(None, description="Hash algorithm")
+    hash_algorithm: str | None = Field(default=None, description="Hash algorithm")
 
 
 class SignResponse(BaseModel):
@@ -133,7 +132,7 @@ class EncryptRequest(BaseModel):
     """Request to encrypt data."""
 
     plaintext: str = Field(..., description="Plaintext data (base64)")
-    aad: Optional[str] = Field(None, description="Additional authenticated data")
+    aad: str | None = Field(default=None, description="Additional authenticated data")
 
 
 class EncryptResponse(BaseModel):
@@ -141,7 +140,7 @@ class EncryptResponse(BaseModel):
 
     ciphertext: str = Field(..., description="Ciphertext (base64)")
     nonce: str = Field(..., description="Nonce (base64)")
-    tag: Optional[str] = Field(None, description="Authentication tag (base64)")
+    tag: str | None = Field(default=None, description="Authentication tag (base64)")
 
 
 class DecryptRequest(BaseModel):
@@ -149,8 +148,8 @@ class DecryptRequest(BaseModel):
 
     ciphertext: str = Field(..., description="Ciphertext (base64)")
     nonce: str = Field(..., description="Nonce (base64)")
-    tag: Optional[str] = Field(None, description="Authentication tag (base64)")
-    aad: Optional[str] = Field(None, description="Additional authenticated data")
+    tag: str | None = Field(default=None, description="Authentication tag (base64)")
+    aad: str | None = Field(default=None, description="Additional authenticated data")
 
 
 class DecryptResponse(BaseModel):
@@ -163,13 +162,17 @@ class DecryptResponse(BaseModel):
 # Batch Operation Types
 # ============================================================================
 
+# Each batch entry is either the success model or a per-item error object. The union must be
+# evaluated left-to-right: under pydantic's default "smart" mode a plain ``dict`` member always
+# wins against a model member, so the success model would never be constructed.
+
 
 class BatchSignItem(BaseModel):
     """Single item in batch sign request."""
 
     key_id: str
     data: str
-    hash_algorithm: Optional[str] = None
+    hash_algorithm: str | None = None
 
 
 class BatchSignRequest(BaseModel):
@@ -181,7 +184,7 @@ class BatchSignRequest(BaseModel):
 class BatchSignResponse(BaseModel):
     """Batch sign response."""
 
-    results: list[SignResponse | dict[str, str]]
+    results: list[Annotated[SignResponse | dict[str, Any], Field(union_mode="left_to_right")]]
 
 
 class BatchVerifyItem(BaseModel):
@@ -201,7 +204,7 @@ class BatchVerifyRequest(BaseModel):
 class BatchVerifyResponse(BaseModel):
     """Batch verify response."""
 
-    results: list[VerifyResponse | dict[str, str]]
+    results: list[Annotated[VerifyResponse | dict[str, Any], Field(union_mode="left_to_right")]]
 
 
 class BatchEncryptItem(BaseModel):
@@ -209,7 +212,7 @@ class BatchEncryptItem(BaseModel):
 
     key_id: str
     plaintext: str
-    aad: Optional[str] = None
+    aad: str | None = None
 
 
 class BatchEncryptRequest(BaseModel):
@@ -221,7 +224,7 @@ class BatchEncryptRequest(BaseModel):
 class BatchEncryptResponse(BaseModel):
     """Batch encrypt response."""
 
-    results: list[EncryptResponse | dict[str, str]]
+    results: list[Annotated[EncryptResponse | dict[str, Any], Field(union_mode="left_to_right")]]
 
 
 class BatchDecryptItem(BaseModel):
@@ -230,8 +233,8 @@ class BatchDecryptItem(BaseModel):
     key_id: str
     ciphertext: str
     nonce: str
-    tag: Optional[str] = None
-    aad: Optional[str] = None
+    tag: str | None = None
+    aad: str | None = None
 
 
 class BatchDecryptRequest(BaseModel):
@@ -243,7 +246,7 @@ class BatchDecryptRequest(BaseModel):
 class BatchDecryptResponse(BaseModel):
     """Batch decrypt response."""
 
-    results: list[DecryptResponse | dict[str, str]]
+    results: list[Annotated[DecryptResponse | dict[str, Any], Field(union_mode="left_to_right")]]
 
 
 # ============================================================================
@@ -258,10 +261,10 @@ class AuditEntry(BaseModel):
     timestamp: str = Field(..., description="Timestamp")
     event_type: str = Field(..., description="Event type")
     actor: str = Field(..., description="Actor")
-    resource: Optional[str] = Field(None, description="Resource")
+    resource: str | None = Field(default=None, description="Resource")
     action: str = Field(..., description="Action")
     result: str = Field(..., description="Result")
-    details: Optional[str] = Field(None, description="Details")
+    details: str | None = Field(default=None, description="Details")
 
 
 class AuditLogResponse(BaseModel):
@@ -269,19 +272,19 @@ class AuditLogResponse(BaseModel):
 
     entries: list[AuditEntry] = Field(..., description="Audit entries")
     total: int = Field(..., description="Total count")
-    next_cursor: Optional[str] = Field(None, description="Next page cursor")
+    next_cursor: str | None = Field(default=None, description="Next page cursor")
 
 
 class AuditLogOptions(BaseModel):
     """Audit log query options."""
 
-    namespace: Optional[str] = None
-    start_time: Optional[str | datetime] = None
-    end_time: Optional[str | datetime] = None
-    user_id: Optional[str] = None
-    operation: Optional[str] = None
-    limit: Optional[int] = None
-    cursor: Optional[str] = None
+    namespace: str | None = None
+    start_time: str | datetime | None = None
+    end_time: str | datetime | None = None
+    user_id: str | None = None
+    operation: str | None = None
+    limit: int | None = None
+    cursor: str | None = None
 
 
 # ============================================================================
@@ -301,7 +304,7 @@ class ComponentStatus(BaseModel):
     """Component status for readiness check."""
 
     status: str = Field(..., description="Component status")
-    message: Optional[str] = Field(None, description="Optional message")
+    message: str | None = Field(default=None, description="Optional message")
 
 
 class ReadyResponse(BaseModel):
@@ -319,10 +322,10 @@ class ReadyResponse(BaseModel):
 class RetryConfig(BaseModel):
     """Retry configuration."""
 
-    max_retries: int = Field(3, description="Maximum number of retries")
-    base_delay: float = Field(0.1, description="Base delay in seconds")
-    max_delay: float = Field(5.0, description="Maximum delay in seconds")
-    jitter: float = Field(0.1, description="Jitter factor")
+    max_retries: int = Field(default=3, description="Maximum number of retries")
+    base_delay: float = Field(default=0.1, description="Base delay in seconds")
+    max_delay: float = Field(default=5.0, description="Maximum delay in seconds")
+    jitter: float = Field(default=0.1, description="Jitter factor")
     retry_on_status: list[int] = Field(
         default_factory=lambda: [429, 502, 503, 504],
         description="Status codes to retry on",
@@ -332,18 +335,18 @@ class RetryConfig(BaseModel):
 class SessionScope(BaseModel):
     """Session scope for limiting session capabilities."""
 
-    allowed_operations: Optional[list[str]] = None
-    allowed_keys: Optional[list[str]] = None
-    max_operations: Optional[int] = None
-    rate_limit: Optional[int] = None
+    allowed_operations: list[str] | None = None
+    allowed_keys: list[str] | None = None
+    max_operations: int | None = None
+    rate_limit: int | None = None
 
 
 class HsmClientConfig(BaseModel):
     """HSM Client configuration."""
 
     base_url: str = Field(..., description="Base URL of the HSM server")
-    session_id: Optional[str] = Field(None, description="Session ID")
-    session_token: Optional[str] = Field(None, description="Session token")
-    timeout: float = Field(30.0, description="Request timeout in seconds")
+    session_id: str | None = Field(default=None, description="Session ID")
+    session_token: str | None = Field(default=None, description="Session token")
+    timeout: float = Field(default=30.0, description="Request timeout in seconds")
     headers: dict[str, str] = Field(default_factory=dict, description="Custom headers")
-    retry: Optional[RetryConfig] = None
+    retry: RetryConfig | None = None

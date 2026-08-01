@@ -4,7 +4,7 @@ HSM Client Exceptions
 Custom exception types for the HSM Python SDK.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 
 class HsmError(Exception):
@@ -14,9 +14,9 @@ class HsmError(Exception):
         self,
         message: str,
         *,
-        status_code: Optional[int] = None,
-        code: Optional[str] = None,
-        details: Optional[dict[str, Any]] = None,
+        status_code: int | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message
@@ -50,9 +50,18 @@ class AuthorizationError(HsmError):
 class NotFoundError(HsmError):
     """Error when a resource is not found."""
 
-    def __init__(self, resource: str, resource_id: str) -> None:
-        message = f"{resource} not found: {resource_id}"
-        super().__init__(message, status_code=404, code="NOT_FOUND")
+    def __init__(
+        self,
+        resource: str,
+        resource_id: str,
+        *,
+        message: str | None = None,
+    ) -> None:
+        super().__init__(
+            message or f"{resource} not found: {resource_id}",
+            status_code=404,
+            code="NOT_FOUND",
+        )
         self.resource = resource
         self.resource_id = resource_id
 
@@ -60,7 +69,7 @@ class NotFoundError(HsmError):
 class ValidationError(HsmError):
     """Error when input validation fails."""
 
-    def __init__(self, message: str, *, field: Optional[str] = None) -> None:
+    def __init__(self, message: str, *, field: str | None = None) -> None:
         super().__init__(message, status_code=400, code="VALIDATION_ERROR")
         self.field = field
 
@@ -72,7 +81,7 @@ class RateLimitError(HsmError):
         self,
         message: str = "Rate limit exceeded",
         *,
-        retry_after: Optional[int] = None,
+        retry_after: int | None = None,
     ) -> None:
         super().__init__(message, status_code=429, code="RATE_LIMIT_EXCEEDED")
         self.retry_after = retry_after
@@ -114,23 +123,37 @@ class SessionError(HsmError):
 
 
 def parse_error_response(status_code: int, body: Any) -> HsmError:
-    """Parse an error response from the server."""
-    message = "Unknown error"
-    if isinstance(body, dict):
-        message = body.get("message", message)
+    """Parse an error response from the server.
 
+    The server error body is ``{"error": <code>, "message": <human>, "details": <optional>}``.
+    The returned exception keeps the SDK's own stable ``code`` taxonomy, while the server's
+    machine-readable ``error`` code and any ``details`` are preserved on ``.details`` so no
+    diagnostic information from the response is lost.
+    """
+    fields: dict[str, Any] = body if isinstance(body, dict) else {}
+    message = fields.get("message") or "Unknown error"
+
+    error: HsmError
     if status_code == 400:
-        return ValidationError(message)
+        error = ValidationError(message)
     elif status_code == 401:
-        return AuthenticationError(message)
+        error = AuthenticationError(message)
     elif status_code == 403:
-        return AuthorizationError(message)
+        error = AuthorizationError(message)
     elif status_code == 404:
-        return NotFoundError("Resource", "unknown")
+        # Preserve the server's message instead of replacing it with a placeholder.
+        error = NotFoundError("Resource", "unknown", message=message)
     elif status_code == 429:
-        retry_after = body.get("retry_after") if isinstance(body, dict) else None
-        return RateLimitError(message, retry_after=retry_after)
+        error = RateLimitError(message, retry_after=fields.get("retry_after"))
     elif status_code >= 500:
-        return ServerError(message, status_code)
+        error = ServerError(message, status_code)
     else:
-        return HsmError(message, status_code=status_code)
+        error = HsmError(message, status_code=status_code)
+
+    details: dict[str, Any] = {}
+    if fields.get("error") is not None:
+        details["error"] = fields["error"]
+    if fields.get("details") is not None:
+        details["details"] = fields["details"]
+    error.details = details
+    return error

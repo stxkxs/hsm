@@ -37,3 +37,8 @@ build/
 # Node (UI + SDKs)
 node_modules/
 .next/
+
+# sdks/rust is a published library: per Rust convention it does not commit a
+# Cargo.lock, so downstream consumers resolve their own. Its CI job deliberately
+# omits --locked to match.
+sdks/rust/Cargo.lock

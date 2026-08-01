@@ -2,17 +2,16 @@
 HSM Client Tests
 """
 
-import pytest
 from hsm_client import (
-    HsmClient,
-    create_client,
-    HsmClientConfig,
     AuthenticationError,
+    HsmClient,
+    HsmClientConfig,
+    NetworkError,
     NotFoundError,
     RateLimitError,
-    NetworkError,
-    to_base64,
+    create_client,
     from_base64,
+    to_base64,
 )
 from hsm_client.crypto import is_base64, normalize_to_base64
 

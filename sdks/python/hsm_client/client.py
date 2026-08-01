@@ -6,8 +6,10 @@ Main client class for interacting with the HSM server.
 
 import asyncio
 import random
+import time
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any, AsyncIterator, Optional, Union
+from typing import Any
 from urllib.parse import quote, urlencode
 
 import httpx
@@ -32,9 +34,7 @@ from hsm_client.models import (
     BatchSignResponse,
     BatchVerifyRequest,
     BatchVerifyResponse,
-    DecryptRequest,
     DecryptResponse,
-    EncryptRequest,
     EncryptResponse,
     GenerateKeyRequest,
     GenerateKeyResponse,
@@ -45,9 +45,7 @@ from hsm_client.models import (
     ListKeysResponse,
     ReadyResponse,
     RetryConfig,
-    SignRequest,
     SignResponse,
-    VerifyRequest,
     VerifyResponse,
 )
 
@@ -57,8 +55,8 @@ class TokenManager:
 
     def __init__(
         self,
-        session_id: Optional[str] = None,
-        session_token: Optional[str] = None,
+        session_id: str | None = None,
+        session_token: str | None = None,
         max_operations_before_rotation: int = 900,
     ) -> None:
         self._session_id = session_id
@@ -67,11 +65,11 @@ class TokenManager:
         self._max_operations = max_operations_before_rotation
 
     @property
-    def session_id(self) -> Optional[str]:
+    def session_id(self) -> str | None:
         return self._session_id
 
     @property
-    def session_token(self) -> Optional[str]:
+    def session_token(self) -> str | None:
         return self._session_token
 
     def set_credentials(self, session_id: str, session_token: str) -> None:
@@ -90,7 +88,7 @@ class TokenManager:
         """Check if authenticated."""
         return self._session_id is not None and self._session_token is not None
 
-    def get_authorization_header(self) -> Optional[str]:
+    def get_authorization_header(self) -> str | None:
         """Get authorization header value."""
         if not self._session_id or not self._session_token:
             return None
@@ -129,9 +127,7 @@ class CircuitBreaker:
             return True
 
         if self._state == "open":
-            import time
-
-            elapsed = time.time() - self._last_failure_time
+            elapsed = time.monotonic() - self._last_failure_time
             if elapsed >= self._recovery_timeout:
                 self._state = "half-open"
                 self._success_count = 0
@@ -153,14 +149,10 @@ class CircuitBreaker:
 
     def record_failure(self) -> None:
         """Record a failed request."""
-        import time
-
         self._failure_count += 1
-        self._last_failure_time = time.time()
+        self._last_failure_time = time.monotonic()
 
-        if self._state == "half-open":
-            self._state = "open"
-        elif self._failure_count >= self._failure_threshold:
+        if self._state == "half-open" or self._failure_count >= self._failure_threshold:
             self._state = "open"
 
     @property
@@ -177,7 +169,7 @@ class CircuitBreaker:
 class RetryStrategy:
     """Retry strategy with exponential backoff."""
 
-    def __init__(self, config: Optional[RetryConfig] = None) -> None:
+    def __init__(self, config: RetryConfig | None = None) -> None:
         config = config or RetryConfig()
         self._max_retries = config.max_retries
         self._base_delay = config.base_delay
@@ -197,7 +189,7 @@ class RetryStrategy:
 
     def get_delay(self, attempt: int) -> float:
         """Calculate delay for next retry."""
-        exponential_delay = self._base_delay * (2**attempt)
+        exponential_delay: float = self._base_delay * float(2**attempt)
         capped_delay = min(exponential_delay, self._max_delay)
         jitter_amount = capped_delay * self._jitter * random.random()
         return capped_delay + jitter_amount
@@ -235,7 +227,7 @@ class HsmClient:
         self,
         method: str,
         path: str,
-        body: Optional[dict[str, Any]] = None,
+        body: dict[str, Any] | None = None,
         attempt: int = 0,
     ) -> Any:
         """Make an HTTP request."""
@@ -281,20 +273,22 @@ class HsmClient:
 
         except httpx.TimeoutException as e:
             self._circuit_breaker.record_failure()
-            raise TimeoutError() from e
-
-        except httpx.NetworkError as e:
             if self._retry_strategy.should_retry_error(e, attempt):
-                self._circuit_breaker.record_failure()
                 await self._retry_strategy.sleep(attempt)
                 return await self._request(method, path, body, attempt + 1)
+            raise TimeoutError(str(e) or "Request timed out") from e
+
+        except httpx.NetworkError as e:
             self._circuit_breaker.record_failure()
+            if self._retry_strategy.should_retry_error(e, attempt):
+                await self._retry_strategy.sleep(attempt)
+                return await self._request(method, path, body, attempt + 1)
             raise NetworkError(str(e)) from e
 
     async def _get(self, path: str) -> Any:
         return await self._request("GET", path)
 
-    async def _post(self, path: str, body: Optional[dict[str, Any]] = None) -> Any:
+    async def _post(self, path: str, body: dict[str, Any] | None = None) -> Any:
         return await self._request("POST", path, body)
 
     async def _delete(self, path: str) -> Any:
@@ -344,9 +338,7 @@ class HsmClient:
         data = await self._get(f"/keys/{quote(key_id, safe='')}")
         return KeyMetadata(**data)
 
-    async def list_keys(
-        self, options: Optional[ListKeysOptions] = None
-    ) -> ListKeysResponse:
+    async def list_keys(self, options: ListKeysOptions | None = None) -> ListKeysResponse:
         """List keys."""
         params = {}
         if options:
@@ -374,8 +366,8 @@ class HsmClient:
     async def sign(
         self,
         key_id: str,
-        data: Union[bytes, str],
-        hash_algorithm: Optional[str] = None,
+        data: bytes | str,
+        hash_algorithm: str | None = None,
     ) -> SignResponse:
         """Sign data with a key."""
         body = {
@@ -389,7 +381,7 @@ class HsmClient:
     async def verify(
         self,
         key_id: str,
-        data: Union[bytes, str],
+        data: bytes | str,
         signature: str,
     ) -> VerifyResponse:
         """Verify a signature."""
@@ -403,8 +395,8 @@ class HsmClient:
     async def encrypt(
         self,
         key_id: str,
-        plaintext: Union[bytes, str],
-        aad: Optional[str] = None,
+        plaintext: bytes | str,
+        aad: str | None = None,
     ) -> EncryptResponse:
         """Encrypt data with a key."""
         body: dict[str, Any] = {
@@ -420,8 +412,8 @@ class HsmClient:
         key_id: str,
         ciphertext: str,
         nonce: str,
-        tag: Optional[str] = None,
-        aad: Optional[str] = None,
+        tag: str | None = None,
+        aad: str | None = None,
     ) -> DecryptResponse:
         """Decrypt data with a key."""
         body: dict[str, Any] = {
@@ -467,9 +459,7 @@ class HsmClient:
     # Audit
     # =========================================================================
 
-    async def get_audit_log(
-        self, options: Optional[AuditLogOptions] = None
-    ) -> AuditLogResponse:
+    async def get_audit_log(self, options: AuditLogOptions | None = None) -> AuditLogResponse:
         """Get audit log entries."""
         params = {}
         if options:
@@ -503,14 +493,14 @@ class HsmClient:
         return AuditLogResponse(**data)
 
     async def stream_audit_log(
-        self, options: Optional[AuditLogOptions] = None
+        self, options: AuditLogOptions | None = None
     ) -> AsyncIterator[AuditEntry]:
         """Stream audit log entries with automatic pagination."""
-        cursor: Optional[str] = None
+        base = options or AuditLogOptions()
+        cursor: str | None = base.cursor
         while True:
-            opts = options or AuditLogOptions()
-            opts.cursor = cursor
-            response = await self.get_audit_log(opts)
+            # Copy rather than mutate: `options` belongs to the caller and may be reused.
+            response = await self.get_audit_log(base.model_copy(update={"cursor": cursor}))
             for entry in response.entries:
                 yield entry
             cursor = response.next_cursor
@@ -539,11 +529,11 @@ class HsmClient:
 def create_client(
     base_url: str,
     *,
-    session_id: Optional[str] = None,
-    session_token: Optional[str] = None,
+    session_id: str | None = None,
+    session_token: str | None = None,
     timeout: float = 30.0,
-    headers: Optional[dict[str, str]] = None,
-    retry: Optional[RetryConfig] = None,
+    headers: dict[str, str] | None = None,
+    retry: RetryConfig | None = None,
 ) -> HsmClient:
     """Create a new HSM client."""
     config = HsmClientConfig(

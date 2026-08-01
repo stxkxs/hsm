@@ -130,14 +130,25 @@ updates:
       sdk-rust-patch-and-minor:
         update-types: ["minor", "patch"]
     ignore:
-      # Same coupling as the main workspace: this SDK re-implements request signing
-      # with sha2 0.10 + hmac 0.12, and reqwest 0.13 renamed `rustls-tls` to `rustls`.
+      # NOTE: these use `versions:`, NOT `update-types:` — deliberately, and the
+      # difference is not cosmetic. This crate ships no Cargo.lock (it is a library),
+      # so Dependabot performs REQUIREMENT updates here ("update sha2 requirement from
+      # 0.10 to 0.11") rather than the version updates it performs against the
+      # lockfile-bearing root workspace ("bump sha2 from 0.10.9 to 0.11.0"). The
+      # `version-update:semver-*` filters do not apply to requirement updates, so the
+      # update-types form used everywhere else in this file is silently inert here —
+      # it let sha2/hmac/reqwest PRs through on the first scan. `versions:` works for
+      # both kinds.
+      #
+      # Same coupling as the main workspace: this SDK signs requests with
+      # sha2 0.10 + hmac 0.12 (one RustCrypto trait generation), and reqwest 0.13
+      # renamed the `rustls-tls` feature this crate enables to `rustls`.
       - dependency-name: "sha2"
-        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+        versions: [">=0.11"]
       - dependency-name: "hmac"
-        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+        versions: [">=0.13"]
       - dependency-name: "reqwest"
-        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+        versions: [">=0.13"]
 
   # Fuzz targets. Each declares its own [workspace] table specifically to stay out of
   # the root workspace, which also hides them from the root cargo entry.

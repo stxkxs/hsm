@@ -4,8 +4,10 @@ HSM Key Management
 High-level key management operations.
 """
 
-from typing import TYPE_CHECKING, AsyncIterator, Optional, Protocol
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING, Protocol
 
+from hsm_client.exceptions import NotFoundError
 from hsm_client.models import (
     GenerateKeyRequest,
     GenerateKeyResponse,
@@ -23,17 +25,13 @@ if TYPE_CHECKING:
 class KeyManagerClient(Protocol):
     """Protocol for key manager client operations."""
 
-    async def generate_key(self, request: GenerateKeyRequest) -> GenerateKeyResponse:
-        ...
+    async def generate_key(self, request: GenerateKeyRequest) -> GenerateKeyResponse: ...
 
-    async def get_key(self, key_id: str) -> KeyMetadata:
-        ...
+    async def get_key(self, key_id: str) -> KeyMetadata: ...
 
-    async def list_keys(self, options: Optional[ListKeysOptions] = None) -> ListKeysResponse:
-        ...
+    async def list_keys(self, options: ListKeysOptions | None = None) -> ListKeysResponse: ...
 
-    async def delete_key(self, key_id: str) -> None:
-        ...
+    async def delete_key(self, key_id: str) -> None: ...
 
 
 class KeyManager:
@@ -47,9 +45,9 @@ class KeyManager:
         algorithm: KeyAlgorithm,
         *,
         purpose: KeyPurpose = KeyPurpose.GENERAL,
-        key_id: Optional[str] = None,
-        namespace: Optional[str] = None,
-        labels: Optional[dict[str, str]] = None,
+        key_id: str | None = None,
+        namespace: str | None = None,
+        labels: dict[str, str] | None = None,
     ) -> GenerateKeyResponse:
         """Generate a new key with specified options."""
         request = GenerateKeyRequest(
@@ -64,9 +62,9 @@ class KeyManager:
     async def generate_ed25519(
         self,
         *,
-        key_id: Optional[str] = None,
-        namespace: Optional[str] = None,
-        labels: Optional[dict[str, str]] = None,
+        key_id: str | None = None,
+        namespace: str | None = None,
+        labels: dict[str, str] | None = None,
     ) -> GenerateKeyResponse:
         """Generate an Ed25519 signing key."""
         return await self.generate(
@@ -80,9 +78,9 @@ class KeyManager:
     async def generate_ecdsa_p256(
         self,
         *,
-        key_id: Optional[str] = None,
-        namespace: Optional[str] = None,
-        labels: Optional[dict[str, str]] = None,
+        key_id: str | None = None,
+        namespace: str | None = None,
+        labels: dict[str, str] | None = None,
         purpose: KeyPurpose = KeyPurpose.SIGN,
     ) -> GenerateKeyResponse:
         """Generate an ECDSA P-256 key."""
@@ -97,9 +95,9 @@ class KeyManager:
     async def generate_ecdsa_p384(
         self,
         *,
-        key_id: Optional[str] = None,
-        namespace: Optional[str] = None,
-        labels: Optional[dict[str, str]] = None,
+        key_id: str | None = None,
+        namespace: str | None = None,
+        labels: dict[str, str] | None = None,
         purpose: KeyPurpose = KeyPurpose.SIGN,
     ) -> GenerateKeyResponse:
         """Generate an ECDSA P-384 key."""
@@ -115,9 +113,9 @@ class KeyManager:
         self,
         size: int,
         *,
-        key_id: Optional[str] = None,
-        namespace: Optional[str] = None,
-        labels: Optional[dict[str, str]] = None,
+        key_id: str | None = None,
+        namespace: str | None = None,
+        labels: dict[str, str] | None = None,
         purpose: KeyPurpose = KeyPurpose.SIGN,
     ) -> GenerateKeyResponse:
         """Generate an RSA key."""
@@ -140,9 +138,9 @@ class KeyManager:
         self,
         size: int,
         *,
-        key_id: Optional[str] = None,
-        namespace: Optional[str] = None,
-        labels: Optional[dict[str, str]] = None,
+        key_id: str | None = None,
+        namespace: str | None = None,
+        labels: dict[str, str] | None = None,
     ) -> GenerateKeyResponse:
         """Generate an AES encryption key."""
         algorithm_map = {
@@ -166,9 +164,9 @@ class KeyManager:
     async def list(
         self,
         *,
-        namespace: Optional[str] = None,
-        limit: Optional[int] = None,
-        cursor: Optional[str] = None,
+        namespace: str | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
     ) -> ListKeysResponse:
         """List all keys."""
         options = ListKeysOptions(namespace=namespace, limit=limit, cursor=cursor)
@@ -177,11 +175,11 @@ class KeyManager:
     async def list_all(
         self,
         *,
-        namespace: Optional[str] = None,
-        limit: Optional[int] = None,
+        namespace: str | None = None,
+        limit: int | None = None,
     ) -> AsyncIterator[KeyMetadata]:
         """List all keys with automatic pagination."""
-        cursor: Optional[str] = None
+        cursor: str | None = None
         while True:
             response = await self.list(namespace=namespace, limit=limit, cursor=cursor)
             for key in response.keys:
@@ -195,9 +193,14 @@ class KeyManager:
         await self._client.delete_key(key_id)
 
     async def exists(self, key_id: str) -> bool:
-        """Check if a key exists."""
+        """Check if a key exists.
+
+        Only a 404 from the server means "absent". Any other failure (auth, network,
+        timeout, server error) is propagated rather than being reported as ``False``,
+        so an outage is never mistaken for a missing key.
+        """
         try:
             await self._client.get_key(key_id)
-            return True
-        except Exception:
+        except NotFoundError:
             return False
+        return True
