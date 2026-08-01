@@ -10,7 +10,7 @@ license.workspace = true
 ed25519-dalek = { version = "2.2", features = ["rand_core", "batch"] }
 curve25519-dalek = "4.1"
 p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
-p384 = { version = "0.13", features = ["ecdsa"] }
+p384 = { version = "0.14", features = ["ecdsa"] }
 k256 = { version = "0.13", features = ["ecdsa", "schnorr"] }
 rsa = { version = "0.9", features = ["sha2"] }
 

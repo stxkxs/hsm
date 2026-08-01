@@ -19,7 +19,7 @@ bip32 = { version = "0.5", default-features = false, features = ["alloc", "secp2
 # Cryptographic primitives for key import
 ed25519-dalek = { version = "2.2", features = ["rand_core"] }
 p256 = { version = "0.13", features = ["ecdsa"] }
-p384 = { version = "0.13", features = ["ecdsa"] }
+p384 = { version = "0.14", features = ["ecdsa"] }
 k256 = { version = "0.13", features = ["ecdsa"] }
 blst = "0.3"
 rsa = "0.9"
