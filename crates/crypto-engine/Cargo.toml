@@ -20,7 +20,7 @@ aes-gcm = "0.10"
 aes = "0.8"
 cbc = "0.1"
 rand_core = "0.6"
-pkcs8 = "0.10"
+pkcs8 = "0.11"
 pkcs1 = "0.7"
 
 # Hashing
