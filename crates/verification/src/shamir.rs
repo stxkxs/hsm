@@ -8,8 +8,8 @@
 //! This is based on polynomial interpolation over finite fields (GF(2^8) or GF(256)).
 
 use tracing::{debug, info};
-use z3::ast::{Ast, Int};
-use z3::{Config, Context, SatResult, Solver};
+use z3::ast::Int;
+use z3::{SatResult, Solver};
 
 use crate::bounded_check::VerificationResult;
 use crate::error::{Result, VerificationError};
@@ -23,17 +23,14 @@ impl ShamirVerifier {
     /// Property: For polynomial P(x) = a₀ + a₁x + a₂x² + ... + aₙxⁿ,
     /// the constant term a₀ equals the secret.
     pub fn verify_polynomial_construction() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-
         // Use integers for polynomial coefficients
-        let secret = Int::new_const(&ctx, "secret");
-        let a0 = Int::new_const(&ctx, "a0"); // Constant term
+        let secret = Int::new_const("secret");
+        let a0 = Int::new_const("a0"); // Constant term
 
-        let solver = Solver::new(&ctx);
+        let solver = Solver::new();
 
         // Property: a₀ = secret (constant term of polynomial equals secret)
-        let property = a0._eq(&secret);
+        let property = a0.eq(&secret);
 
         solver.assert(&property);
 
@@ -56,24 +53,21 @@ impl ShamirVerifier {
     /// Lagrange basis polynomial: Lⱼ(x) = ∏(i≠j) (x - xᵢ)/(xⱼ - xᵢ)
     /// Interpolation: P(x) = Σ yⱼ·Lⱼ(x)
     pub fn verify_lagrange_interpolation() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-
         // For simplicity, verify with 2 points (threshold k=2, degree 1)
         // Linear polynomial: P(x) = a₀ + a₁·x
 
         // Points: (x₁, y₁) = (1, y₁), (x₂, y₂) = (2, y₂)
-        let _x1 = Int::from_i64(&ctx, 1);
-        let _x2 = Int::from_i64(&ctx, 2);
-        let y1 = Int::new_const(&ctx, "y1");
-        let y2 = Int::new_const(&ctx, "y2");
+        let _x1 = Int::from_i64(1);
+        let _x2 = Int::from_i64(2);
+        let y1 = Int::new_const("y1");
+        let y2 = Int::new_const("y2");
 
         // Lagrange basis polynomials at x=0:
         // L₁(0) = (0 - x₂)/(x₁ - x₂) = (0 - 2)/(1 - 2) = -2/-1 = 2
         // L₂(0) = (0 - x₁)/(x₂ - x₁) = (0 - 1)/(2 - 1) = -1/1 = -1
 
-        let l1_at_0 = Int::from_i64(&ctx, 2);
-        let l2_at_0 = Int::from_i64(&ctx, -1);
+        let l1_at_0 = Int::from_i64(2);
+        let l2_at_0 = Int::from_i64(-1);
 
         // Interpolated value at x=0:
         // P(0) = y₁·L₁(0) + y₂·L₂(0) = y₁·2 + y₂·(-1) = 2y₁ - y₂
@@ -81,20 +75,20 @@ impl ShamirVerifier {
         let p_at_0 = &(&y1 * &l1_at_0) + &(&y2 * &l2_at_0);
 
         // Original polynomial: P(x) = a₀ + a₁·x
-        let a0 = Int::new_const(&ctx, "a0"); // Secret
-        let a1 = Int::new_const(&ctx, "a1"); // Random coefficient
+        let a0 = Int::new_const("a0"); // Secret
+        let a1 = Int::new_const("a1"); // Random coefficient
 
         // Points must satisfy polynomial:
         // y₁ = P(1) = a₀ + a₁·1 = a₀ + a₁
         // y₂ = P(2) = a₀ + a₁·2 = a₀ + 2a₁
 
-        let solver = Solver::new(&ctx);
+        let solver = Solver::new();
 
-        solver.assert(&y1._eq(&(&a0 + &a1)));
-        solver.assert(&y2._eq(&(&a0 + &(&a1 * &Int::from_i64(&ctx, 2)))));
+        solver.assert(y1.eq(&(&a0 + &a1)));
+        solver.assert(y2.eq(&(&a0 + &(&a1 * &Int::from_i64(2)))));
 
         // Property: P(0) from Lagrange interpolation equals a₀
-        let property = p_at_0._eq(&a0);
+        let property = p_at_0.eq(&a0);
 
         solver.assert(&property);
 
@@ -132,50 +126,45 @@ impl ShamirVerifier {
     ///
     /// This proves that k-1 shares don't constrain the secret.
     pub fn verify_information_theoretic_security() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-
         // Threshold k=3, so k-1 = 2 shares
         // Polynomial degree 2: P(x) = a₀ + a₁x + a₂x²
 
         // Two different secrets
-        let secret1 = Int::from_i64(&ctx, 42);
+        let secret1 = Int::from_i64(42);
         // Use even value for integer arithmetic (odd values require non-integer coefficients)
-        let secret2 = Int::from_i64(&ctx, 100);
+        let secret2 = Int::from_i64(100);
 
         // Two shares (x₁, y₁) and (x₂, y₂) - these are the k-1 shares
-        let _x1 = Int::from_i64(&ctx, 1);
-        let _x2 = Int::from_i64(&ctx, 2);
-        let y1 = Int::from_i64(&ctx, 10); // Fixed share value
-        let y2 = Int::from_i64(&ctx, 20); // Fixed share value
+        let _x1 = Int::from_i64(1);
+        let _x2 = Int::from_i64(2);
+        let y1 = Int::from_i64(10); // Fixed share value
+        let y2 = Int::from_i64(20); // Fixed share value
 
         // For secret1, we need coefficients a₁¹, a₂¹
-        let a1_1 = Int::new_const(&ctx, "a1_secret1");
-        let a2_1 = Int::new_const(&ctx, "a2_secret1");
+        let a1_1 = Int::new_const("a1_secret1");
+        let a2_1 = Int::new_const("a2_secret1");
 
         // For secret2, we need coefficients a₁², a₂²
-        let a1_2 = Int::new_const(&ctx, "a1_secret2");
-        let a2_2 = Int::new_const(&ctx, "a2_secret2");
+        let a1_2 = Int::new_const("a1_secret2");
+        let a2_2 = Int::new_const("a2_secret2");
 
-        let solver = Solver::new(&ctx);
+        let solver = Solver::new();
 
         // Polynomial 1: P₁(x) = secret1 + a₁¹x + a₂¹x²
         // Must satisfy: P₁(1) = y₁, P₁(2) = y₂
         let p1_at_1 = &(&secret1 + &a1_1) + &a2_1;
-        let p1_at_2 =
-            &(&secret1 + &(&a1_1 * &Int::from_i64(&ctx, 2))) + &(&a2_1 * &Int::from_i64(&ctx, 4));
+        let p1_at_2 = &(&secret1 + &(&a1_1 * &Int::from_i64(2))) + &(&a2_1 * &Int::from_i64(4));
 
-        solver.assert(&p1_at_1._eq(&y1));
-        solver.assert(&p1_at_2._eq(&y2));
+        solver.assert(p1_at_1.eq(&y1));
+        solver.assert(p1_at_2.eq(&y2));
 
         // Polynomial 2: P₂(x) = secret2 + a₁²x + a₂²x²
         // Must satisfy: P₂(1) = y₁, P₂(2) = y₂ (same share values!)
         let p2_at_1 = &(&secret2 + &a1_2) + &a2_2;
-        let p2_at_2 =
-            &(&secret2 + &(&a1_2 * &Int::from_i64(&ctx, 2))) + &(&a2_2 * &Int::from_i64(&ctx, 4));
+        let p2_at_2 = &(&secret2 + &(&a1_2 * &Int::from_i64(2))) + &(&a2_2 * &Int::from_i64(4));
 
-        solver.assert(&p2_at_1._eq(&y1));
-        solver.assert(&p2_at_2._eq(&y2));
+        solver.assert(p2_at_1.eq(&y1));
+        solver.assert(p2_at_2.eq(&y2));
 
         // Property: Both constraint systems are satisfiable
         // This proves that the same k-1 shares are consistent with different secrets
@@ -211,26 +200,23 @@ impl ShamirVerifier {
     /// For threshold k=3 from total n=5 shares, all C(5,3)=10 combinations
     /// should reconstruct the same secret.
     pub fn verify_share_consistency() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-
         // Polynomial: P(x) = a₀ + a₁x + a₂x² (degree 2, threshold 3)
-        let a0 = Int::new_const(&ctx, "a0"); // Secret
-        let a1 = Int::new_const(&ctx, "a1");
-        let a2 = Int::new_const(&ctx, "a2");
+        let a0 = Int::new_const("a0"); // Secret
+        let a1 = Int::new_const("a1");
+        let a2 = Int::new_const("a2");
 
         // Generate 5 shares: (1, P(1)), (2, P(2)), ..., (5, P(5))
         let mut shares_y = Vec::new();
         for i in 1..=5 {
-            let x = Int::from_i64(&ctx, i);
-            let x_squared = Int::from_i64(&ctx, i * i);
+            let x = Int::from_i64(i);
+            let x_squared = Int::from_i64(i * i);
 
             // P(i) = a₀ + a₁·i + a₂·i²
             let y = &(&a0 + &(&a1 * &x)) + &(&a2 * &x_squared);
             shares_y.push(y);
         }
 
-        let solver = Solver::new(&ctx);
+        let solver = Solver::new();
 
         // Reconstruct from shares {1, 2, 3}
         // Use Lagrange interpolation to get P(0)
@@ -240,9 +226,9 @@ impl ShamirVerifier {
         // L₂(0) = (0-1)(0-3) / (2-1)(2-3) = 3/-1 = -3
         // L₃(0) = (0-1)(0-2) / (3-1)(3-2) = 2/2 = 1
 
-        let l1 = Int::from_i64(&ctx, 3);
-        let l2 = Int::from_i64(&ctx, -3);
-        let l3 = Int::from_i64(&ctx, 1);
+        let l1 = Int::from_i64(3);
+        let l2 = Int::from_i64(-3);
+        let l3 = Int::from_i64(1);
 
         let secret_123 = &(&(&shares_y[0] * &l1) + &(&shares_y[1] * &l2)) + &(&shares_y[2] * &l3);
 
@@ -260,14 +246,14 @@ impl ShamirVerifier {
         // To avoid fractions, multiply by 8:
         // 8·P(0) = 15·y₁ - 10·y₃ + 3·y₅
 
-        let secret_135_times_8 = &(&(&shares_y[0] * &Int::from_i64(&ctx, 15))
-            + &(&shares_y[2] * &Int::from_i64(&ctx, -10)))
-            + &(&shares_y[4] * &Int::from_i64(&ctx, 3));
+        let secret_135_times_8 = &(&(&shares_y[0] * &Int::from_i64(15))
+            + &(&shares_y[2] * &Int::from_i64(-10)))
+            + &(&shares_y[4] * &Int::from_i64(3));
 
         // Property: secret_123 = a₀ (direct reconstruction)
         // Property: secret_135_times_8 = 8·a₀ (scaled reconstruction)
-        let property1 = secret_123._eq(&a0);
-        let property2 = secret_135_times_8._eq(&(&a0 * &Int::from_i64(&ctx, 8)));
+        let property1 = secret_123.eq(&a0);
+        let property2 = secret_135_times_8.eq(&(&a0 * &Int::from_i64(8)));
 
         solver.assert(&property1);
         solver.assert(&property2);

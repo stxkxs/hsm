@@ -91,8 +91,6 @@ updates:
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
 
       # ── Attempted and reverted (pre-1.0) ───────────────────────────────────
-      - dependency-name: "z3"          # 0.13+ removed the 'ctx lifetime; full rewrite of 7 SMT encoders
-        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       # reqwest 0.13 renamed the `rustls-tls` feature to `rustls` and re-pointed it at
       # rustls-platform-verifier + aws-lc-rs. (`json` still exists in 0.13 — an earlier
       # note in this repo claimed otherwise and was wrong.) Every crate here enables

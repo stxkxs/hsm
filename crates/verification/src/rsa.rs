@@ -6,9 +6,6 @@
 //! - Encryption/decryption correctness
 //! - Signature generation and verification
 
-use z3::ast::Ast;
-use z3::{Config, Context};
-
 use crate::bounded_check::{BoundedChecker, VerificationResult};
 use crate::error::{Result, VerificationError};
 
@@ -22,9 +19,7 @@ impl RsaVerifier {
     ///
     /// This verifies the fundamental RSA property.
     pub fn verify_rsa_correctness() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 64); // Use smaller bit-width for efficiency
+        let checker = BoundedChecker::new(64); // Use smaller bit-width for efficiency
         let encoder = checker.encoder();
 
         // Symbolic variables
@@ -55,9 +50,7 @@ impl RsaVerifier {
     ///
     /// CRITICAL: Constant-time verification to prevent Marvin Attack (RUSTSEC-2023-0071)
     pub fn verify_pkcs1v15_padding_format() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 256);
+        let checker = BoundedChecker::new(256);
         let encoder = checker.encoder();
 
         // Padded message components
@@ -73,8 +66,8 @@ impl RsaVerifier {
         // 1. byte0 == 0x00
         // 2. byte1 == 0x02
         // 3. PS length >= 8
-        let byte0_valid = byte0._eq(&zero);
-        let byte1_valid = byte1._eq(&two);
+        let byte0_valid = byte0.eq(&zero);
+        let byte1_valid = byte1.eq(&two);
         let ps_length_valid = ps_length.bvuge(&eight);
 
         let property = &byte0_valid & &byte1_valid & &ps_length_valid;
@@ -90,9 +83,7 @@ impl RsaVerifier {
     ///
     /// In SMT, we verify that the comparison operation itself is constant-time
     pub fn verify_constant_time_padding_check() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 8); // Small bit-width for efficiency
+        let checker = BoundedChecker::new(8); // Small bit-width for efficiency
         let encoder = checker.encoder();
 
         // Two padding values (one valid, one invalid)
@@ -108,7 +99,7 @@ impl RsaVerifier {
 
         // Property: Both comparisons should execute (symbolically) in constant time
         // This is verified by ensuring both paths are feasible
-        let both_feasible = &eq1._eq(&encoder.bv_from_u64(1)) | &eq1._eq(&encoder.bv_from_u64(0));
+        let both_feasible = &eq1.eq(encoder.bv_from_u64(1)) | &eq1.eq(encoder.bv_from_u64(0));
 
         checker.verify_property(&both_feasible)
     }
@@ -122,9 +113,7 @@ impl RsaVerifier {
     /// - Random salt
     /// - Mask generation function (MGF1)
     pub fn verify_pss_padding_format() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 256);
+        let checker = BoundedChecker::new(256);
         let encoder = checker.encoder();
 
         // PSS components
@@ -147,9 +136,7 @@ impl RsaVerifier {
     ///
     /// Property: ∀ m, keypair. verify(public_key, m, sign(private_key, m)) = true
     pub fn verify_signature_soundness() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 64);
+        let checker = BoundedChecker::new(64);
         let encoder = checker.encoder();
 
         // Message and signature

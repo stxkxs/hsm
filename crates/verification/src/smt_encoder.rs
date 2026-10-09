@@ -7,37 +7,33 @@
 
 use num_bigint::BigUint;
 use num_traits::One;
-use z3::ast::{Ast, BV};
-use z3::Context;
+use z3::ast::BV;
 
 use crate::error::Result;
 
 /// Encoder for finite-field arithmetic in SMT
-pub struct FiniteFieldEncoder<'ctx> {
-    context: &'ctx Context,
+///
+/// Terms are built in the calling thread's Z3 context.
+pub struct FiniteFieldEncoder {
     field_bits: u32,
 }
 
-impl<'ctx> FiniteFieldEncoder<'ctx> {
+impl FiniteFieldEncoder {
     /// Create a new finite-field encoder
     ///
     /// # Arguments
-    /// * `context` - Z3 context
     /// * `field_bits` - Bit size of the finite field (e.g., 256 for Ed25519)
-    pub fn new(context: &'ctx Context, field_bits: u32) -> Self {
-        Self {
-            context,
-            field_bits,
-        }
+    pub fn new(field_bits: u32) -> Self {
+        Self { field_bits }
     }
 
     /// Create a bitvector constant
-    pub fn bv_const(&self, name: &str) -> BV<'ctx> {
-        BV::new_const(self.context, name, self.field_bits)
+    pub fn bv_const(&self, name: &str) -> BV {
+        BV::new_const(name, self.field_bits)
     }
 
     /// Create a bitvector from a BigUint value
-    pub fn bv_from_biguint(&self, value: &BigUint) -> Result<BV<'ctx>> {
+    pub fn bv_from_biguint(&self, value: &BigUint) -> Result<BV> {
         let bytes = value.to_bytes_le();
         let _hex_str = hex::encode(&bytes);
 
@@ -46,33 +42,29 @@ impl<'ctx> FiniteFieldEncoder<'ctx> {
         let mut padded_bytes = bytes.clone();
         padded_bytes.resize(byte_width as usize, 0);
 
-        Ok(BV::from_u64(
-            self.context,
-            value.try_into().unwrap_or(0),
-            self.field_bits,
-        ))
+        Ok(BV::from_u64(value.try_into().unwrap_or(0), self.field_bits))
     }
 
     /// Create a bitvector from u64
-    pub fn bv_from_u64(&self, value: u64) -> BV<'ctx> {
-        BV::from_u64(self.context, value, self.field_bits)
+    pub fn bv_from_u64(&self, value: u64) -> BV {
+        BV::from_u64(value, self.field_bits)
     }
 
     /// Encode modular addition: (a + b) mod p
-    pub fn mod_add(&self, a: &BV<'ctx>, b: &BV<'ctx>, modulus: &BV<'ctx>) -> BV<'ctx> {
+    pub fn mod_add(&self, a: &BV, b: &BV, modulus: &BV) -> BV {
         let sum = a.bvadd(b);
         // Use bitvector remainder for modular reduction
         sum.bvurem(modulus)
     }
 
     /// Encode modular subtraction: (a - b) mod p
-    pub fn mod_sub(&self, a: &BV<'ctx>, b: &BV<'ctx>, modulus: &BV<'ctx>) -> BV<'ctx> {
+    pub fn mod_sub(&self, a: &BV, b: &BV, modulus: &BV) -> BV {
         let diff = a.bvsub(b);
         diff.bvurem(modulus)
     }
 
     /// Encode modular multiplication: (a * b) mod p
-    pub fn mod_mul(&self, a: &BV<'ctx>, b: &BV<'ctx>, modulus: &BV<'ctx>) -> BV<'ctx> {
+    pub fn mod_mul(&self, a: &BV, b: &BV, modulus: &BV) -> BV {
         let product = a.bvmul(b);
         product.bvurem(modulus)
     }
@@ -80,7 +72,7 @@ impl<'ctx> FiniteFieldEncoder<'ctx> {
     /// Encode modular exponentiation: (base ^ exp) mod p
     ///
     /// Uses square-and-multiply algorithm for efficiency
-    pub fn mod_exp(&self, base: &BV<'ctx>, exp: &BV<'ctx>, modulus: &BV<'ctx>) -> BV<'ctx> {
+    pub fn mod_exp(&self, base: &BV, exp: &BV, modulus: &BV) -> BV {
         // For small exponents, we can unroll the loop
         // For larger ones, this should be done symbolically or with bounded unrolling
 
@@ -97,18 +89,18 @@ impl<'ctx> FiniteFieldEncoder<'ctx> {
     /// Encode field element equality in constant time
     ///
     /// This is critical for verifying constant-time comparisons
-    pub fn ct_eq(&self, a: &BV<'ctx>, b: &BV<'ctx>) -> BV<'ctx> {
+    pub fn ct_eq(&self, a: &BV, b: &BV) -> BV {
         // Constant-time equality: returns all 1s if equal, all 0s otherwise
         let diff = a.bvxor(b);
         let zero = self.bv_from_u64(0);
 
         // Check if diff == 0
-        diff._eq(&zero)
+        diff.eq(&zero)
             .ite(&self.bv_from_u64(1), &self.bv_from_u64(0))
     }
 
     /// Create a constraint that value is in range [0, max)
-    pub fn range_constraint(&self, value: &BV<'ctx>, max: &BV<'ctx>) -> z3::ast::Bool<'ctx> {
+    pub fn range_constraint(&self, value: &BV, max: &BV) -> z3::ast::Bool {
         value.bvult(max)
     }
 
@@ -118,13 +110,13 @@ impl<'ctx> FiniteFieldEncoder<'ctx> {
     /// This is a simplified encoding - full implementation would encode curve arithmetic
     pub fn scalar_mult_constraint(
         &self,
-        scalar: &BV<'ctx>,
-        _point_x: &BV<'ctx>,
-        _point_y: &BV<'ctx>,
-        _result_x: &BV<'ctx>,
-        _result_y: &BV<'ctx>,
-        curve_order: &BV<'ctx>,
-    ) -> z3::ast::Bool<'ctx> {
+        scalar: &BV,
+        _point_x: &BV,
+        _point_y: &BV,
+        _result_x: &BV,
+        _result_y: &BV,
+        curve_order: &BV,
+    ) -> z3::ast::Bool {
         // Constraint: scalar must be in valid range
         let scalar_valid = self.range_constraint(scalar, curve_order);
 
@@ -206,22 +198,18 @@ impl Default for P256Field {
 mod tests {
     use super::*;
     use num_traits::Zero;
-    use z3::{Config, Context, Solver};
+    use z3::Solver;
 
     #[test]
     fn test_finite_field_encoder_creation() {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let encoder = FiniteFieldEncoder::new(&ctx, 256);
+        let encoder = FiniteFieldEncoder::new(256);
 
         assert_eq!(encoder.field_bits, 256);
     }
 
     #[test]
     fn test_modular_addition() {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let encoder = FiniteFieldEncoder::new(&ctx, 8); // 8-bit for simplicity
+        let encoder = FiniteFieldEncoder::new(8); // 8-bit for simplicity
 
         let a = encoder.bv_from_u64(250);
         let b = encoder.bv_from_u64(10);
@@ -229,17 +217,15 @@ mod tests {
 
         let result = encoder.mod_add(&a, &b, &modulus);
 
-        let solver = Solver::new(&ctx);
-        solver.assert(&result._eq(&encoder.bv_from_u64(4))); // (250 + 10) mod 256 = 4
+        let solver = Solver::new();
+        solver.assert(result.eq(encoder.bv_from_u64(4))); // (250 + 10) mod 256 = 4
 
         assert_eq!(solver.check(), z3::SatResult::Sat);
     }
 
     #[test]
     fn test_constant_time_equality() {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let encoder = FiniteFieldEncoder::new(&ctx, 256);
+        let encoder = FiniteFieldEncoder::new(256);
 
         let a = encoder.bv_from_u64(42);
         let b = encoder.bv_from_u64(42);
@@ -248,9 +234,9 @@ mod tests {
         let eq_true = encoder.ct_eq(&a, &b);
         let eq_false = encoder.ct_eq(&a, &c);
 
-        let solver = Solver::new(&ctx);
-        solver.assert(&eq_true._eq(&encoder.bv_from_u64(1)));
-        solver.assert(&eq_false._eq(&encoder.bv_from_u64(0)));
+        let solver = Solver::new();
+        solver.assert(eq_true.eq(encoder.bv_from_u64(1)));
+        solver.assert(eq_false.eq(encoder.bv_from_u64(0)));
 
         assert_eq!(solver.check(), z3::SatResult::Sat);
     }

@@ -18,14 +18,6 @@ ignore = [
     # Mitigation: Additional randomness sources for critical splits
     "RUSTSEC-2024-0398",
 
-    # rustls-webpki 0.101.7 advisories — transitive via aws-smithy-http-client → rustls 0.21
-    # (pulled in only when the optional `aws-nitro` feature of hsm-hardware-backend is enabled).
-    # No upstream fix until AWS SDK refreshes its smithy http-client stack. The HSM's own TLS
-    # stack uses rustls 0.23 + rustls-webpki 0.103.13 which IS patched.
-    "RUSTSEC-2026-0098",  # Name constraints incorrectly accepted for URI names
-    "RUSTSEC-2026-0099",  # Name constraints accepted for wildcard certificates
-    "RUSTSEC-2026-0104",  # Reachable panic in CRL parsing
-
     # ansi_term / atty - unmaintained, pulled in via clap 2 -> dudect-bencher (dev-dep only,
     # crypto-engine constant-time tests). Not in production binary. No upstream fix planned.
     "RUSTSEC-2021-0139",  # ansi_term is unmaintained

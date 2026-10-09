@@ -79,21 +79,15 @@ fn bench_shamir_verification(c: &mut Criterion) {
 
 fn bench_smt_encoder_operations(c: &mut Criterion) {
     use hsm_verification::smt_encoder::FiniteFieldEncoder;
-    use z3::{Config, Context};
 
     c.bench_function("smt_encoder_modular_addition", |b| {
         b.iter(|| {
-            let cfg = Config::new();
-            let ctx = Context::new(&cfg);
-            let encoder = FiniteFieldEncoder::new(&ctx, 256);
+            let encoder = FiniteFieldEncoder::new(256);
 
             let a = encoder.bv_from_u64(black_box(12345));
             let b = encoder.bv_from_u64(black_box(67890));
             let m = encoder.bv_from_u64(black_box(100000));
 
-            // Result borrows `ctx`; keep it inside the closure scope and only
-            // hand a reference to `black_box` so nothing referencing `ctx`
-            // escapes the closure.
             let result = encoder.mod_add(&a, &b, &m);
             black_box(&result);
         })
@@ -101,9 +95,7 @@ fn bench_smt_encoder_operations(c: &mut Criterion) {
 
     c.bench_function("smt_encoder_modular_multiplication", |b| {
         b.iter(|| {
-            let cfg = Config::new();
-            let ctx = Context::new(&cfg);
-            let encoder = FiniteFieldEncoder::new(&ctx, 256);
+            let encoder = FiniteFieldEncoder::new(256);
 
             let a = encoder.bv_from_u64(black_box(123));
             let b = encoder.bv_from_u64(black_box(456));
@@ -116,9 +108,7 @@ fn bench_smt_encoder_operations(c: &mut Criterion) {
 
     c.bench_function("smt_encoder_constant_time_equality", |b| {
         b.iter(|| {
-            let cfg = Config::new();
-            let ctx = Context::new(&cfg);
-            let encoder = FiniteFieldEncoder::new(&ctx, 256);
+            let encoder = FiniteFieldEncoder::new(256);
 
             let a = encoder.bv_from_u64(black_box(42));
             let b = encoder.bv_from_u64(black_box(42));
@@ -131,19 +121,13 @@ fn bench_smt_encoder_operations(c: &mut Criterion) {
 
 fn bench_bounded_checker(c: &mut Criterion) {
     use hsm_verification::bounded_check::BoundedChecker;
-    // `_eq` is a method on the `z3::ast::Ast` trait (mirrors the idiom used in
-    // `crates/verification/src/bounded_check.rs`), so it must be in scope here.
-    use z3::ast::Ast;
-    use z3::{Config, Context};
 
     c.bench_function("bounded_checker_tautology_check", |b| {
         b.iter(|| {
-            let cfg = Config::new();
-            let ctx = Context::new(&cfg);
-            let checker = BoundedChecker::new(&ctx, 8);
+            let checker = BoundedChecker::new(8);
 
             let x = checker.encoder().bv_const("x");
-            let property = x._eq(&x);
+            let property = x.eq(&x);
 
             black_box(checker.verify_property(&property)).unwrap()
         })
@@ -151,15 +135,13 @@ fn bench_bounded_checker(c: &mut Criterion) {
 
     c.bench_function("bounded_checker_forall_verification", |b| {
         b.iter(|| {
-            let cfg = Config::new();
-            let ctx = Context::new(&cfg);
-            let checker = BoundedChecker::new(&ctx, 8);
+            let checker = BoundedChecker::new(8);
 
             // Property: ∀x. x + 0 = x
             let x = checker.encoder().bv_const("x");
             let zero = checker.encoder().bv_from_u64(0);
             let sum = x.bvadd(&zero);
-            let property = sum._eq(&x);
+            let property = sum.eq(&x);
 
             black_box(checker.verify_property_forall(&property)).unwrap()
         })

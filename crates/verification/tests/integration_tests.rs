@@ -4,7 +4,6 @@
 //! formal properties using SMT-based bounded model checking.
 
 use hsm_verification::*;
-use z3::ast::Ast;
 
 #[test]
 fn test_comprehensive_ed25519_verification() {
@@ -122,38 +121,35 @@ fn test_verification_context_operations() {
     use hsm_verification::VerificationContext;
 
     let ctx = VerificationContext::new();
-    let z3_ctx = ctx.create_z3_context();
 
-    // Test that Z3 context works
-    use z3::ast::{Ast, Int};
-    let x = Int::new_const(&z3_ctx, "x");
-    let y = Int::new_const(&z3_ctx, "y");
+    // Test that Z3 works inside the configured context
+    let y_val = ctx.run(|| {
+        use z3::ast::Int;
+        let x = Int::new_const("x");
+        let y = Int::new_const("y");
 
-    // Simple constraint: x + y = 10, x = 3
-    use z3::Solver;
-    let solver = Solver::new(&z3_ctx);
-    solver.assert(&Int::add(&z3_ctx, &[&x, &y])._eq(&Int::from_i64(&z3_ctx, 10)));
-    solver.assert(&x._eq(&Int::from_i64(&z3_ctx, 3)));
+        // Simple constraint: x + y = 10, x = 3
+        use z3::Solver;
+        let solver = Solver::new();
+        solver.assert(Int::add(&[&x, &y]).eq(Int::from_i64(10)));
+        solver.assert(x.eq(Int::from_i64(3)));
 
-    assert_eq!(solver.check(), z3::SatResult::Sat);
+        assert_eq!(solver.check(), z3::SatResult::Sat);
 
-    let model = solver.get_model().unwrap();
-    let y_val = model.eval(&y, true).unwrap().as_i64().unwrap();
+        let model = solver.get_model().unwrap();
+        model.eval(&y, true).unwrap().as_i64().unwrap()
+    });
     assert_eq!(y_val, 7);
 }
 
 #[test]
 fn test_bounded_checker_basic_properties() {
     use hsm_verification::bounded_check::BoundedChecker;
-    use z3::{Config, Context};
-
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let checker = BoundedChecker::new(&ctx, 8);
+    let checker = BoundedChecker::new(8);
 
     // Property: x = x (tautology)
     let x = checker.encoder().bv_const("x");
-    let property = x._eq(&x);
+    let property = x.eq(&x);
 
     let result = checker.verify_property(&property).unwrap();
     assert_eq!(
@@ -165,11 +161,9 @@ fn test_bounded_checker_basic_properties() {
 #[test]
 fn test_smt_encoder_field_operations() {
     use hsm_verification::smt_encoder::FiniteFieldEncoder;
-    use z3::{Config, Context, Solver};
+    use z3::Solver;
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let encoder = FiniteFieldEncoder::new(&ctx, 8);
+    let encoder = FiniteFieldEncoder::new(8);
 
     // Test modular addition
     let a = encoder.bv_from_u64(250);
@@ -178,8 +172,8 @@ fn test_smt_encoder_field_operations() {
 
     let result = encoder.mod_add(&a, &b, &modulus);
 
-    let solver = Solver::new(&ctx);
-    solver.assert(&result._eq(&encoder.bv_from_u64(4))); // (250 + 10) mod 256 = 4
+    let solver = Solver::new();
+    solver.assert(result.eq(encoder.bv_from_u64(4))); // (250 + 10) mod 256 = 4
 
     assert_eq!(solver.check(), z3::SatResult::Sat);
 }

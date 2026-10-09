@@ -10,7 +10,7 @@ license.workspace = true
 # NOTE: Requires Z3 to be installed on the system
 # Install with: brew install z3 (macOS) or apt-get install z3 (Linux)
 # Or download from: https://github.com/Z3Prover/z3/releases
-z3 = "0.12"
+z3 = "0.21"
 
 # Crypto dependencies (for property verification)
 ed25519-dalek = "2.2"

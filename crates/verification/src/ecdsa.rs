@@ -5,9 +5,6 @@
 //! - Signature correctness
 //! - Deterministic vs randomized nonce generation
 
-use z3::ast::Ast;
-use z3::{Config, Context};
-
 use crate::bounded_check::{BoundedChecker, VerificationResult};
 use crate::error::{Result, VerificationError};
 use crate::smt_encoder::P256Field;
@@ -25,9 +22,7 @@ impl EcdsaVerifier {
     /// This ensures that signing different messages with the same key
     /// produces different nonces.
     pub fn verify_nonce_uniqueness() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 256);
+        let checker = BoundedChecker::new(256);
         let encoder = checker.encoder();
 
         // Two different messages
@@ -46,7 +41,7 @@ impl EcdsaVerifier {
         // Property: If messages are different, nonces must be different
         // (assuming proper nonce generation with randomness or RFC 6979 deterministic)
 
-        let messages_different = message1._eq(&message2).not();
+        let messages_different = message1.eq(&message2).not();
 
         // For proper nonce generation:
         // - Randomized: nonce includes fresh randomness
@@ -54,7 +49,7 @@ impl EcdsaVerifier {
 
         // We verify that nonces depend on the message
         // Simplified: if message1 != message2, then nonce1 != nonce2
-        let nonces_different = nonce1._eq(&nonce2).not();
+        let nonces_different = nonce1.eq(&nonce2).not();
 
         // Property: different messages ⇒ different nonces
         let property = messages_different.implies(&nonces_different);
@@ -71,9 +66,7 @@ impl EcdsaVerifier {
     /// (x, y) = u1*G + u2*Q
     /// r == x mod n
     pub fn verify_signature_equation() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 256);
+        let checker = BoundedChecker::new(256);
         let encoder = checker.encoder();
 
         // Signature components
@@ -112,9 +105,7 @@ impl EcdsaVerifier {
     ///
     /// We verify that s <= n/2 (low-s requirement)
     pub fn verify_low_s_requirement() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 256);
+        let checker = BoundedChecker::new(256);
         let encoder = checker.encoder();
 
         let s = encoder.bv_const("s");
@@ -139,9 +130,7 @@ impl EcdsaVerifier {
     ///
     /// We verify that if nonces are different, this attack is prevented.
     pub fn verify_nonce_reuse_attack_prevention() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 256);
+        let checker = BoundedChecker::new(256);
         let encoder = checker.encoder();
 
         // Two signatures with different nonces
@@ -151,7 +140,7 @@ impl EcdsaVerifier {
         let _n = encoder.bv_from_u64(1u64 << 52);
 
         // Property: k1 ≠ k2 prevents the attack
-        let nonces_different = k1._eq(&k2).not();
+        let nonces_different = k1.eq(&k2).not();
 
         // If nonces are different, private key cannot be recovered from
         // signature pair alone (without breaking ECDLP)

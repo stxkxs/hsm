@@ -6,9 +6,6 @@
 //! - Scalar multiplication correctness
 //! - Base point properties
 
-use z3::ast::Ast;
-use z3::{Config, Context};
-
 use crate::bounded_check::{BoundedChecker, VerificationResult};
 use crate::error::{Result, VerificationError};
 use crate::smt_encoder::Ed25519Field;
@@ -24,9 +21,7 @@ impl Ed25519Verifier {
     /// This is a simplified verification that checks basic algebraic properties.
     /// Full verification would require encoding complete curve arithmetic.
     pub fn verify_signature_soundness() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 256);
+        let checker = BoundedChecker::new(256);
         let encoder = checker.encoder();
 
         // Create symbolic variables
@@ -59,9 +54,7 @@ impl Ed25519Verifier {
     ///
     /// Property: Scalar multiplication is associative and distributive
     pub fn verify_scalar_mult_properties() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 256);
+        let checker = BoundedChecker::new(256);
         let encoder = checker.encoder();
 
         // Symbolic scalars
@@ -74,12 +67,12 @@ impl Ed25519Verifier {
         // Property: (k1 + k2) mod l is commutative
         let sum1 = encoder.mod_add(&k1, &k2, &l_bv);
         let sum2 = encoder.mod_add(&k2, &k1, &l_bv);
-        let commutative = sum1._eq(&sum2);
+        let commutative = sum1.eq(&sum2);
 
         // Property: (k1 * k2) mod l is commutative
         let prod1 = encoder.mod_mul(&k1, &k2, &l_bv);
         let prod2 = encoder.mod_mul(&k2, &k1, &l_bv);
-        let mult_commutative = prod1._eq(&prod2);
+        let mult_commutative = prod1.eq(&prod2);
 
         let property = &commutative & &mult_commutative;
 
@@ -93,9 +86,7 @@ impl Ed25519Verifier {
     /// Note: This is bounded verification - we cannot prove cryptographic hash properties
     /// completely, but we can verify algebraic properties.
     pub fn verify_hash_properties() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 256);
+        let checker = BoundedChecker::new(256);
         let encoder = checker.encoder();
 
         // For bounded verification, we verify that the hash is deterministic
@@ -106,7 +97,7 @@ impl Ed25519Verifier {
 
         // If we hash the same message twice, we get the same result
         // This is a tautological property but verifies the framework
-        let property = hash1._eq(&hash2);
+        let property = hash1.eq(&hash2);
 
         // For the same message, hashes should be equal (determinism)
         checker.assert(&property);
@@ -119,9 +110,7 @@ impl Ed25519Verifier {
     /// where S is signature scalar, B is base point, R is signature point,
     /// A is public key, M is message
     pub fn verify_verification_equation() -> Result<VerificationResult> {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let checker = BoundedChecker::new(&ctx, 256);
+        let checker = BoundedChecker::new(256);
         let encoder = checker.encoder();
 
         // Symbolic variables for verification equation
