@@ -42,7 +42,7 @@ sha3 = "0.10"
 # RIPEMD-160 for Cosmos HASH160 address derivation
 ripemd = "0.1"
 # Blake2b-512 for SS58 (Substrate/Polkadot) address checksums
-blake2 = "0.10"
+blake2 = "0.11"
 hmac = "0.12"
 pbkdf2 = { version = "0.12", features = ["hmac"] }
 ed25519-dalek.workspace = true

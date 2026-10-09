@@ -44,7 +44,7 @@ ark-crypto-primitives = "0.6"
 ark-poly-commit = "0.6"
 
 # Cryptographic primitives
-blake2 = "0.10"  # Fast hash function
+blake2 = "0.11"  # Fast hash function
 rand = "0.8"
 rand_chacha = "0.3"
 
