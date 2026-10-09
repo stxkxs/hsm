@@ -18,7 +18,7 @@ experimental-chains = []
 [dependencies]
 # HD key derivation
 bip32 = "0.5"
-bip39 = { version = "2.2", features = ["rand"] }
+bip39 = { version = "3.0", features = ["rand"] }
 
 # Ethereum support
 alloy-primitives = { version = "1", features = ["rlp"] }
