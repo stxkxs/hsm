@@ -77,6 +77,11 @@ impl PolicyEngine {
         config.wasm_bulk_memory(true);
         config.wasm_multi_value(true);
         config.wasm_threads(false);
+        // Policies are core modules. The component model (and its async
+        // extension, which requires reference types) stays off so the
+        // runtime exposes no component-model surface to policy code.
+        config.wasm_component_model(false);
+        config.wasm_component_model_async(false);
 
         Engine::new(&config).map_err(|e| PolicyError::Internal(e.to_string()))
     }

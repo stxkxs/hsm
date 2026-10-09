@@ -40,9 +40,13 @@ pub mod smt_encoder;
 
 pub use error::{Result, VerificationError};
 
-use z3::*;
+use z3::Config;
 
-/// Verification context for managing Z3 solver instances
+/// Solver configuration applied to a scoped Z3 context.
+///
+/// Z3 terms and solvers are built in the calling thread's implicit context.
+/// [`VerificationContext::run`] swaps in a context built from this
+/// configuration for the duration of a closure.
 pub struct VerificationContext {
     config: Config,
 }
@@ -56,9 +60,13 @@ impl VerificationContext {
         Self { config: cfg }
     }
 
-    /// Create a Z3 context from this verification context
-    pub fn create_z3_context(&self) -> Context {
-        Context::new(&self.config)
+    /// Run `f` with every Z3 call inside it bound to a fresh context built
+    /// from this configuration.
+    ///
+    /// Z3 objects created inside `f` belong to that context and cannot be
+    /// returned from it, which the `Send + Sync` bounds enforce.
+    pub fn run<R: Send + Sync>(&self, f: impl FnOnce() -> R + Send + Sync) -> R {
+        z3::with_z3_config(&self.config, f)
     }
 
     /// Set solver timeout in milliseconds
@@ -80,8 +88,9 @@ mod tests {
     #[test]
     fn test_verification_context_creation() {
         let ctx = VerificationContext::new();
-        let _z3_ctx = ctx.create_z3_context();
-        // Basic test: verify that Z3 context can be created
+        // An empty assertion set is satisfiable in the configured context.
         // Full Z3 integration tests are in the integration test suite
+        let result = ctx.run(|| z3::Solver::new().check());
+        assert_eq!(result, z3::SatResult::Sat);
     }
 }

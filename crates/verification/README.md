@@ -111,12 +111,9 @@ shamir::verify_shamir_correctness()?;
 
 ```rust
 use hsm_verification::*;
-use z3::{Config, Context};
 
-// Create verification context
-let cfg = Config::new();
-let ctx = Context::new(&cfg);
-let checker = bounded_check::BoundedChecker::new(&ctx, 256);
+// Terms and the solver use the calling thread's Z3 context
+let checker = bounded_check::BoundedChecker::new(256);
 
 // Verify a specific property
 let property = /* SMT property */;
