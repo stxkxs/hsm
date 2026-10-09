@@ -17,7 +17,7 @@ experimental-chains = []
 
 [dependencies]
 # HD key derivation
-bip32 = "0.5"
+bip32 = "0.6"
 bip39 = { version = "2.2", features = ["rand"] }
 
 # Ethereum support
