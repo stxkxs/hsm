@@ -51,13 +51,6 @@ ignore = [
     # hsm-server binary; compile-time-only proc-macro with no runtime exposure.
     "RUSTSEC-2024-0388",
 
-    # serde_cbor - unmaintained (RUSTSEC-2021-0127), pulled in via aws-nitro-enclaves-cose,
-    # which is compiled only when the optional `aws-nitro` feature of hsm-hardware-backend is
-    # enabled (not in the default hsm-server binary). aws-nitro-enclaves-cose is at its latest
-    # 0.5.2 and still depends on serde_cbor ^0.11; no upstream fix. Also noted in
-    # crates/hardware-backend/Cargo.toml.
-    "RUSTSEC-2021-0127",
-
     # pqcrypto-* family - unmaintained: the upstream PQClean project is being archived
     # (advisories published 2026-06-04). Pulled in via hsm-crypto-engine's post-quantum
     # support — pqcrypto-mlkem (ML-KEM / Kyber) and pqcrypto-mldsa (ML-DSA / Dilithium),

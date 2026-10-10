@@ -8,9 +8,9 @@
  * Login via API (fast, no UI interaction)
  */
 Cypress.Commands.add('loginViaApi', (username?: string, password?: string) => {
-  const user = username ?? Cypress.env('defaultUsername')
-  const pass = password ?? Cypress.env('defaultPassword')
-  const apiUrl = Cypress.env('apiUrl')
+  const user = username ?? Cypress.expose('defaultUsername')
+  const pass = password ?? Cypress.expose('defaultPassword')
+  const apiUrl = Cypress.expose('apiUrl')
 
   cy.request({
     method: 'POST',
@@ -32,8 +32,8 @@ Cypress.Commands.add('loginViaApi', (username?: string, password?: string) => {
  * Session-based authentication (cached across tests in same spec)
  */
 Cypress.Commands.add('setupAuth', (username?: string, password?: string) => {
-  const user = username ?? Cypress.env('defaultUsername')
-  const pass = password ?? Cypress.env('defaultPassword')
+  const user = username ?? Cypress.expose('defaultUsername')
+  const pass = password ?? Cypress.expose('defaultPassword')
 
   cy.session(
     [user, pass],
@@ -76,7 +76,7 @@ interface CreateKeyOptions {
  * Create a key via API
  */
 Cypress.Commands.add('createKeyViaApi', (options?: CreateKeyOptions) => {
-  const apiUrl = Cypress.env('apiUrl')
+  const apiUrl = Cypress.expose('apiUrl')
   const {
     algorithm = 'ED25519',
     purpose = 'SIGN',
@@ -106,7 +106,7 @@ Cypress.Commands.add('createKeyViaApi', (options?: CreateKeyOptions) => {
  * Delete a key via API
  */
 Cypress.Commands.add('deleteKeyViaApi', (keyId: string) => {
-  const apiUrl = Cypress.env('apiUrl')
+  const apiUrl = Cypress.expose('apiUrl')
 
   return cy.window().then((win) => {
     const token = win.localStorage.getItem('hsm_auth_token')
@@ -126,7 +126,7 @@ Cypress.Commands.add('deleteKeyViaApi', (keyId: string) => {
  * Get all keys via API
  */
 Cypress.Commands.add('getKeysViaApi', (namespace?: string) => {
-  const apiUrl = Cypress.env('apiUrl')
+  const apiUrl = Cypress.expose('apiUrl')
   const url = namespace ? `${apiUrl}/keys?namespace=${namespace}` : `${apiUrl}/keys`
 
   return cy.window().then((win) => {
@@ -149,7 +149,7 @@ Cypress.Commands.add('getKeysViaApi', (namespace?: string) => {
  * Sign data via API
  */
 Cypress.Commands.add('signViaApi', (keyId: string, data: string) => {
-  const apiUrl = Cypress.env('apiUrl')
+  const apiUrl = Cypress.expose('apiUrl')
 
   return cy.window().then((win) => {
     const token = win.localStorage.getItem('hsm_auth_token')

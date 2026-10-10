@@ -51,6 +51,16 @@ impl MnemonicType {
         }
     }
 
+    fn to_bip39_word_count(self) -> bip39_crate::WordCount {
+        match self {
+            MnemonicType::Words12 => bip39_crate::WordCount::Words12,
+            MnemonicType::Words15 => bip39_crate::WordCount::Words15,
+            MnemonicType::Words18 => bip39_crate::WordCount::Words18,
+            MnemonicType::Words21 => bip39_crate::WordCount::Words21,
+            MnemonicType::Words24 => bip39_crate::WordCount::Words24,
+        }
+    }
+
     /// Get the entropy bits for this mnemonic type
     pub fn entropy_bits(&self) -> usize {
         match self {
@@ -91,7 +101,7 @@ pub enum Language {
 
 impl Language {
     fn to_bip39_language(&self) -> bip39_crate::Language {
-        // Note: bip39 v2.x only includes English by default.
+        // Note: bip39 only includes English by default.
         // Other languages require feature flags. For now, we only support English.
         // TODO: Enable other languages via feature flags if needed.
         match self {
@@ -165,15 +175,16 @@ impl Mnemonic {
                     .to_string(),
             ));
         }
-        let word_count = mnemonic_type.word_count();
-
-        let mnemonic = bip39_crate::Mnemonic::generate_in(language.to_bip39_language(), word_count)
-            .map_err(|e| BlockchainError::InvalidMnemonic(e.to_string()))?;
+        let mnemonic = bip39_crate::Mnemonic::generate_in(
+            language.to_bip39_language(),
+            mnemonic_type.to_bip39_word_count(),
+        )
+        .map_err(|e| BlockchainError::InvalidMnemonic(e.to_string()))?;
         let phrase = mnemonic.to_string();
 
         Ok(Self {
             phrase: SecretString::from(phrase),
-            word_count,
+            word_count: mnemonic_type.word_count(),
             language,
         })
     }

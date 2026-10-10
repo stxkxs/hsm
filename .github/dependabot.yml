@@ -60,6 +60,10 @@ updates:
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "ripemd"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # blake2 0.11 brings its own digest 0.11 `Digest` trait; blockchain's
+      # polkadot/mod.rs has it in scope beside sha2 0.10 calls, the same coupling.
+      - dependency-name: "blake2"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "aes"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "aes-gcm"
