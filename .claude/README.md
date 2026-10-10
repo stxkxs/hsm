@@ -1,79 +1,23 @@
-# Claude Code Configuration
+# Claude Code configuration
 
-This directory contains Claude Code configuration for the HSM project.
+Project skills and settings for Claude Code in this repository.
 
 ## Skills
 
-Custom skills for HSM development:
+Each skill lives in `skills/<name>/SKILL.md` and runs as `/<name>`.
 
-### `/hsm-module <number>`
-Work on any HSM module - explore, implement, test, benchmark.
+| Skill | Use it to |
+|---|---|
+| `/verify` | Run the checks CI runs (fmt, clippy including feature-gated builds, tests, docs, and the UI/SDK suites a change touches). Run before every commit. |
+| `/hsm-module <crate>` | Orient on one crate under `crates/`: purpose, dependents, history, health. |
+| `/hsm-bench [crate]` | Run Criterion benchmarks and compare against the performance targets in `docs/architecture/spec.md`. |
+| `/hsm-coverage [crate]` | Measure coverage with cargo-llvm-cov and turn uncovered security-relevant paths into test suggestions. |
+| `/hsm-fuzz <crate> [runs]` | Run cargo-fuzz targets (nightly) for a crate with a `fuzz/` workspace and triage crashes. |
+| `/hsm-security [crate]` | Audit advisories on every dependency surface under the CI policy, then check constant-time comparison, zeroization, redaction, unsafe usage and input validation. |
+| `/hsm-deps` | Dependency maintenance pass: triage Dependabot PRs and alerts, update and audit every surface, keep `.github/dependabot.yml` and MSRV references consistent, land one PR. |
 
-**Examples:**
-```
-/hsm-module 1           # Work on crypto-engine
-/hsm-module 2           # Work on key-manager
-```
-
-### `/hsm-bench [module]`
-Run benchmarks and analyze performance against targets.
-
-**Examples:**
-```
-/hsm-bench          # Benchmark all modules
-/hsm-bench 1        # Benchmark crypto-engine only
-```
-
-### `/hsm-security [module]`
-Comprehensive security audit - dependencies, lints, constant-time ops, zeroization.
-
-**Examples:**
-```
-/hsm-security       # Audit all modules
-/hsm-security 1     # Audit crypto-engine only
-```
-
-### `/hsm-coverage [module]`
-Test coverage analysis and gap identification.
-
-**Examples:**
-```
-/hsm-coverage       # Coverage for all modules
-/hsm-coverage 1     # Coverage for crypto-engine only
-```
-
-### `/hsm-fuzz <module> [iterations]`
-Run fuzz tests to find crashes and edge cases.
-
-**Examples:**
-```
-/hsm-fuzz 1              # Fuzz crypto-engine (1M iterations)
-/hsm-fuzz 1 10000000     # Fuzz crypto-engine (10M iterations)
-```
+`<crate>` is always a directory name under `crates/`.
 
 ## Hooks
 
-Configured in `settings.json`:
-
-- **pre-commit**: Format check, clippy, compilation before commits
-- **post-edit**: Quick compilation check after edits
-
-Hooks run automatically when conditions are met.
-
-## Configuration
-
-Edit `.claude/settings.json` to customize hooks and project settings.
-
-## Module Map
-
-| # | Crate | Purpose |
-|---|-------|---------|
-| 1 | crypto-engine | Core cryptographic primitives |
-| 2 | key-manager | Key lifecycle management |
-| 3 | auth | Authentication & authorization |
-| 4 | grpc-api | gRPC API server |
-| 5 | audit | Audit logging |
-| 6 | metrics | Metrics & monitoring |
-| 7 | storage | Persistent storage |
-| 8 | backup | Backup & recovery |
-| 9 | config | Configuration management |
+`settings.json` runs `cargo fmt` on any `.rs` file after Claude writes or edits it.

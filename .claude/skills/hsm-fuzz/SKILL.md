@@ -1,65 +1,44 @@
 ---
-name: HSM Fuzz Testing
-description: Run fuzz tests to find crashes and edge cases
-version: 1.0.0
-tags: [hsm, fuzzing, testing]
+name: hsm-fuzz
+description: Run cargo-fuzz targets for a crate that has a fuzz workspace, triage any crash into a minimized reproducer, and turn it into a regression test.
 ---
 
-# HSM Fuzz Testing
-
-Fuzz testing orchestration for HSM modules.
-
-## Usage
+# HSM fuzzing
 
 ```
-/hsm-fuzz <module-number> [iterations]
+/hsm-fuzz <crate> [runs]
 ```
 
-Default iterations: 1,000,000
+`crate` is a directory under `crates/` that contains a `fuzz/` directory; `find crates -maxdepth 2 -name fuzz -type d` lists them. Default `runs`: 1,000,000 per target.
 
-## What You Do
+## Tooling
 
-1. **List Fuzz Targets:**
-   ```bash
-   cd crates/<module>
-   cargo fuzz list
-   ```
+cargo-fuzz needs a nightly toolchain, and `rust-toolchain.toml` pins a stable one, so every command uses `+nightly`.
 
-2. **Run Fuzz Tests:**
-   For each target:
-   ```bash
-   cargo fuzz run <target> -- -runs=<iterations>
-   ```
+```bash
+rustup toolchain install nightly   # if `rustup toolchain list` lacks it
+cargo install cargo-fuzz           # if `cargo fuzz` is missing
+```
 
-3. **Monitor Progress:**
-   Show real-time stats:
-   - Runs completed / total
-   - Crashes found
-   - Hangs detected
-   - Coverage achieved
+Each `fuzz/` directory is its own Cargo workspace (it is not a member of the root workspace) with its own `Cargo.lock`, which is not committed.
 
-4. **Handle Crashes:**
-   If crash found:
-   ```bash
-   # Minimize corpus
-   cargo fuzz cmin <target>
+## Steps
 
-   # Minimize crash
-   cargo fuzz tmin <target> crash-<hash>
-   ```
+Run from `crates/<crate>`:
 
-5. **Report Results:**
-   ```
-   Target: fuzz_ed25519_verify
-   Runs: 1,000,000
-   Status: PASS ✅
-   Crashes: 0
-   Coverage: 94%
-   ```
+1. **List targets:** `cargo +nightly fuzz list`
+2. **Run each target:** `cargo +nightly fuzz run <target> -- -runs=<runs>`
+   For a time box instead of a run count: `-- -max_total_time=<seconds>`.
+3. **On a crash**, libFuzzer writes the input to `fuzz/artifacts/<target>/crash-<hash>`.
+   - Reproduce: `cargo +nightly fuzz run <target> fuzz/artifacts/<target>/crash-<hash>`
+   - Minimize: `cargo +nightly fuzz tmin <target> fuzz/artifacts/<target>/crash-<hash>`
+   - Fix the bug in the crate, then add a unit test that feeds the minimized bytes through the same API the target calls, so the case stays covered without nightly.
+4. **Corpus upkeep (optional):** `cargo +nightly fuzz cmin <target>` shrinks `fuzz/corpus/<target>` to the inputs that add coverage.
 
-## Common Fuzz Targets
+## Report
 
-- **Crypto Engine:** sign/verify, encrypt/decrypt
-- **gRPC API:** request parsing
-- **Audit:** event serialization
-- **Storage:** encryption/compression
+Per target: runs completed, crashes, timeouts/OOMs, and the final `cov:` / `ft:` counters from libFuzzer's last status line. For each crash: the artifact path, the panic message, the root cause, and the regression test added.
+
+## Adding targets
+
+When a crate parses untrusted input and has no fuzz workspace, `cargo +nightly fuzz init` inside the crate creates one; add a `package-ecosystem: cargo` entry for the new `fuzz/` directory to `.github/dependabot.yml`, since the root entry cannot reach a nested workspace.

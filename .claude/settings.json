@@ -1,8 +1,4 @@
 {
-  "project": {
-    "name": "HSM (Hardware Security Module)",
-    "description": "Production-grade HSM in Rust with independent modules"
-  },
   "hooks": {
     "PostToolUse": [
       {

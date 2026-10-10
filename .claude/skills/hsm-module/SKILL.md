@@ -1,54 +1,30 @@
 ---
-name: HSM Module Helper
-description: Work on any HSM module - explore code, implement features, run tests, benchmarks
-version: 1.0.0
-tags: [hsm, development, modules]
+name: hsm-module
+description: Orient on one HSM crate — what it does, what depends on it, its recent history and health — then explore, implement, test or benchmark it.
 ---
 
-# HSM Module Helper
-
-Quick helper for working on HSM modules.
-
-## Usage
+# HSM module helper
 
 ```
-/hsm-module <module-number>
+/hsm-module <crate>
 ```
 
-## What You Do
+`crate` is a directory name under `crates/`; `ls crates` lists them. Package names are in each crate's `Cargo.toml` (`grep -h '^name' crates/*/Cargo.toml`). The module descriptions in `docs/architecture/spec.md` ("Module Breakdown") describe the core crates; the crate's own `README.md` and `src/lib.rs` doc comment describe the rest.
 
-When user invokes this skill with a module number (1-9):
+## Orient
 
-1. **Navigate to module:**
-   ```bash
-   cd crates/<module-name>
-   ```
+1. **Purpose:** the crate's `README.md` (if present) and the `//!` doc comment in `src/lib.rs`.
+2. **Position in the graph:**
+   - what it depends on: `cargo tree -p <package> --depth 1 -e normal`
+   - what depends on it: `cargo tree -i <package> --depth 1 -e normal`
+3. **Recent history:** `git log -10 --oneline -- crates/<crate>`
+4. **Health:** `cargo clippy -p <package> --all-targets -- -D warnings` and `cargo test -p <package>`.
+5. **Features:** the `[features]` table in its `Cargo.toml`. Non-default features are not built by `cargo test --all`; name the ones relevant to the task.
+6. **Unsafe policy:** every crate carries `#![deny(unsafe_code)]` except those listed in `CLAUDE.md`; keep it that way.
 
-2. **Show module status:**
-   - Show recent changes (`git log -5 --oneline -- .`)
-   - Check compilation (`cargo check`)
-   - List available plans in `docs/phases/`
+Then offer: explain the code, implement a change, run tests, run benchmarks (`/hsm-bench <crate>`), coverage (`/hsm-coverage <crate>`), fuzzing (`/hsm-fuzz <crate>` where a `fuzz/` directory exists), or a security pass (`/hsm-security <crate>`).
 
-3. **Offer actions:**
-   - "Explore code" - Read and explain module
-   - "Implement feature" - User describes what to add
-   - "Run tests" - `cargo test`
-   - "Run benchmarks" - `cargo bench`
-   - "Security audit" - `cargo audit && cargo clippy`
-   - "View docs" - Show README and plans
+## Working in a crate
 
-Let user choose what they want to do with the module.
-
-## Module Mapping
-
-| Number | Crate           | Purpose                        |
-|--------|-----------------|--------------------------------|
-| 1      | `crypto-engine` | Core cryptographic primitives  |
-| 2      | `key-manager`   | Key lifecycle management       |
-| 3      | `auth`          | Authentication & authorization |
-| 4      | `grpc-api`      | gRPC API server                |
-| 5      | `audit`         | Audit logging                  |
-| 6      | `metrics`       | Metrics & monitoring           |
-| 7      | `storage`       | Persistent storage             |
-| 8      | `backup`        | Backup & recovery              |
-| 9      | `config`        | Configuration management       |
+- Finish with `/verify`; it runs the feature-gated builds a single-crate test misses.
+- A change to a public type or function: check the reverse dependencies from step 2 still build.
