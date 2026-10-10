@@ -29,8 +29,8 @@ export default defineConfig({
     video: false,
     screenshotOnRunFailure: true,
 
-    // Environment variables
-    env: {
+    // Public test configuration, read with Cypress.expose()
+    expose: {
       apiUrl: '/api/hsm',
       defaultUsername: 'admin',
       defaultPassword: 'dev',

@@ -15,7 +15,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 zeroize = { version = "1.9", features = ["derive"] }
 rayon = "1.12"  # Parallel processing
-zstd = "0.13"  # Compression
+zstd = "0.14"  # Compression
 postcard = { workspace = true }  # Binary serialization
 tokio = { version = "1.53", features = ["io-util", "fs"] }  # Async I/O
 hmac = "0.12"  # HMAC for integrity

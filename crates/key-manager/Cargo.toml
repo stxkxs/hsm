@@ -14,7 +14,7 @@ hsm-blockchain = { path = "../blockchain" }
 
 # BIP-32 extended key reconstruction (faithful XPrv rebuild from stored
 # private-key + chain-code components, used by HD child derivation)
-bip32 = { version = "0.5", default-features = false, features = ["alloc", "secp256k1"] }
+bip32 = { version = "0.6", default-features = false, features = ["alloc", "secp256k1"] }
 
 # Cryptographic primitives for key import
 ed25519-dalek = { version = "2.2", features = ["rand_core"] }
