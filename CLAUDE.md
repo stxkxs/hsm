@@ -18,21 +18,19 @@ cargo test --all -- --skip performance --skip throughput --skip stress --skip hi
 cargo clippy --all -- -D warnings                  # lint (warnings are errors)
 cargo fmt --all                                    # format
 cargo doc --no-deps --all                          # docs (should produce zero warnings)
-cargo audit --deny warnings                        # security audit (4 transitive advisories ignored in CI)
+cargo audit --deny unsound                         # security audit, CI policy (ignores: .cargo/audit.toml + ci.yml)
 cargo bench --all                                  # benchmarks (Criterion)
 ```
 
 ## Code conventions
 
-- `#![deny(unsafe_code)]` on 19 of 23 crates. Only `crypto-engine`, `pkcs11-bridge`, `hardware-backend`, and `validator` are exempt.
+- Every crate root carries `#![deny(unsafe_code)]` except `crypto-engine`, `pkcs11-bridge` and `hardware-backend`.
 - Commit messages use conventional prefixes: `fix:`, `feat:`, `security:`, `style:`, `docs:`, etc.
 - Security first: constant-time operations (`subtle`), memory zeroization (`zeroize`), secret redaction (`secrecy`). Never log key material.
 
 ## Architecture references
 
 - Full specification: @docs/architecture/spec.md
-- Phase 1 implementation plans: @docs/phases/phase-1-plans/
-- Phase 2 enhancement plans: @docs/phases/phase-2-plans/
 
 ## Module-specific CLAUDE.md
 

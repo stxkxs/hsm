@@ -1,57 +1,38 @@
 ---
-name: HSM Test Coverage
-description: Analyze test coverage and identify gaps
-version: 1.0.0
-tags: [hsm, testing, coverage]
+name: hsm-coverage
+description: Measure test coverage with cargo-llvm-cov for one crate or the workspace and turn uncovered security-relevant paths into concrete test suggestions.
 ---
 
-# HSM Test Coverage
-
-Test coverage analysis for HSM modules.
-
-## Usage
+# HSM test coverage
 
 ```
-/hsm-coverage [module-number]
+/hsm-coverage [crate]
 ```
 
-## What You Do
+`crate` is a directory name under `crates/`. With no argument, measure the workspace.
 
-1. **Run Coverage:**
+## Steps
+
+1. **Tooling.** `cargo llvm-cov --version`; if missing, `cargo install cargo-llvm-cov` and `rustup component add llvm-tools-preview`.
+
+2. **Run.** Use the same slow-test skips as `/verify`:
    ```bash
-   cargo tarpaulin --all --out Lcov
+   SKIPS="--skip performance --skip throughput --skip stress --skip high_concurrency --skip large_chain --skip batch_operations --skip workload"
+   # one crate
+   cargo llvm-cov --manifest-path crates/<crate>/Cargo.toml --summary-only -- $SKIPS
+   # workspace
+   cargo llvm-cov --workspace --summary-only -- $SKIPS
    ```
-   Or for specific module:
-   ```bash
-   cd crates/<module> && cargo tarpaulin --out Lcov
-   ```
+   For line-level gaps, rerun with `--text --output-path target/llvm-cov.txt` (or `--html`) and read the uncovered lines for the files that matter.
 
-2. **Parse Results:**
-   Extract:
-   - Line coverage %
-   - Branch coverage %
-   - Uncovered lines/functions
+3. **Target.** The spec's testing strategy (`docs/architecture/spec.md`) sets >80% coverage per module. Report each crate's line and region coverage against it.
 
-3. **Compare Against Target:**
-   Target: >90% line coverage per module
+4. **Prioritise gaps.** A percentage is not the finding; uncovered behaviour is. Rank uncovered code by risk:
+   - error and rejection paths in crypto, auth, key lifecycle and storage (invalid keys, bad signatures, tampered ciphertext, expired or revoked credentials)
+   - namespace and RBAC denial branches
+   - zeroization and redaction paths
+   - parsing of untrusted input
 
-4. **Identify Gaps:**
-   Report uncovered code paths with suggestions:
-   ```
-   Uncovered:
-     src/asymmetric/rsa.rs:145-152   - Error handling for invalid key
+   Shape-only tests (constructs a value, asserts it exists) count toward the percentage while proving nothing. Suggested tests assert behaviour: known-answer vectors for crypto, an explicit rejection for every denial path.
 
-   Suggested:
-     - test_rsa_invalid_key_size()
-     - test_rsa_error_recovery()
-   ```
-
-5. **Recommend Test Types:**
-   - Unit tests for basic functionality
-   - Property tests for invariants
-   - Fuzz tests for robustness
-   - Integration tests for workflows
-
-## Target Coverage
-
-All modules: >90% line coverage
+5. **Report.** Per crate: coverage vs target, then the ranked uncovered paths as `file:line` with a named test that would cover each.
