@@ -20,7 +20,7 @@ hex = "0.4"
 sha2 = "0.10"
 hmac = "0.12"
 subtle = "2.5"
-parking_lot = "0.12"
+parking_lot = "0.13"
 urlencoding = "2.1.3"
 getrandom = "0.4.3"
 
