@@ -37,7 +37,7 @@ tracing = "0.1"
 chrono = "0.4"
 
 # Concurrency
-parking_lot = "0.12"
+parking_lot = "0.13"
 
 # AWS Nitro Enclaves backend
 aws-config = { version = "1.10", optional = true }

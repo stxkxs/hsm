@@ -70,12 +70,12 @@ jobs:
         # vulnerabilities and unsound advisories still hard-fail.
         cargo audit --deny unsound \
           --ignore RUSTSEC-2021-0145 \
-          --ignore RUSTSEC-2026-0097
+          --ignore RUSTSEC-2026-0387
         # Ignored advisories — only vulnerability/unsound-type entries that are not
         # applicable here (unmaintained/yanked notices are NOT denied, so need no ignore):
         # RUSTSEC-2021-0145: atty potential unaligned read (unsound) — via clap 2 -> dudect-bencher (dev-dep only).
-        # RUSTSEC-2026-0097: rand 0.10 unsound with a custom global logger — via quickcheck (grpc-api dev-dep only;
-        #   the HSM never installs a custom rand logger).
+        # RUSTSEC-2026-0387: crypto-bigint 0.5.5 timing variability — via elliptic-curve 0.13 and starknet-crypto 0.8.
+        #   No 0.5.x patch exists; see .cargo/audit.toml for the paths and what unblocks removal.
 
   msrv:
     runs-on: ubuntu-latest
