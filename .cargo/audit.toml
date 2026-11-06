@@ -28,10 +28,6 @@ ignore = [
     # Sled maintainers have not refreshed parking_lot. Affects only sled-backed components.
     "RUSTSEC-2024-0384",
 
-    # rand 0.10 unsoundness when a custom global logger is installed. Pulled in via quickcheck
-    # (grpc-api dev-dep only). The HSM does not install a custom rand logger, so this is
-    # inert. quickcheck 1.x is not yet updated to rand 0.11+.
-    "RUSTSEC-2026-0097",
 
     # paste - unmaintained proc-macro (RUSTSEC-2024-0436). Pulled in transitively via
     # alloy-primitives (blockchain), pqcrypto-mldsa (crypto-engine ML-DSA), and ark-ff. No
@@ -63,6 +59,20 @@ ignore = [
     "RUSTSEC-2026-0162",  # pqcrypto-traits unmaintained
     "RUSTSEC-2026-0163",  # pqcrypto-internals unmaintained
     "RUSTSEC-2026-0166",  # pqcrypto-mldsa unmaintained
+
+    # crypto-bigint 0.5.5 timing variability in operations meant to be constant-time
+    # (RUSTSEC-2026-0387). This one is REACHABLE, not inert: elliptic-curve 0.13 (under
+    # k256/p256/p384 0.13, the ECDSA keys crypto-engine, key-manager, auth and blockchain
+    # sign with) uses it for scalar arithmetic, and starknet-crypto 0.8 uses it for RFC 6979
+    # nonce derivation in hsm-blockchain. The only patched release is crypto-bigint 0.7.6,
+    # and no 0.5.x patch exists. Moving off 0.5 needs both:
+    #   - the elliptic-curve 0.14 / RustCrypto trait wave, held in .github/dependabot.yml
+    #     because rsa 0.9.10 (the latest stable rsa) still requires sha2/digest 0.10 and
+    #     pkcs8 0.10, and the call sites cannot mix trait generations;
+    #   - a starknet-crypto release on crypto-bigint 0.7 (0.8.1, the latest, requires 0.5).
+    # Exposure depends on compiler and target CPU and on an attacker able to time signing.
+    # Remove this entry as soon as `cargo tree -i crypto-bigint@0.5.5` comes back empty.
+    "RUSTSEC-2026-0387",
 ]
 
 # Severity threshold for errors (we want to be notified of medium+ vulnerabilities)

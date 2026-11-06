@@ -28,7 +28,7 @@ parking_lot.workspace = true
 pem = "4.0"
 
 # Performance & Caching
-lru = "0.18"
+lru = "0.19"
 dashmap = "6.2"
 
 # Permissions

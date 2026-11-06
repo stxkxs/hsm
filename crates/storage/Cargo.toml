@@ -34,7 +34,7 @@ futures = "0.3"
 async-trait = "0.1"
 
 # Caching
-lru = "0.18"
+lru = "0.19"
 dashmap = "6.2"
 parking_lot.workspace = true
 

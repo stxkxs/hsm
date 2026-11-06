@@ -21,7 +21,7 @@ validator = { version = "0.21", features = ["derive"] }
 
 # Hot reload & concurrency
 notify = "8.2"
-parking_lot = "0.12"
+parking_lot = "0.13"
 
 # Encryption
 aes-gcm = "0.10"

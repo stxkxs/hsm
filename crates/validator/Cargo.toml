@@ -35,7 +35,7 @@ hex = "0.4"
 sled = "0.34"
 
 # Concurrent access
-parking_lot = "0.12"
+parking_lot = "0.13"
 dashmap.workspace = true
 
 # Misc

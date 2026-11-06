@@ -23,7 +23,7 @@ updates:
     groups:
       rust-patch-and-minor:
         update-types: ["minor", "patch"]
-    # These 26 crates are every direct dependency `cargo upgrade --incompatible
+    # These 28 crates are every direct dependency `cargo upgrade --incompatible
     # --dry-run` reports as held back, except sgx_types — whose only available bump is
     # patch-level, so the resolver simply declines it and Dependabot produces nothing.
     # Keep this in sync with that command: a crate listed there but not here means
@@ -72,6 +72,10 @@ updates:
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "pkcs8"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # pkcs1 0.8 moves to der/spki 0.8; crypto-engine/src/asymmetric/rsa.rs calls
+      # pkcs1::DecodeRsaPublicKey on rsa 0.9's RsaPublicKey, which implements the 0.7 trait.
+      - dependency-name: "pkcs1"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "k256"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "p256"
@@ -92,6 +96,10 @@ updates:
       - dependency-name: "rand_chacha"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "num-bigint"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # argon2 0.6 re-exports password-hash 0.6, built on rand_core 0.10: backup/src/export.rs
+      # passes aes-gcm 0.10's rand_core 0.6 OsRng to SaltString::generate.
+      - dependency-name: "argon2"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
 
       # ── Attempted and reverted (pre-1.0) ───────────────────────────────────
