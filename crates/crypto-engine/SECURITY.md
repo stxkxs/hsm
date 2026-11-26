@@ -103,6 +103,8 @@ cargo audit
 
 Current known issues:
 - `rsa 0.9.10`: RUSTSEC-2023-0071 (Marvin Attack)
+- `pqcrypto-mlkem 0.1.1`: RUSTSEC-2026-0585 (encapsulation and decapsulation skip the FIPS 203 input checks)
+- `pqcrypto-mldsa 0.1.2`: RUSTSEC-2026-0586 (the AVX2 verifier accepts non-conforming signatures; this crate builds it without `avx2`)
 
 ## Reporting Security Issues
 

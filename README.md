@@ -712,11 +712,23 @@ cargo fuzz run fuzz_ed25519_sign
 - **Mitigation**: No upstream fix available. Consider additional randomness sources for critical key splits
 - **Reference**: https://rustsec.org/advisories/RUSTSEC-2024-0398
 
-The two advisories above carry security-relevant mitigations. The full, canonical list of
-accepted transitive advisories (all unmaintained-crate warnings with no upstream fix and no
-runtime exposure — e.g. `paste`, `fxhash`, `derivative`, `serde_cbor`) is tracked with
-per-entry rationale in [`.cargo/audit.toml`](.cargo/audit.toml). `cargo audit --deny warnings`
-passes against that ignore list.
+**RUSTSEC-2026-0585: ML-KEM skips the FIPS 203 input checks**
+- **Affected**: ML-KEM-768/1024 encapsulation and decapsulation in `hsm-crypto-engine`'s `pqc` module, and the hybrid KEM built on them
+- **Issue**: `pqcrypto-mlkem` accepts encapsulation keys with unreduced coefficients and decapsulation keys whose stored hash or embedded encapsulation key was altered; no key material is disclosed
+- **Mitigation**: No upstream fix; the crate is unmaintained. No server API calls the `pqc` module, and the FIPS registry lists ML-KEM as under evaluation, not approved
+- **Reference**: https://rustsec.org/advisories/RUSTSEC-2026-0585
+
+**RUSTSEC-2026-0586: ML-DSA AVX2 verifier accepts non-conforming signatures**
+- **Affected**: ML-DSA-65/87 verification in `hsm-crypto-engine`'s `pqc` module
+- **Issue**: the AVX2 backend of `pqcrypto-mldsa` skips the FIPS 204 bound on the infinity norm of z
+- **Mitigation**: `pqcrypto-mldsa` is built without its `avx2` feature, so verification runs the portable backend, which performs the check
+- **Reference**: https://rustsec.org/advisories/RUSTSEC-2026-0586
+
+The advisories above carry security-relevant mitigations. Every accepted advisory, with the
+dependency path that pulls it in and the reason it is accepted, is listed in
+[`.cargo/audit.toml`](.cargo/audit.toml). CI runs `cargo audit --deny unsound` against that
+list: vulnerabilities and unsound advisories fail the build, and unmaintained notices are
+reported as warnings.
 
 ### Best Practices
 
