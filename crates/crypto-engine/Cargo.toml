@@ -72,7 +72,11 @@ frost-core = "3"
 rayon = "1.12"
 # Post-quantum cryptography (NIST FIPS 203/204 standardized)
 pqcrypto-mlkem = "0.1"
-pqcrypto-mldsa = "0.1"
+# Built without the default `avx2` feature. That backend's verifier skips the FIPS 204
+# bound on the infinity norm of z and accepts signatures a conforming verifier rejects
+# (RUSTSEC-2026-0586); the portable backend performs the check. `neon` and `std` are
+# the remaining defaults.
+pqcrypto-mldsa = { version = "0.1", default-features = false, features = ["std", "neon"] }
 pqcrypto-traits = "0.3.5"
 x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }
 
