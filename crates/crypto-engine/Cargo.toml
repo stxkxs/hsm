@@ -35,7 +35,8 @@ argon2 = "0.5"
 # Security
 zeroize = { version = "1.9", features = ["derive"] }
 secrecy = "0.10"
-getrandom.workspace = true
+# `sys_rng` provides the rand_core 0.10 OS generator ML-DSA's hedged signing draws from.
+getrandom = { workspace = true, features = ["sys_rng"] }
 subtle = "2.6"
 
 # FIPS compliance
@@ -70,14 +71,10 @@ frost-core = "3"
 
 # Parallelism
 rayon = "1.12"
-# Post-quantum cryptography (NIST FIPS 203/204 standardized)
-pqcrypto-mlkem = "0.1"
-# Built without the default `avx2` feature. That backend's verifier skips the FIPS 204
-# bound on the infinity norm of z and accepts signatures a conforming verifier rejects
-# (RUSTSEC-2026-0586); the portable backend performs the check. `neon` and `std` are
-# the remaining defaults.
-pqcrypto-mldsa = { version = "0.1", default-features = false, features = ["std", "neon"] }
-pqcrypto-traits = "0.3.5"
+# Post-quantum cryptography: ML-KEM (FIPS 203) and ML-DSA (FIPS 204). Secret keys are held
+# as the FIPS seeds, and fresh randomness comes from the OS through getrandom.
+ml-kem = { version = "0.3.4", features = ["getrandom", "zeroize"] }
+ml-dsa = { version = "0.1.2", default-features = false, features = ["alloc", "rand_core", "zeroize"] }
 x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }
 
 [dev-dependencies]

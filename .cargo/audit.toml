@@ -30,9 +30,9 @@ ignore = [
 
 
     # paste - unmaintained proc-macro (RUSTSEC-2024-0436). Pulled in transitively via
-    # alloy-primitives (blockchain), pqcrypto-mldsa (crypto-engine ML-DSA), and ark-ff. No
-    # upstream fix: even alloy-primitives 1.x and the latest pqcrypto-mldsa still depend on
-    # paste ^1.0. It is a compile-time-only proc-macro, so there is no runtime exposure.
+    # alloy-primitives (blockchain) and ark-ff. No upstream fix: even alloy-primitives 1.x
+    # still depends on paste ^1.0. It is a compile-time-only proc-macro, so there is no
+    # runtime exposure.
     "RUSTSEC-2024-0436",
 
     # fxhash - unmaintained (RUSTSEC-2025-0057), pulled in via sled 0.34 (storage/cluster/
@@ -46,19 +46,6 @@ ignore = [
     # fix: even arkworks 0.6 still depends on derivative ^2.0. Not present in the default
     # hsm-server binary; compile-time-only proc-macro with no runtime exposure.
     "RUSTSEC-2024-0388",
-
-    # pqcrypto-* family - unmaintained: the upstream PQClean project is being archived
-    # (advisories published 2026-06-04). Pulled in via hsm-crypto-engine's post-quantum
-    # support — pqcrypto-mlkem (ML-KEM / Kyber) and pqcrypto-mldsa (ML-DSA / Dilithium),
-    # which in turn depend on pqcrypto-internals and pqcrypto-traits. These are
-    # unmaintained NOTICES (no known vulnerability), not denied by `--deny unsound`. There
-    # is no maintained drop-in pure-Rust replacement for NIST PQC primitives yet; the
-    # RustCrypto ml-kem/ml-dsa crates are not yet a 1:1 swap for these bindings. Tracked for
-    # migration when a maintained successor stabilizes.
-    "RUSTSEC-2026-0161",  # pqcrypto-mlkem unmaintained
-    "RUSTSEC-2026-0162",  # pqcrypto-traits unmaintained
-    "RUSTSEC-2026-0163",  # pqcrypto-internals unmaintained
-    "RUSTSEC-2026-0166",  # pqcrypto-mldsa unmaintained
 
     # crypto-bigint 0.5.5 timing variability in operations meant to be constant-time
     # (RUSTSEC-2026-0387). This one is REACHABLE, not inert: elliptic-curve 0.13 (under
@@ -94,20 +81,6 @@ ignore = [
     "RUSTSEC-2026-0581",  # Deque::make_contiguous broken invariants
     "RUSTSEC-2026-0582",  # IndexMap::insert at u16::MAX elements
 
-    # pqcrypto-mlkem 0.1.1 - RUSTSEC-2026-0585: encapsulation skips the FIPS 203 encapsulation
-    # key modulus check and decapsulation skips the decapsulation key hash check, so malformed
-    # keys are accepted; no key material is disclosed. pqcrypto-mldsa 0.1.2 -
-    # RUSTSEC-2026-0586: the AVX2 verifier accepts signatures FIPS 204 rejects. crypto-engine
-    # builds pqcrypto-mldsa without `avx2` (see its Cargo.toml), so verification runs the
-    # portable backend, which performs the check; the advisory matches on the version alone.
-    # Neither crate has a patched release, and both are unmaintained (the pqcrypto-* entries
-    # above). Both are reached only through hsm-crypto-engine's `pqc` module, which no server
-    # API, key store or other workspace crate calls, and which the FIPS registry lists as under
-    # evaluation rather than approved. The maintained successors are the RustCrypto ml-kem and
-    # ml-dsa crates. Remove these entries as soon as `cargo tree -i pqcrypto-mlkem` and
-    # `cargo tree -i pqcrypto-mldsa` come back empty.
-    "RUSTSEC-2026-0585",  # pqcrypto-mlkem: no FIPS 203 input checks
-    "RUSTSEC-2026-0586",  # pqcrypto-mldsa: AVX2 verifier accepts non-conforming signatures
 ]
 
 # Severity threshold for errors (we want to be notified of medium+ vulnerabilities)

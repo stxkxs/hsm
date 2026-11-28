@@ -79,9 +79,7 @@ jobs:
           --ignore RUSTSEC-2026-0579 \
           --ignore RUSTSEC-2026-0580 \
           --ignore RUSTSEC-2026-0581 \
-          --ignore RUSTSEC-2026-0582 \
-          --ignore RUSTSEC-2026-0585 \
-          --ignore RUSTSEC-2026-0586
+          --ignore RUSTSEC-2026-0582
         # Ignored advisories — only vulnerability/unsound-type entries that are not
         # applicable here (unmaintained/yanked notices are NOT denied, so need no ignore):
         # RUSTSEC-2021-0145: atty potential unaligned read (unsound) — via clap 2 -> dudect-bencher (dev-dep only).
@@ -89,8 +87,6 @@ jobs:
         #   No 0.5.x patch exists; see .cargo/audit.toml for the paths and what unblocks removal.
         # RUSTSEC-2026-0574 to RUSTSEC-2026-0582: heapless 0.7.17 (unsound) — via frost-core 3 -> postcard's
         #   default features; nothing in the graph calls the affected APIs. See .cargo/audit.toml.
-        # RUSTSEC-2026-0585, RUSTSEC-2026-0586: pqcrypto-mlkem / pqcrypto-mldsa, no patched release — reached
-        #   only through crypto-engine's pqc module; ML-DSA is built without `avx2`. See .cargo/audit.toml.
 
   msrv:
     runs-on: ubuntu-latest

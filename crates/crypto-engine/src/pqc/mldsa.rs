@@ -12,14 +12,13 @@
 //!
 //! | Level | Public Key | Secret Key | Signature |
 //! |-------|------------|------------|-----------|
-//! | 65    | 1952 bytes | 4032 bytes | 3309 bytes|
-//! | 87    | 2592 bytes | 4896 bytes | 4627 bytes|
+//! | 65    | 1952 bytes | 32 bytes   | 3309 bytes|
+//! | 87    | 2592 bytes | 32 bytes   | 4627 bytes|
 //!
-//! # Note on Naming
-//!
-//! The pqcrypto-dilithium crate uses `mldsa65` for ML-DSA-65 and
-//! `mldsa87` for ML-DSA-87. This mapping follows the NIST security
-//! level correspondence.
+//! The secret key is the FIPS 204 key-generation seed ξ; the signing key is derived from
+//! it for each signature. Signing is the hedged (randomized) ML-DSA.Sign with an empty
+//! context string, drawing its randomness from the operating system, and verification
+//! is ML-DSA.Verify with the same empty context.
 //!
 //! # Example
 //!
@@ -44,12 +43,20 @@
 //! assert!(valid);
 //! ```
 
-use crate::Result;
-use pqcrypto_mldsa::{mldsa65, mldsa87};
-use pqcrypto_traits::sign::{DetachedSignature, PublicKey, SecretKey};
-use zeroize::ZeroizeOnDrop;
+use crate::{CryptoError, Result};
+use ml_dsa::{
+    EncodedSignature, EncodedVerifyingKey, MlDsa65, MlDsa87, Seed, Signature, SigningKey,
+    VerifyingKey,
+};
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use super::error::PqcError;
+
+/// Length of the FIPS 204 key-generation seed ξ, which is the stored secret key.
+const SEED_LEN: usize = 32;
+
+/// ML-DSA.Sign and ML-DSA.Verify context string: empty, as for the plain FIPS 204 API.
+const CONTEXT: &[u8] = &[];
 
 /// Security level for ML-DSA.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,7 +95,7 @@ pub struct MlDsaKeyPair {
     #[zeroize(skip)]
     pub public_key: Vec<u8>,
 
-    /// Secret key bytes (must be kept private for signing).
+    /// Secret key bytes: the FIPS 204 seed ξ (must be kept private for signing).
     secret_key: Vec<u8>,
 }
 
@@ -98,8 +105,8 @@ impl MlDsaKeyPair {
     /// # Arguments
     ///
     /// * `level` - Security level of the key pair
-    /// * `public_key` - Public key bytes
-    /// * `secret_key` - Secret key bytes
+    /// * `public_key` - Encoded verifying key
+    /// * `secret_key` - FIPS 204 key-generation seed ξ
     pub fn new(level: MlDsaSecurityLevel, public_key: Vec<u8>, secret_key: Vec<u8>) -> Self {
         Self {
             security_level: level,
@@ -158,6 +165,8 @@ pub struct MlDsaEngine;
 impl MlDsaEngine {
     /// Generates a new ML-DSA key pair.
     ///
+    /// The seed ξ is drawn from the operating system's CSPRNG.
+    ///
     /// # Arguments
     ///
     /// * `level` - Security level to use
@@ -165,30 +174,26 @@ impl MlDsaEngine {
     /// # Returns
     ///
     /// A new key pair for the specified security level.
-    ///
-    /// # Performance
-    ///
-    /// - ML-DSA-65 keygen: ~100 microseconds
-    /// - ML-DSA-87 keygen: ~150 microseconds
     pub fn generate_keypair(level: MlDsaSecurityLevel) -> Result<MlDsaKeyPair> {
-        match level {
+        let mut seed = Zeroizing::new([0u8; SEED_LEN]);
+        getrandom::fill(seed.as_mut()).map_err(|_| CryptoError::InsufficientEntropy)?;
+        Ok(Self::keypair_from_seed(level, &seed))
+    }
+
+    /// Derives the key pair FIPS 204 `ML-DSA.KeyGen_internal` produces from a seed.
+    fn keypair_from_seed(level: MlDsaSecurityLevel, seed: &[u8; SEED_LEN]) -> MlDsaKeyPair {
+        let xi = Zeroizing::new(Seed::from(*seed));
+        let public_key = match level {
             MlDsaSecurityLevel::MlDsa65 => {
-                let (pk, sk) = mldsa65::keypair();
-                Ok(MlDsaKeyPair::new(
-                    level,
-                    pk.as_bytes().to_vec(),
-                    sk.as_bytes().to_vec(),
-                ))
+                let signing_key = SigningKey::<MlDsa65>::from_seed(&xi);
+                signing_key.expanded_key().verifying_key().encode().to_vec()
             }
             MlDsaSecurityLevel::MlDsa87 => {
-                let (pk, sk) = mldsa87::keypair();
-                Ok(MlDsaKeyPair::new(
-                    level,
-                    pk.as_bytes().to_vec(),
-                    sk.as_bytes().to_vec(),
-                ))
+                let signing_key = SigningKey::<MlDsa87>::from_seed(&xi);
+                signing_key.expanded_key().verifying_key().encode().to_vec()
             }
-        }
+        };
+        MlDsaKeyPair::new(level, public_key, seed.to_vec())
     }
 
     /// Signs a message using ML-DSA.
@@ -201,38 +206,37 @@ impl MlDsaEngine {
     /// # Returns
     ///
     /// The signature on success.
-    ///
-    /// # Performance
-    ///
-    /// - ML-DSA-65 sign: ~500 microseconds
-    /// - ML-DSA-87 sign: ~800 microseconds
     pub fn sign(keypair: &MlDsaKeyPair, message: &[u8]) -> Result<MlDsaSignature> {
         let level = keypair.security_level;
+        let xi = Zeroizing::new(Seed::try_from(keypair.secret_key.as_slice()).map_err(|_| {
+            PqcError::InvalidSecretKey {
+                algorithm: level.as_str(),
+            }
+        })?);
+        let signing_failed = |_| PqcError::SigningFailed(level.as_str().to_string());
 
-        match level {
+        let bytes = match level {
             MlDsaSecurityLevel::MlDsa65 => {
-                let sk = mldsa65::SecretKey::from_bytes(&keypair.secret_key).map_err(|_| {
-                    PqcError::InvalidSecretKey {
-                        algorithm: level.as_str(),
-                    }
-                })?;
-
-                let sig = mldsa65::detached_sign(message, &sk);
-
-                Ok(MlDsaSignature::new(sig.as_bytes().to_vec(), level))
+                let signing_key = SigningKey::<MlDsa65>::from_seed(&xi);
+                signing_key
+                    .expanded_key()
+                    .sign_randomized(message, CONTEXT, &mut getrandom::SysRng)
+                    .map_err(signing_failed)?
+                    .encode()
+                    .to_vec()
             }
             MlDsaSecurityLevel::MlDsa87 => {
-                let sk = mldsa87::SecretKey::from_bytes(&keypair.secret_key).map_err(|_| {
-                    PqcError::InvalidSecretKey {
-                        algorithm: level.as_str(),
-                    }
-                })?;
-
-                let sig = mldsa87::detached_sign(message, &sk);
-
-                Ok(MlDsaSignature::new(sig.as_bytes().to_vec(), level))
+                let signing_key = SigningKey::<MlDsa87>::from_seed(&xi);
+                signing_key
+                    .expanded_key()
+                    .sign_randomized(message, CONTEXT, &mut getrandom::SysRng)
+                    .map_err(signing_failed)?
+                    .encode()
+                    .to_vec()
             }
-        }
+        };
+
+        Ok(MlDsaSignature::new(bytes, level))
     }
 
     /// Verifies an ML-DSA signature.
@@ -246,102 +250,67 @@ impl MlDsaEngine {
     ///
     /// # Returns
     ///
-    /// `true` if the signature is valid, `false` otherwise.
-    ///
-    /// # Performance
-    ///
-    /// - ML-DSA-65 verify: ~200 microseconds
-    /// - ML-DSA-87 verify: ~300 microseconds
+    /// `true` if the signature is valid, `false` otherwise, including for a signature
+    /// whose encoding does not decode.
     pub fn verify(
         public_key: &[u8],
         message: &[u8],
         signature: &MlDsaSignature,
         level: MlDsaSecurityLevel,
     ) -> Result<bool> {
-        match level {
+        let expected_pk_size = Self::public_key_size(level);
+        if public_key.len() != expected_pk_size {
+            return Err(PqcError::InvalidKeySize {
+                algorithm: level.as_str(),
+                expected: expected_pk_size,
+                actual: public_key.len(),
+            }
+            .into());
+        }
+
+        let expected_sig_size = Self::signature_size(level);
+        if signature.bytes.len() != expected_sig_size {
+            return Err(PqcError::InvalidSignatureSize {
+                algorithm: level.as_str(),
+                expected: expected_sig_size,
+                actual: signature.bytes.len(),
+            }
+            .into());
+        }
+
+        let invalid_public_key = |_| PqcError::InvalidPublicKey {
+            algorithm: level.as_str(),
+        };
+        let invalid_signature = |_| PqcError::InvalidSignatureSize {
+            algorithm: level.as_str(),
+            expected: expected_sig_size,
+            actual: signature.bytes.len(),
+        };
+
+        let valid = match level {
             MlDsaSecurityLevel::MlDsa65 => {
-                let expected_pk_size = Self::public_key_size(level);
-                if public_key.len() != expected_pk_size {
-                    return Err(PqcError::InvalidKeySize {
-                        algorithm: level.as_str(),
-                        expected: expected_pk_size,
-                        actual: public_key.len(),
-                    }
-                    .into());
-                }
-
-                let expected_sig_size = Self::signature_size(level);
-                if signature.bytes.len() != expected_sig_size {
-                    return Err(PqcError::InvalidSignatureSize {
-                        algorithm: level.as_str(),
-                        expected: expected_sig_size,
-                        actual: signature.bytes.len(),
-                    }
-                    .into());
-                }
-
-                let pk = mldsa65::PublicKey::from_bytes(public_key).map_err(|_| {
-                    PqcError::InvalidPublicKey {
-                        algorithm: level.as_str(),
-                    }
-                })?;
-
-                let sig =
-                    mldsa65::DetachedSignature::from_bytes(&signature.bytes).map_err(|_| {
-                        PqcError::InvalidSignatureSize {
-                            algorithm: level.as_str(),
-                            expected: expected_sig_size,
-                            actual: signature.bytes.len(),
-                        }
-                    })?;
-
-                match mldsa65::verify_detached_signature(&sig, message, &pk) {
-                    Ok(()) => Ok(true),
-                    Err(_) => Ok(false),
-                }
+                let vk = VerifyingKey::<MlDsa65>::decode(
+                    &EncodedVerifyingKey::<MlDsa65>::try_from(public_key)
+                        .map_err(invalid_public_key)?,
+                );
+                let encoded = EncodedSignature::<MlDsa65>::try_from(signature.bytes.as_slice())
+                    .map_err(invalid_signature)?;
+                Signature::<MlDsa65>::decode(&encoded)
+                    .is_some_and(|sig| vk.verify_with_context(message, CONTEXT, &sig))
             }
             MlDsaSecurityLevel::MlDsa87 => {
-                let expected_pk_size = Self::public_key_size(level);
-                if public_key.len() != expected_pk_size {
-                    return Err(PqcError::InvalidKeySize {
-                        algorithm: level.as_str(),
-                        expected: expected_pk_size,
-                        actual: public_key.len(),
-                    }
-                    .into());
-                }
-
-                let expected_sig_size = Self::signature_size(level);
-                if signature.bytes.len() != expected_sig_size {
-                    return Err(PqcError::InvalidSignatureSize {
-                        algorithm: level.as_str(),
-                        expected: expected_sig_size,
-                        actual: signature.bytes.len(),
-                    }
-                    .into());
-                }
-
-                let pk = mldsa87::PublicKey::from_bytes(public_key).map_err(|_| {
-                    PqcError::InvalidPublicKey {
-                        algorithm: level.as_str(),
-                    }
-                })?;
-
-                let sig =
-                    mldsa87::DetachedSignature::from_bytes(&signature.bytes).map_err(|_| {
-                        PqcError::InvalidSignatureSize {
-                            algorithm: level.as_str(),
-                            expected: expected_sig_size,
-                            actual: signature.bytes.len(),
-                        }
-                    })?;
-
-                match mldsa87::verify_detached_signature(&sig, message, &pk) {
-                    Ok(()) => Ok(true),
-                    Err(_) => Ok(false),
-                }
+                let vk = VerifyingKey::<MlDsa87>::decode(
+                    &EncodedVerifyingKey::<MlDsa87>::try_from(public_key)
+                        .map_err(invalid_public_key)?,
+                );
+                let encoded = EncodedSignature::<MlDsa87>::try_from(signature.bytes.as_slice())
+                    .map_err(invalid_signature)?;
+                Signature::<MlDsa87>::decode(&encoded)
+                    .is_some_and(|sig| vk.verify_with_context(message, CONTEXT, &sig))
             }
-        }
+        };
+
+        Ok(valid)
     }
 
     /// Returns the public key size in bytes for the given security level.
@@ -352,12 +321,9 @@ impl MlDsaEngine {
         }
     }
 
-    /// Returns the secret key size in bytes for the given security level.
-    pub fn secret_key_size(level: MlDsaSecurityLevel) -> usize {
-        match level {
-            MlDsaSecurityLevel::MlDsa65 => 4032,
-            MlDsaSecurityLevel::MlDsa87 => 4896,
-        }
+    /// Returns the secret key size in bytes: the FIPS 204 seed ξ, at either level.
+    pub fn secret_key_size(_level: MlDsaSecurityLevel) -> usize {
+        SEED_LEN
     }
 
     /// Returns the signature size in bytes for the given security level.
@@ -372,6 +338,12 @@ impl MlDsaEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::{Digest, Sha256};
+
+    /// The seed of the IETF LAMPS ML-DSA certificate examples: the bytes 0x00 through 0x1f.
+    fn counting_seed() -> [u8; SEED_LEN] {
+        core::array::from_fn(|i| i as u8)
+    }
 
     #[test]
     fn test_mldsa_65_sign_verify() {
@@ -483,7 +455,7 @@ mod tests {
         );
         assert_eq!(
             MlDsaEngine::secret_key_size(MlDsaSecurityLevel::MlDsa65),
-            4032
+            32
         );
         assert_eq!(
             MlDsaEngine::signature_size(MlDsaSecurityLevel::MlDsa65),
@@ -496,7 +468,7 @@ mod tests {
         );
         assert_eq!(
             MlDsaEngine::secret_key_size(MlDsaSecurityLevel::MlDsa87),
-            4896
+            32
         );
         assert_eq!(
             MlDsaEngine::signature_size(MlDsaSecurityLevel::MlDsa87),
@@ -505,32 +477,84 @@ mod tests {
     }
 
     #[test]
-    fn test_mldsa_deterministic_signatures() {
-        // ML-DSA signatures are NOT deterministic (they use randomness)
-        // So the same message signed twice should produce different signatures
+    fn test_mldsa_hedged_signatures_differ_and_verify() {
         let keypair = MlDsaEngine::generate_keypair(MlDsaSecurityLevel::MlDsa65).unwrap();
         let message = b"test message";
 
         let sig1 = MlDsaEngine::sign(&keypair, message).unwrap();
         let sig2 = MlDsaEngine::sign(&keypair, message).unwrap();
 
-        // Both signatures should be valid
-        assert!(MlDsaEngine::verify(
-            &keypair.public_key,
-            message,
-            &sig1,
-            MlDsaSecurityLevel::MlDsa65
-        )
-        .unwrap());
-        assert!(MlDsaEngine::verify(
-            &keypair.public_key,
-            message,
-            &sig2,
-            MlDsaSecurityLevel::MlDsa65
-        )
-        .unwrap());
+        for sig in [&sig1, &sig2] {
+            assert!(MlDsaEngine::verify(
+                &keypair.public_key,
+                message,
+                sig,
+                MlDsaSecurityLevel::MlDsa65
+            )
+            .unwrap());
+        }
+        // Each signature draws 32 fresh bytes of randomness, so a repeat means the
+        // randomness is not being used.
+        assert_ne!(sig1.bytes, sig2.bytes);
+    }
 
-        // Signatures may be different (randomized signing)
-        // We don't assert inequality because there's a tiny chance they could be the same
+    /// Known answers: the verifying keys of the IETF LAMPS ML-DSA certificate examples
+    /// (ML-DSA-65.pub and ML-DSA-87.pub, seed 0x00..0x1f), as SHA-256 of the raw key.
+    #[test]
+    fn test_mldsa_keygen_from_seed_matches_known_answers() {
+        let cases = [
+            (
+                MlDsaSecurityLevel::MlDsa65,
+                "d666806e11cee19a7c989f7445f90dd419cf4d2d51db8c0fdb4c0f0a542238c9",
+            ),
+            (
+                MlDsaSecurityLevel::MlDsa87,
+                "91dc389cfaa01470b7f66eee45a4ae9026d154817c754dfe22298b3fa241ffcd",
+            ),
+        ];
+        for (level, expected) in cases {
+            let keypair = MlDsaEngine::keypair_from_seed(level, &counting_seed());
+            assert_eq!(
+                keypair.public_key.len(),
+                MlDsaEngine::public_key_size(level)
+            );
+            assert_eq!(
+                hex::encode(Sha256::digest(&keypair.public_key)),
+                expected,
+                "{}",
+                level.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn test_mldsa_tampered_signature_rejected() {
+        for level in [MlDsaSecurityLevel::MlDsa65, MlDsaSecurityLevel::MlDsa87] {
+            let keypair = MlDsaEngine::generate_keypair(level).unwrap();
+            let message = b"tamper check";
+            let mut signature = MlDsaEngine::sign(&keypair, message).unwrap();
+            let last = signature.bytes.len() - 1;
+            // Flip a bit in the challenge seed c~, then in the encoded hint.
+            for index in [0, last] {
+                signature.bytes[index] ^= 0x01;
+                assert!(
+                    !MlDsaEngine::verify(&keypair.public_key, message, &signature, level).unwrap(),
+                    "{} accepted a signature altered at byte {index}",
+                    level.as_str()
+                );
+                signature.bytes[index] ^= 0x01;
+            }
+        }
+    }
+
+    #[test]
+    fn test_mldsa_rejects_malformed_secret_key() {
+        let keypair = MlDsaEngine::generate_keypair(MlDsaSecurityLevel::MlDsa65).unwrap();
+        let truncated = MlDsaKeyPair::new(
+            MlDsaSecurityLevel::MlDsa65,
+            keypair.public_key.clone(),
+            keypair.secret_key()[..SEED_LEN - 1].to_vec(),
+        );
+        assert!(MlDsaEngine::sign(&truncated, b"message").is_err());
     }
 }

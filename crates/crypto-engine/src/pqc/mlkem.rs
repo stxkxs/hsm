@@ -12,8 +12,16 @@
 //!
 //! | Level | Public Key | Secret Key | Ciphertext | Shared Secret |
 //! |-------|------------|------------|------------|---------------|
-//! | 768   | 1184 bytes | 2400 bytes | 1088 bytes | 32 bytes      |
-//! | 1024  | 1568 bytes | 3168 bytes | 1568 bytes | 32 bytes      |
+//! | 768   | 1184 bytes | 64 bytes   | 1088 bytes | 32 bytes      |
+//! | 1024  | 1568 bytes | 64 bytes   | 1568 bytes | 32 bytes      |
+//!
+//! The secret key is the FIPS 203 key-generation seed `d ‖ z`. The decapsulation key is
+//! derived from it for each operation, so a stored secret key is always consistent with
+//! its public key.
+//!
+//! Encapsulation performs the FIPS 203 §7.2 encapsulation key check: a public key whose
+//! coefficients are not reduced modulo q is rejected with
+//! [`PqcError::InvalidPublicKey`].
 //!
 //! # Example
 //!
@@ -35,12 +43,17 @@
 //! assert_eq!(shared_secret_sender, shared_secret_receiver);
 //! ```
 
-use crate::Result;
-use pqcrypto_mlkem::{mlkem1024, mlkem768};
-use pqcrypto_traits::kem::{Ciphertext as CiphertextTrait, PublicKey, SecretKey, SharedSecret};
-use zeroize::ZeroizeOnDrop;
+use crate::{CryptoError, Result};
+use ml_kem::{
+    Decapsulate, DecapsulationKey1024, DecapsulationKey768, Encapsulate, EncapsulationKey1024,
+    EncapsulationKey768, KeyExport, KeyInit, TryKeyInit,
+};
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use super::error::PqcError;
+
+/// Length of the FIPS 203 key-generation seed `d ‖ z`, which is the stored secret key.
+const SEED_LEN: usize = 64;
 
 /// Security level for ML-KEM (Kyber).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,7 +94,7 @@ pub struct MlKemKeyPair {
     #[zeroize(skip)]
     pub public_key: Vec<u8>,
 
-    /// Secret key bytes (must be kept private).
+    /// Secret key bytes: the FIPS 203 seed `d ‖ z` (must be kept private).
     secret_key: Vec<u8>,
 }
 
@@ -91,8 +104,8 @@ impl MlKemKeyPair {
     /// # Arguments
     ///
     /// * `level` - Security level of the key pair
-    /// * `public_key` - Public key bytes
-    /// * `secret_key` - Secret key bytes
+    /// * `public_key` - Encoded encapsulation key
+    /// * `secret_key` - FIPS 203 key-generation seed `d ‖ z`
     pub fn new(level: MlKemSecurityLevel, public_key: Vec<u8>, secret_key: Vec<u8>) -> Self {
         Self {
             security_level: level,
@@ -151,6 +164,8 @@ pub struct MlKemEngine;
 impl MlKemEngine {
     /// Generates a new ML-KEM key pair.
     ///
+    /// The seed `d ‖ z` is drawn from the operating system's CSPRNG.
+    ///
     /// # Arguments
     ///
     /// * `level` - Security level to use
@@ -158,30 +173,27 @@ impl MlKemEngine {
     /// # Returns
     ///
     /// A new key pair for the specified security level.
-    ///
-    /// # Performance
-    ///
-    /// - ML-KEM-768 keygen: ~50 microseconds
-    /// - ML-KEM-1024 keygen: ~80 microseconds
     pub fn generate_keypair(level: MlKemSecurityLevel) -> Result<MlKemKeyPair> {
-        match level {
-            MlKemSecurityLevel::MlKem768 => {
-                let (pk, sk) = mlkem768::keypair();
-                Ok(MlKemKeyPair::new(
-                    level,
-                    pk.as_bytes().to_vec(),
-                    sk.as_bytes().to_vec(),
-                ))
-            }
-            MlKemSecurityLevel::MlKem1024 => {
-                let (pk, sk) = mlkem1024::keypair();
-                Ok(MlKemKeyPair::new(
-                    level,
-                    pk.as_bytes().to_vec(),
-                    sk.as_bytes().to_vec(),
-                ))
-            }
-        }
+        let mut seed = Zeroizing::new([0u8; SEED_LEN]);
+        getrandom::fill(seed.as_mut()).map_err(|_| CryptoError::InsufficientEntropy)?;
+        Self::keypair_from_seed(level, &seed)
+    }
+
+    /// Derives the key pair FIPS 203 `ML-KEM.KeyGen_internal` produces from a seed.
+    fn keypair_from_seed(level: MlKemSecurityLevel, seed: &[u8; SEED_LEN]) -> Result<MlKemKeyPair> {
+        let public_key = match level {
+            MlKemSecurityLevel::MlKem768 => DecapsulationKey768::new_from_slice(seed)
+                .map_err(|_| Self::invalid_secret_key(level))?
+                .encapsulation_key()
+                .to_bytes()
+                .to_vec(),
+            MlKemSecurityLevel::MlKem1024 => DecapsulationKey1024::new_from_slice(seed)
+                .map_err(|_| Self::invalid_secret_key(level))?
+                .encapsulation_key()
+                .to_bytes()
+                .to_vec(),
+        };
+        Ok(MlKemKeyPair::new(level, public_key, seed.to_vec()))
     }
 
     /// Encapsulates a shared secret using a public key.
@@ -199,64 +211,44 @@ impl MlKemEngine {
     ///
     /// A tuple of (shared_secret, ciphertext) on success.
     ///
-    /// # Performance
+    /// # Errors
     ///
-    /// - ML-KEM-768 encapsulate: ~60 microseconds
-    /// - ML-KEM-1024 encapsulate: ~90 microseconds
+    /// [`PqcError::InvalidKeySize`] for a public key of the wrong length, and
+    /// [`PqcError::InvalidPublicKey`] for one that fails the FIPS 203 §7.2 encapsulation
+    /// key check.
     pub fn encapsulate(
         public_key: &[u8],
         level: MlKemSecurityLevel,
     ) -> Result<(Vec<u8>, MlKemCiphertext)> {
-        match level {
+        let expected_size = Self::public_key_size(level);
+        if public_key.len() != expected_size {
+            return Err(PqcError::InvalidKeySize {
+                algorithm: level.as_str(),
+                expected: expected_size,
+                actual: public_key.len(),
+            }
+            .into());
+        }
+
+        let invalid_public_key = |_| PqcError::InvalidPublicKey {
+            algorithm: level.as_str(),
+        };
+        let (ciphertext, shared_secret) = match level {
             MlKemSecurityLevel::MlKem768 => {
-                let expected_size = Self::public_key_size(level);
-                if public_key.len() != expected_size {
-                    return Err(PqcError::InvalidKeySize {
-                        algorithm: level.as_str(),
-                        expected: expected_size,
-                        actual: public_key.len(),
-                    }
-                    .into());
-                }
-
-                let pk = mlkem768::PublicKey::from_bytes(public_key).map_err(|_| {
-                    PqcError::InvalidPublicKey {
-                        algorithm: level.as_str(),
-                    }
-                })?;
-
-                let (ss, ct) = mlkem768::encapsulate(&pk);
-
-                Ok((
-                    ss.as_bytes().to_vec(),
-                    MlKemCiphertext::new(ct.as_bytes().to_vec(), level),
-                ))
+                let (ct, ss) = EncapsulationKey768::new_from_slice(public_key)
+                    .map_err(invalid_public_key)?
+                    .encapsulate();
+                (ct.to_vec(), Zeroizing::new(ss).to_vec())
             }
             MlKemSecurityLevel::MlKem1024 => {
-                let expected_size = Self::public_key_size(level);
-                if public_key.len() != expected_size {
-                    return Err(PqcError::InvalidKeySize {
-                        algorithm: level.as_str(),
-                        expected: expected_size,
-                        actual: public_key.len(),
-                    }
-                    .into());
-                }
-
-                let pk = mlkem1024::PublicKey::from_bytes(public_key).map_err(|_| {
-                    PqcError::InvalidPublicKey {
-                        algorithm: level.as_str(),
-                    }
-                })?;
-
-                let (ss, ct) = mlkem1024::encapsulate(&pk);
-
-                Ok((
-                    ss.as_bytes().to_vec(),
-                    MlKemCiphertext::new(ct.as_bytes().to_vec(), level),
-                ))
+                let (ct, ss) = EncapsulationKey1024::new_from_slice(public_key)
+                    .map_err(invalid_public_key)?
+                    .encapsulate();
+                (ct.to_vec(), Zeroizing::new(ss).to_vec())
             }
-        }
+        };
+
+        Ok((shared_secret, MlKemCiphertext::new(ciphertext, level)))
     }
 
     /// Decapsulates a ciphertext to recover the shared secret.
@@ -272,75 +264,47 @@ impl MlKemEngine {
     /// # Returns
     ///
     /// The shared secret bytes (32 bytes).
-    ///
-    /// # Performance
-    ///
-    /// - ML-KEM-768 decapsulate: ~50 microseconds
-    /// - ML-KEM-1024 decapsulate: ~70 microseconds
     pub fn decapsulate(keypair: &MlKemKeyPair, ciphertext: &MlKemCiphertext) -> Result<Vec<u8>> {
         let level = keypair.security_level;
 
-        match level {
-            MlKemSecurityLevel::MlKem768 => {
-                let expected_ct_size = Self::ciphertext_size(level);
-                if ciphertext.ciphertext.len() != expected_ct_size {
-                    return Err(PqcError::InvalidCiphertextSize {
-                        algorithm: level.as_str(),
-                        expected: expected_ct_size,
-                        actual: ciphertext.ciphertext.len(),
-                    }
-                    .into());
-                }
-
-                let sk = mlkem768::SecretKey::from_bytes(&keypair.secret_key).map_err(|_| {
-                    PqcError::InvalidSecretKey {
-                        algorithm: level.as_str(),
-                    }
-                })?;
-
-                let ct =
-                    mlkem768::Ciphertext::from_bytes(&ciphertext.ciphertext).map_err(|_| {
-                        PqcError::InvalidCiphertextSize {
-                            algorithm: level.as_str(),
-                            expected: expected_ct_size,
-                            actual: ciphertext.ciphertext.len(),
-                        }
-                    })?;
-
-                let ss = mlkem768::decapsulate(&ct, &sk);
-
-                Ok(ss.as_bytes().to_vec())
+        let expected_ct_size = Self::ciphertext_size(level);
+        if ciphertext.ciphertext.len() != expected_ct_size {
+            return Err(PqcError::InvalidCiphertextSize {
+                algorithm: level.as_str(),
+                expected: expected_ct_size,
+                actual: ciphertext.ciphertext.len(),
             }
-            MlKemSecurityLevel::MlKem1024 => {
-                let expected_ct_size = Self::ciphertext_size(level);
-                if ciphertext.ciphertext.len() != expected_ct_size {
-                    return Err(PqcError::InvalidCiphertextSize {
-                        algorithm: level.as_str(),
-                        expected: expected_ct_size,
-                        actual: ciphertext.ciphertext.len(),
-                    }
-                    .into());
-                }
+            .into());
+        }
 
-                let sk = mlkem1024::SecretKey::from_bytes(&keypair.secret_key).map_err(|_| {
-                    PqcError::InvalidSecretKey {
-                        algorithm: level.as_str(),
-                    }
-                })?;
+        let invalid_ciphertext = |_| PqcError::InvalidCiphertextSize {
+            algorithm: level.as_str(),
+            expected: expected_ct_size,
+            actual: ciphertext.ciphertext.len(),
+        };
+        let shared_secret = match level {
+            MlKemSecurityLevel::MlKem768 => Zeroizing::new(
+                DecapsulationKey768::new_from_slice(&keypair.secret_key)
+                    .map_err(|_| Self::invalid_secret_key(level))?
+                    .decapsulate_slice(&ciphertext.ciphertext)
+                    .map_err(invalid_ciphertext)?,
+            )
+            .to_vec(),
+            MlKemSecurityLevel::MlKem1024 => Zeroizing::new(
+                DecapsulationKey1024::new_from_slice(&keypair.secret_key)
+                    .map_err(|_| Self::invalid_secret_key(level))?
+                    .decapsulate_slice(&ciphertext.ciphertext)
+                    .map_err(invalid_ciphertext)?,
+            )
+            .to_vec(),
+        };
 
-                let ct =
-                    mlkem1024::Ciphertext::from_bytes(&ciphertext.ciphertext).map_err(|_| {
-                        PqcError::InvalidCiphertextSize {
-                            algorithm: level.as_str(),
-                            expected: expected_ct_size,
-                            actual: ciphertext.ciphertext.len(),
-                        }
-                    })?;
+        Ok(shared_secret)
+    }
 
-                let ss = mlkem1024::decapsulate(&ct, &sk);
-
-                Ok(ss.as_bytes().to_vec())
-            }
+    fn invalid_secret_key(level: MlKemSecurityLevel) -> PqcError {
+        PqcError::InvalidSecretKey {
+            algorithm: level.as_str(),
         }
     }
 
@@ -352,12 +316,9 @@ impl MlKemEngine {
         }
     }
 
-    /// Returns the secret key size in bytes for the given security level.
-    pub fn secret_key_size(level: MlKemSecurityLevel) -> usize {
-        match level {
-            MlKemSecurityLevel::MlKem768 => 2400,
-            MlKemSecurityLevel::MlKem1024 => 3168,
-        }
+    /// Returns the secret key size in bytes: the FIPS 203 seed `d ‖ z`, at either level.
+    pub fn secret_key_size(_level: MlKemSecurityLevel) -> usize {
+        SEED_LEN
     }
 
     /// Returns the ciphertext size in bytes for the given security level.
@@ -377,6 +338,12 @@ impl MlKemEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::{Digest, Sha256};
+
+    /// The seed of the IETF LAMPS ML-KEM certificate examples: the bytes 0x00 through 0x3f.
+    fn counting_seed() -> [u8; SEED_LEN] {
+        core::array::from_fn(|i| i as u8)
+    }
 
     #[test]
     fn test_mlkem_768_roundtrip() {
@@ -468,7 +435,7 @@ mod tests {
         );
         assert_eq!(
             MlKemEngine::secret_key_size(MlKemSecurityLevel::MlKem768),
-            2400
+            64
         );
         assert_eq!(
             MlKemEngine::ciphertext_size(MlKemSecurityLevel::MlKem768),
@@ -481,7 +448,7 @@ mod tests {
         );
         assert_eq!(
             MlKemEngine::secret_key_size(MlKemSecurityLevel::MlKem1024),
-            3168
+            64
         );
         assert_eq!(
             MlKemEngine::ciphertext_size(MlKemSecurityLevel::MlKem1024),
@@ -489,5 +456,84 @@ mod tests {
         );
 
         assert_eq!(MlKemEngine::shared_secret_size(), 32);
+    }
+
+    /// Known answers: the encapsulation keys of the IETF LAMPS ML-KEM certificate examples
+    /// (ML-KEM-768.pub and ML-KEM-1024.pub, seed 0x00..0x3f), as SHA-256 of the raw key.
+    #[test]
+    fn test_mlkem_keygen_from_seed_matches_known_answers() {
+        let cases = [
+            (
+                MlKemSecurityLevel::MlKem768,
+                "0b7934c83125c788995e2ba6bd761e33046b3e40571be53e023309a29f398cc9",
+            ),
+            (
+                MlKemSecurityLevel::MlKem1024,
+                "c7b8fa0aa471d5ae18922d6ccad5b31e1d84f92ae723abfd13747018740a8530",
+            ),
+        ];
+        for (level, expected) in cases {
+            let keypair = MlKemEngine::keypair_from_seed(level, &counting_seed()).unwrap();
+            assert_eq!(
+                keypair.public_key.len(),
+                MlKemEngine::public_key_size(level)
+            );
+            assert_eq!(
+                hex::encode(Sha256::digest(&keypair.public_key)),
+                expected,
+                "{}",
+                level.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn test_mlkem_secret_key_rederives_public_key() {
+        for level in [MlKemSecurityLevel::MlKem768, MlKemSecurityLevel::MlKem1024] {
+            let keypair = MlKemEngine::generate_keypair(level).unwrap();
+            let seed: [u8; SEED_LEN] = keypair.secret_key().try_into().unwrap();
+            let rederived = MlKemEngine::keypair_from_seed(level, &seed).unwrap();
+            assert_eq!(
+                rederived.public_key,
+                keypair.public_key,
+                "{}",
+                level.as_str()
+            );
+        }
+    }
+
+    /// FIPS 203 §7.2 modulus check: a coefficient equal to q = 3329 is not reduced, so the
+    /// key must be refused rather than encapsulated to.
+    #[test]
+    fn test_mlkem_rejects_unreduced_encapsulation_key() {
+        for level in [MlKemSecurityLevel::MlKem768, MlKemSecurityLevel::MlKem1024] {
+            let keypair = MlKemEngine::generate_keypair(level).unwrap();
+            let mut public_key = keypair.public_key.clone();
+            // The first 12-bit coefficient is byte 0 plus the low nibble of byte 1.
+            public_key[0] = 0x01;
+            public_key[1] = (public_key[1] & 0xf0) | 0x0d;
+
+            let err = MlKemEngine::encapsulate(&public_key, level)
+                .err()
+                .expect("an unreduced encapsulation key must be refused");
+            assert!(
+                err.to_string().contains("Invalid public key format"),
+                "{}: {err}",
+                level.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn test_mlkem_rejects_malformed_secret_key() {
+        let keypair = MlKemEngine::generate_keypair(MlKemSecurityLevel::MlKem768).unwrap();
+        let (_, ct) =
+            MlKemEngine::encapsulate(&keypair.public_key, MlKemSecurityLevel::MlKem768).unwrap();
+        let truncated = MlKemKeyPair::new(
+            MlKemSecurityLevel::MlKem768,
+            keypair.public_key.clone(),
+            keypair.secret_key()[..SEED_LEN - 1].to_vec(),
+        );
+        assert!(MlKemEngine::decapsulate(&truncated, &ct).is_err());
     }
 }
